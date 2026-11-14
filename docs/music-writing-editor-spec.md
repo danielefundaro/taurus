@@ -192,7 +192,12 @@ La copia nel browser non si elimina mai per un rifiuto del server: si elimina so
 
 ### Impaginazione
 
-1. Da una versione l'archivista sceglie **Impagina**: formato (A4 verticale, A4 orizzontale, formato marcia di 18 × 13 cm in orizzontale), dimensione del rigo, margini, intestazione (titolo della traccia, compositore, arrangiatore, nome della parte) e numerazione delle pagine.
+1. Da una versione l'archivista sceglie **Impagina**: formato (A4 verticale, A4 orizzontale, formato marcia di 18 × 13 cm in orizzontale), dimensione del rigo, margini, intestazione (titolo della traccia, compositore, arrangiatore, nome della parte), numerazione delle pagine e numeri di battuta.
+   - **Valori proposti**: rigo di 7 mm e margini di 12 mm in A4, rigo di 5,6 mm e margini di 8 mm nel formato marcia; il rigo va da 4 a 9,6 mm e i margini da 3 a 30 mm.
+   - **Intestazione**: solo sulla prima pagina, con il nome della parte in grassetto a sinistra, il titolo al centro e compositore e arrangiatore a destra, uno sotto l'altro. I testi sono proposti dalla traccia e dalla parte e si possono cambiare; un testo vuoto non compare, e senza testi la musica inizia in alto. Il nome della parte non si ripete a sinistra dei righi, e un'intestazione già presente nel MusicXML, per esempio di una parte importata da MuseScore, è sostituita.
+   - **Numeri di pagina**: dalla seconda pagina, al centro sotto la musica, in una fascia lasciata libera sopra il margine inferiore.
+   - **Numeri di battuta**: all'inizio di ogni rigo (proposto), su ogni battuta per le [parti di studio](#estensioni-approvate) o nessuno.
+   - **Righe e pagine**: le interruzioni di riga della parte restano, come nella scrittura, e una riga piena va a capo da sola; un'interruzione di pagina inizia una pagina nuova, che ripete chiave, armatura e tempo.
 2. Il browser mostra subito un'anteprima con Verovio.
 3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF.
 4. Al termine Taurus chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**; per una parte scritta da zero, senza pagine, le aggiunge direttamente. Le pagine sostituite restano come media della traccia secondo le regole di pulizia esistenti.
@@ -304,9 +309,15 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 
 ### Servizio musicale
 
-`taurus-omr` aggiunge `POST /v1/engravings`: riceve un MusicXML e le opzioni di impaginazione e restituisce il PDF e le pagine PNG. Usa Verovio per Python e Cairo, gli stessi strumenti con cui il test di accuratezza disegna il proprio corpus, già provati con il carattere musicale incorporato. Il servizio resta interno, senza stato e senza accesso a database o storage.
+`taurus-omr` aggiunge `POST /v1/engravings`: riceve un MusicXML, normale o compresso, e le opzioni di impaginazione e restituisce il PDF e le pagine PNG in scala di grigi a 300 DPI. Usa Verovio per Python e CairoSVG, gli stessi strumenti con cui il test di accuratezza disegna il proprio corpus, con il carattere musicale incorporato in Verovio reso disponibile a Cairo e Liberation Serif per i testi. Il servizio resta interno, senza stato e senza accesso a database o storage. Le opzioni e i codici di errore sono descritti nel [README del servizio](../taurus-omr/README.md#impaginazione).
 
-Verovio ha la stessa versione nel frontend, nel servizio e nel test di accuratezza, così l'anteprima del browser e le pagine generate coincidono. Le versioni si aggiornano insieme, e un controllo del repository fallisce se divergono.
+- **Processo separato**: l'impaginazione gira in un processo a parte, con slot propri e un tempo massimo di 120 secondi (`TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS`), come la lettura del testo: non aspetta i riconoscimenti e si interrompe allo scadere del tempo. Il MusicXML non supera 20 MB anche dopo la decompressione, e le pagine non superano il limite del servizio, 30 (`tooManyPages`).
+- **Intestazione e righe**: l'intestazione si scrive nell'MEI che Verovio ricava dal MusicXML, così Verovio le lascia spazio; il disegno usa le stesse opzioni di interruzione dell'editor di scrittura (`breaks: smart`, `breaksSmartSb: 0`).
+- **Interruzioni di pagina**: Verovio le ignora nel suo impaginare automatico e non disegna l'intestazione di una selezione di battute. Il servizio impagina quindi la parte in sezioni tra due interruzioni di pagina: la prima dalla parte tagliata dopo la sua ultima battuta, con l'intestazione, le altre come selezioni della parte intera, che conservano chiave, armatura e tempo in vigore.
+- **Numeri di pagina**: scritti dal servizio nella fascia di 6 mm lasciata libera sopra il margine inferiore, contati su tutte le sezioni.
+- **PDF**: vettoriale, in PDF 1.4, con le pagine nel formato scelto, titolo della traccia e nome della parte nei metadati.
+
+Verovio ha la stessa versione nel frontend, nel servizio e nel test di accuratezza, così l'anteprima del browser e le pagine generate coincidono. Le versioni si aggiornano insieme, e `scripts/ops/check-verovio-versions.mjs`, eseguito dalla CI, fallisce se divergono.
 
 ## Modello dati e migrazioni
 
@@ -381,7 +392,7 @@ Le misure seguono il metodo della [fase 4 dell'ascolto](track-score-playback-spe
 - **Validità**: ogni documento prodotto dai test viene validato contro lo schema XSD di MusicXML 4.0; un campione si apre in MuseScore durante la verifica manuale.
 - **Andata e ritorno**: scrivere, salvare, riaprire e scaricare produce lo stesso MusicXML, senza attributi di lavoro.
 - **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, bozze e versioni scritte o corrette rifiutate senza il blocco, estrazione con trasposizione per rigo e strumenti non configurati, derivazione rifiutata per parti con più strumenti, job di impaginazione con il servizio simulato, autorizzazioni e isolamento tenant.
-- **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend.
+- **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend. I test che disegnano richiedono la libreria Cairo, installata dalla CI, che con `TAURUS_OMR_REQUIRE_CAIRO=true` li fa fallire invece di saltarli se manca; la pagina di riferimento si confronta a un quarto della dimensione, perché contino l'impaginazione e non le sfumature dei bordi.
 - **Prestazioni**: misure ripetibili del disegno su parti e partiture grandi.
 - **Manuale**: prove con archivisti su parti reali, tempo per scrivere una parte di una pagina, uso su tablet, tastiera MIDI reale su Chrome, Edge e Firefox.
 
@@ -465,7 +476,7 @@ Le proposte della prima bozza, approvate nella seconda revisione. Ognuna si dett
 
 - **Organico della banda per tenant** (fase 4): un modello con gli strumenti e l'ordine in partitura, usato per le nuove partiture e per ordinare le parti in stampa; descritto in [Organico della banda](#organico-della-banda).
 - **Confronto tra versioni** (fase 5): una vista che evidenzia le battute diverse tra due versioni, riusando il confronto per battute già scritto per l'[accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori); utile per rivedere correzioni, estrazioni e approvazioni.
-- **Parti di studio** (fase 2): l'ascolto della propria parte con le altre attenuate e il tempo rallentato è già possibile con il lettore; si aggiunge la stampa con le battute numerate a ogni rigo, come opzione dell'impaginazione.
+- **Parti di studio** (fase 2): l'ascolto della propria parte con le altre attenuate e il tempo rallentato è già possibile con il lettore; si aggiunge la stampa con le battute numerate, come opzione dell'impaginazione. Verovio numera già la prima battuta di ogni rigo, che diventa il valore proposto per tutte le parti; per le parti di studio l'opzione **Su ogni battuta** numera ogni battuta.
 - **Frammenti riutilizzabili** (fase 5): introduzioni, marce d'ordinanza, segnali e rulli di tamburo salvati una volta e inseriti nelle parti.
 - **Impaginazione per l'evento** (fase 2): dalla preparazione di un evento, la stampa di tutte le parti di una scaletta già impaginate per strumento, nel formato marcia.
 - **Raccolta dai riconoscimenti** (fase 5): le battute che gli archivisti correggono più spesso indicano i difetti dei motori e possono diventare nuove parti del corpus di accuratezza.

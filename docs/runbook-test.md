@@ -13,7 +13,7 @@ Copertura presente nel repository (la data dell'ultima verifica è nel catalogo)
 
 - backend: 220 file Java di test e supporto sotto `src/test`, con unit test, test Spring e integrazioni PostgreSQL/Testcontainers;
 - frontend: 68 specifiche Jasmine/Karma;
-- servizio OMR: 7 file pytest, con test sui motori finti e test di accuratezza sui motori reali, eseguiti solo con il servizio in esecuzione;
+- servizio OMR: 9 file pytest, con test sui motori finti, test dell'impaginazione con Verovio e Cairo veri e test di accuratezza sui motori reali, eseguiti solo con il servizio in esecuzione;
 - provider Keycloak: 7 classi di test, fra cui `TaurusOtpTest`, `TaurusOtpResourceIT`, `EmailTemplatesTest` sui modelli di posta del tema, `EmailDeliveryIT`, che fa partire un'e-mail vera verso Mailpit, e `TenantRoleFlowIT`, che attraversa il browser flow e legge i claim del mapper su un Keycloak reale;
 - sito informativo: type-check, build e `pnpm test`/`pnpm test:image`, che controllano il sito costruito e l'immagine nginx che lo serve;
 - E2E: suite Playwright in `taurus-fe/e2e`, con i profili desktop e mobile, che richiede un'istanza completa e due tenant di prova; eseguita la prima volta il 2026-10-31, calibrata e verde — 46 prove passate e 34 saltate per dati assenti;
@@ -356,7 +356,13 @@ python -m venv .venv
 docker build -t taurus-omr:test .
 ```
 
-I test sostituiscono Audiveris e homr con programmi finti. La build dell'immagine verifica di nuovo le impronte di pacchetti, modelli e dati.
+I test sostituiscono Audiveris e homr con programmi finti. I test dell'impaginazione usano Verovio e CairoSVG veri e, per disegnare, la libreria Cairo: su Windows di solito manca e quei test si saltano, mentre la CI installa `libcairo2` e `fonts-liberation` e li rende obbligatori con `TAURUS_OMR_REQUIRE_CAIRO=true`. Per eseguirli in locale basta un container Python 3.12 con le due librerie, montando il modulo:
+
+```powershell
+docker run --rm -v ${PWD}:/w -w /w -e TAURUS_OMR_REQUIRE_CAIRO=true python:3.12-slim sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends libcairo2 fonts-liberation fontconfig > /dev/null && pip install -q -r requirements-test.txt && python -m pytest -p no:cacheprovider"
+```
+
+La pagina di riferimento `tests/engraving/marcia-a4-1.png` si ridisegna solo dopo un cambiamento voluto di Verovio o delle opzioni, con lo stesso container. La build dell'immagine verifica di nuovo le impronte di pacchetti, modelli e dati. `node scripts/ops/check-verovio-versions.mjs` controlla che Verovio abbia la stessa versione nel frontend e nel servizio.
 
 L'accuratezza dei motori reali si misura con il servizio in esecuzione, per esempio quello avviato da `services.yml`:
 
