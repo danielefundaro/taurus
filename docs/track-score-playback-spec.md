@@ -121,7 +121,7 @@ Le pagine generate da Taurus a partire dai PDF sono a 300 DPI ([Elaborazione asi
 - I file stanno sul filesystem locale (`application.base-path`); non esistono volumi condivisi né API interne di download.
 - Super amministratore, amministratore e archivista gestiscono tracce, strumenti e immagini delle pagine; `ROLE_USER` vede le tracce `COMPLETE` e `PUBLIC` con le sole parti dei propri strumenti; `ROLE_USER_EXTERNAL` vede solo le tracce `PUBLIC`.
 - Il dettaglio della traccia è lo stesso componente per tutti i ruoli, con schede Dettagli, Parti e, per chi gestisce i PDF, PDF.
-- L'intestazione `Permissions-Policy` disabilita Web MIDI, che non serve: l'audio è generato con Web Audio.
+- L'intestazione `Permissions-Policy` delle API disabilita Web MIDI, che all'ascolto non serve: l'audio è generato con Web Audio. Le pagine dell'applicazione lo consentono alla stessa origine (`midi=(self)` in `taurus-fe/security-headers.conf`) per la tastiera MIDI dell'[editor di scrittura](music-writing-editor-spec.md#tastiera-midi).
 - Il service worker mette in cache in modo differito i file sotto `/assets/**`.
 
 ## Flussi
@@ -344,7 +344,7 @@ Nel dettaglio dello strumento si sceglie prima se è intonato o una percussione;
 
 La parte può sovrascrivere trasposizione e suono (banco e programma). Se gli strumenti assegnati alla parte hanno valori diversi e non c'è una sovrascrittura, l'ascolto usa il primo strumento e la scheda Ascolto mostra un avviso.
 
-La trasposizione si applica alle altezze scritte durante la generazione del MIDI, con l'intervallo della chiave in uso: quello in chiave di basso per le parti in chiave di Fa, se configurato. Le parti di percussione suonano sul canale 10: con uno strumento ogni nota usa la sua nota di batteria; con due strumenti la prima voce usa il primo e la seconda voce il secondo. Una parte in chiave di percussione senza strumenti di batteria configurati usa il rullante.
+La trasposizione si applica alle altezze scritte durante la generazione del MIDI, con l'intervallo della chiave in uso: quello in chiave di basso per le parti in chiave di Fa, se configurato. Le parti di percussione suonano sul canale 10: con uno strumento ogni nota usa la sua nota di batteria; con più strumenti la voce 1 usa il primo, la voce 2 il secondo e così via, e le voci oltre gli strumenti usano l'ultimo. Una parte in chiave di percussione senza strumenti di batteria configurati usa il rullante.
 
 ## Ascolto
 

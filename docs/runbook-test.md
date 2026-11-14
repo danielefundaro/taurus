@@ -77,7 +77,7 @@ I valori seguenti costituiscono la baseline raccomandata; devono essere approvat
 | Tenant isolation | Tutta la matrice negativa P0 superata con almeno due tenant |
 | Migrazioni | Fresh install, upgrade e riavvio idempotente superati |
 | Sicurezza | 0 vulnerabilità Critical/High sfruttabili non accettate; il job `security` della CI cerca segreti, vulnerabilità di dipendenze e configurazioni, e difetti con analisi statica. Il DAST su staging resta da aggiungere |
-| Copertura | Baseline attiva e verificata in CI: backend 77% linee e 62% branch sulla suite intera, frontend 70% istruzioni, 61% branch e 72% linee. La proposta resta 80% linee e 70% branch nei moduli modificati, 90% per logica P0 nuova: la baseline si alza man mano, non si abbassa |
+| Copertura | Baseline attiva e verificata in CI: backend 77% linee e 62% branch sulla suite intera, frontend 71% istruzioni, 62% branch e 73% linee. La proposta resta 80% linee e 70% branch nei moduli modificati, 90% per logica P0 nuova: la baseline si alza man mano, non si abbassa |
 | Accessibilità | Nessuna violazione critica automatica; flussi principali utilizzabili da tastiera |
 | Performance | SLO p95/p99, throughput ed error rate approvati e rispettati |
 | Resilienza | Recupero dimostrato per riavvio backend e indisponibilità temporanea delle dipendenze |
@@ -317,7 +317,7 @@ npm test -- --watch=false --browsers=ChromeHeadless --code-coverage
 npm run build -- --configuration production
 ```
 
-La copertura ha un gate: `npm run test:coverage` esegue i test con `--code-coverage` e fallisce se scende sotto la baseline di `scripts/check-coverage.mjs` (70% istruzioni, 61% branch, 72% linee, misurati sul ramo principale; alzata il 2026-10-27 con le prove del workspace delle parti, dell’editor delle immagini, della dashboard e dei QR dell’inventario, il 2026-10-28 con quelle della preparazione evento, il 2026-10-29 con quelle del feed calendario, il 2026-11-04 con quelle della guida introduttiva, il 2026-11-06 con quelle dei documenti legali, il 2026-11-13 con quelle dei compensi ai presenti e il 2026-11-14 con quelle dell'editor di scrittura, dei suoi passaggi e della nuova notazione). Anche questa baseline si alza, non si abbassa. La build scarica il SoundFont del lettore da `ftp.osuosl.org` e ne verifica l'impronta; senza rete la build fallisce, salvo `TAURUS_SKIP_SOUNDFONT=1` quando il lettore non serve.
+La copertura ha un gate: `npm run test:coverage` esegue i test con `--code-coverage` e fallisce se scende sotto la baseline di `scripts/check-coverage.mjs` (71% istruzioni, 62% branch, 73% linee, misurati sul ramo principale; alzata il 2026-10-27 con le prove del workspace delle parti, dell’editor delle immagini, della dashboard e dei QR dell’inventario, il 2026-10-28 con quelle della preparazione evento, il 2026-10-29 con quelle del feed calendario, il 2026-11-04 con quelle della guida introduttiva, il 2026-11-06 con quelle dei documenti legali, il 2026-11-13 con quelle dei compensi ai presenti e il 2026-11-14 con quelle dell'editor di scrittura, dei suoi passaggi, della nuova notazione e della tastiera MIDI). Anche questa baseline si alza, non si abbassa. La build scarica il SoundFont del lettore da `ftp.osuosl.org` e ne verifica l'impronta; senza rete la build fallisce, salvo `TAURUS_SKIP_SOUNDFONT=1` quando il lettore non serve.
 
 Suite end to end full-stack, con Playwright:
 

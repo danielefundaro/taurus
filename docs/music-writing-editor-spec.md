@@ -85,13 +85,27 @@ Nella prima versione dell'editor di parte, oltre a ciò che la correzione già g
 - legature di portamento, forcelle di crescendo e diminuendo, corona, respiro, abbellimenti (acciaccatura e appoggiatura);
 - lettere di prova e numeri di riferimento, testo di espressione (per esempio «dolce», «rit.», «a tempo»), cambi di tempo con testo;
 - interruzioni di riga e di pagina, numero di battute per riga suggerito;
-- chiave di percussione con le note mappate sui suoni di batteria dello strumento, per le parti di percussione: ogni strumento scrive nella propria voce, come la legge il lettore (voce 1 il primo strumento della parte, voce 2 il secondo), e ogni suono ha una posizione fissa sul rigo.
+- chiave di percussione con le note mappate sui suoni di batteria dello strumento, per le parti di percussione: ogni strumento scrive nella propria voce, come la legge il lettore (voce 1 il primo strumento della parte, voce 2 il secondo; le voci oltre gli strumenti suonano l'ultimo), e ogni suono ha una posizione fissa sul rigo. Con gli strumenti di batteria configurati, i tasti A–G, il pianoforte a schermo e la tastiera MIDI scrivono il suono dello strumento della voce, nella sua posizione e con la sua testa, e il selettore della voce porta il nome dello strumento («Voce 2 · tamburo»).
 
 | Suono di batteria (nota General MIDI) | Posizione sul rigo | Testa |
 | --- | --- | --- |
+| Charleston a pedale (44) | sotto il rigo (Re4) | a croce |
 | Gran cassa (35, 36) | primo spazio (Fa4) | normale |
+| Tom bassi (41, 43) | secondo spazio (La4) | normale |
+| Battito di mani (39) | terza linea (Si4) | a croce |
+| Campanaccio (56) | terza linea (Si4) | a rombo |
 | Tamburo, rullante (38, 40) | terzo spazio (Do5) | normale |
-| Piatti (49, 57) | sopra il rigo, sul primo taglio addizionale (La5) | a croce |
+| Colpo sul cerchio (37) | terzo spazio (Do5) | a croce |
+| Tom (45, 47) | quarta linea (Re5) | normale |
+| Tamburello (54) | quarta linea (Re5) | a rombo |
+| Tom acuti (48, 50) | quarto spazio (Mi5) | normale |
+| Triangolo (80, 81) | quarto spazio (Mi5) | a croce |
+| Piatto ride (51, 59), campana del ride (53) | quinta linea (Fa5) | a croce; la campana a rombo |
+| Charleston chiuso (42) e aperto (46) | spazio sopra il rigo (Sol5) | a croce; aperto a croce cerchiata |
+| Piatti (49, 57), piatto cinese (52), piatto splash (55) | sopra il rigo, sul primo taglio addizionale (La5) | a croce |
+| Gli altri suoni, compresi quelli fuori da General MIDI | terza linea (Si4) | normale |
+
+Le teste sono quelle che Verovio disegna, perché lo spartito dell'editor mostri ciò che si suona: il triangolo, scritto altrove con la testa a triangolo che Verovio non ha, qui è a croce e si distingue così dai tom sullo stesso spazio.
 
 Gli altri suoni del catalogo di riferimento (triangolo, tamburello) e quelli degli strumenti aggiunti dal tenant ricevono una posizione nella stessa tabella durante la fase 1, con le prove degli archivisti.
 
@@ -219,7 +233,7 @@ L'editor si apre a schermo intero, come quello di correzione.
 - **Palette laterale** a schede: Note, Battuta (metro, armatura, chiave, battute), Struttura (ritornelli, volte, salti, lettere di prova), Espressione (dinamiche, forcelle, articolazioni, legature, testo), Impaginazione (interruzioni di riga e di pagina). Ogni comando indica la sua scorciatoia.
 - **Spartito** al centro, con il cursore di inserimento visibile come una barra verticale colorata nella posizione dove andrà la prossima nota.
 - **Barra di stato**: battuta, tempo nella battuta, voce, nota selezionata letta per esteso («Battuta 12 · tempo 3 · Sib4 · croma puntata»), già annunciata a chi usa uno screen reader; controlli in tempo reale.
-- **Tastiera di pianoforte a schermo**, mostrata su tablet o a richiesta: un tocco inserisce la nota alla durata corrente.
+- **Tastiera di pianoforte a schermo**, mostrata da sola sui dispositivi touch e a richiesta con **Pianoforte** nella scheda Nota: due ottave dal Do4 in chiave di violino, dal Do3 in chiave di contralto o di tenore e dal Do2 in chiave di basso, da spostare di un'ottava alla volta. Un tocco suona il tasto e lo scrive come una nota della tastiera MIDI: al cursore con la durata corrente durante l'inserimento, al posto dell'altezza della nota selezionata fuori dall'inserimento. Nelle parti di percussione con strumenti mostra un pulsante per strumento, con la sua voce.
 - **Partitura**: elenco delle parti con mostra e nascondi, righi vuoti compressi, interruttore tra suoni reali e trasposizione, scelta della parte da ascoltare in evidenza.
 - **Ricavata da**: per le parti estratte o trasposte, un'etichetta con la parte o la partitura di origine e, se divergono, un avviso.
 - **Scheda Ascolto**: **Nuova parte scritta**, e per ogni parte **Scrivi** oppure, con una bozza, l'etichetta «Bozza non salvata di …» con **Riprendi la bozza** e **Scarta la bozza**. I comandi stanno accanto a **Correggi** e alle versioni, che sono già nella scheda Ascolto, e sono disattivati finché la traccia ha modifiche da salvare.
@@ -236,7 +250,7 @@ L'editor si apre a schermo intero, come quello di correzione.
 | `0` | pausa della durata corrente |
 | `Maiusc` + `A`–`G` | aggiunge la nota all'accordo |
 | `↑` `↓` | un grado; con `Ctrl` un'ottava; un passaggio selezionato si sposta tutto |
-| `+` `-` `=` | diesis, bemolle, bequadro |
+| `+` `-` `=` | diesis, bemolle, bequadro; sulle ultime note suonate correggono la grafia senza cambiarne il suono |
 | `T` | legatura di valore con la nota seguente; durante l'inserimento scrive al cursore la nota precedente, legata a lei |
 | `Canc` | elimina la nota, che diventa pausa nella scrittura, o trasforma in pause il passaggio selezionato; durante l'inserimento il cursore torna al suo posto |
 | `←` `→` | nota precedente o seguente; durante l'inserimento spostano il cursore |
@@ -256,14 +270,14 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 
 ### Tastiera MIDI
 
-- **Collegamento**: **Tastiera MIDI** nella barra superiore chiede al browser, la prima volta, il permesso di usare i dispositivi MIDI, poi elenca le tastiere collegate e usa quella scelta, ricordandola nel browser. Una tastiera collegata con l'editor già aperto compare da sola nell'elenco. Lo stesso pannello regola la soglia dell'accordo, tra 30 e 200 ms, ricordata nel browser insieme alla tastiera.
+- **Collegamento**: **Tastiera MIDI** nella barra superiore chiede al browser, la prima volta, il permesso di usare i dispositivi MIDI, poi elenca le tastiere collegate e usa quella scelta, ricordandola nel browser. Una tastiera collegata con l'editor già aperto compare da sola nell'elenco; se la tastiera in uso si scollega, l'editor passa alla prima delle altre e torna a quella scelta quando si ricollega. Lo stesso pannello regola la soglia dell'accordo, tra 30 e 200 ms, ricordata nel browser insieme alla tastiera. Il comando si evidenzia quando una tastiera è in uso; se il browser rifiuta il permesso, il pannello lo dice e offre **Riprova**.
 - **Inserimento**: in modalità di inserimento ogni nota suonata si scrive al cursore con la durata corrente e il cursore avanza. La durata si cambia con i tasti 1–7 del computer o con la palette, come in MuseScore.
 - **Accordi**: una nota entra nell'accordo se arriva entro la soglia, 80 ms per default, dalla prima nota del gruppo e mentre la prima è ancora premuta. La prima nota si scrive subito, senza attendere la soglia; le successive si aggiungono all'accordo come con `Maiusc` + lettera. Così chi suona legato, premendo la nota seguente prima di rilasciare la precedente, non crea accordi, e un accordo è un solo passo di annulla. Gli accordi suonati da musicisti amatoriali sono di solito sfasati di poche decine di millisecondi, mentre due note distinte inserite una alla volta distano quasi sempre più di 150 ms: la soglia predefinita si verifica nelle prove con gli archivisti.
-- **Percussioni**: in una parte con un solo strumento a percussione qualsiasi tasto scrive la nota nella posizione del suo suono, e la tastiera serve solo per il ritmo. In una parte con più strumenti il tasto deve essere la nota di batteria di uno di essi (per esempio 36 gran cassa, 38 tamburo, 49 piatti): la nota va nella voce di quello strumento e nella posizione del suo suono. Gli altri tasti sono ignorati, e la barra di stato indica quali funzionano («Do2 gran cassa, Re2 tamburo, Do#3 piatti»). Le batterie elettroniche inviano già queste note.
-- **Correzione**: fuori dalla modalità di inserimento una nota suonata sostituisce l'altezza della nota selezionata.
-- **Grafia**: i tasti neri si scrivono secondo l'armatura in vigore, con diesis nelle armature in diesis e bemolli in quelle in bemolle; `+`, `-` e `=` correggono la grafia.
+- **Percussioni**: in una parte con un solo strumento a percussione qualsiasi tasto scrive la nota nella posizione del suo suono, e la tastiera serve solo per il ritmo. In una parte con più strumenti il tasto deve essere la nota di batteria di uno di essi (per esempio 36 gran cassa, 38 tamburo, 49 piatti): la nota va nella voce di quello strumento e nella posizione del suo suono. Gli altri tasti sono ignorati, e la barra di stato indica quali funzionano («Tasti MIDI: Do2 gran cassa, Re2 tamburo, Do♯3 piatti»). Le batterie elettroniche inviano già queste note. Colpi di strumenti diversi suonati insieme, entro la soglia dell'accordo, si scrivono ciascuno nella sua voce allo stesso istante; con un solo strumento le note insieme valgono come una. Una parte in chiave di percussione senza strumenti configurati scrive ogni tasto nella posizione del suo suono, nella voce del cursore.
+- **Correzione**: fuori dalla modalità di inserimento una nota suonata sostituisce l'altezza della nota selezionata, e delle note legate a lei; le note suonate insieme si aggiungono al suo accordo. Nelle percussioni, fuori dall'inserimento, la nota suonata si ascolta soltanto.
+- **Grafia**: i tasti neri si scrivono secondo l'armatura della battuta dove si scrive, con diesis nelle armature in diesis e bemolli in quelle in bemolle, e senza armatura come Do♯, Mi♭, Fa♯, Sol♯ e Si♭. Sulle ultime note suonate `+`, `-` e `=` correggono la grafia senza cambiarne il suono (con `+` Re♭ diventa Do♯, con `-` Mi diventa Fa♭); una grafia che non esiste, come Re con il diesis, è rifiutata con un messaggio. Dopo un'altra modifica i tre tasti tornano a essere diesis, bemolle e bequadro. Le altre note della battuta conservano il loro suono: gli accidenti che servono, compresi i bequadri, si scrivono da soli.
 - **Altezza**: la nota suonata è quella che si vede. Nella partitura in suoni reali è il suono reale; nelle parti e nella partitura trasposta è la nota scritta dello strumento.
-- **Ascolto**: la nota suonata si sente subito con il suono della parte, attraverso il sintetizzatore del lettore.
+- **Ascolto**: la nota suonata si sente subito con il suono della parte, attraverso il sintetizzatore del lettore: per gli strumenti traspositori il suono reale, come nel lettore, e nelle percussioni la nota di batteria dello strumento. Il sintetizzatore si prepara quando si apre il pannello della tastiera MIDI o il pianoforte a schermo, perché la prima nota non arrivi in ritardo.
 - **Messaggi ignorati**: intensità, pedale e controlli; un Note On con intensità 0 vale come rilascio, come prevede lo standard MIDI. Taurus non chiede l'accesso ai messaggi di sistema (sysex).
 - **Browser**: Chrome, Edge e Opera su computer e Android; Firefox dalla versione 108, dopo che l'utente accetta il permesso del sito che il browser propone. Safari e iPad non supportano Web MIDI: lì il comando non compare e restano la tastiera del computer e il pianoforte a schermo.
 - **Pagina**: Web MIDI richiede HTTPS e una `Permissions-Policy` della pagina che lo consenta. La regola predefinita di `midi` lo consente già alla stessa origine; `taurus-fe/security-headers.conf` aggiunge comunque `midi=(self)`, così la scelta è esplicita e non cambia se la regola predefinita cambiasse. Il `midi=()` del backend riguarda solo le risposte delle API e resta.
@@ -278,7 +292,7 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Cronologia**: per la parte singola restano le istantanee del documento; per la partitura la cronologia registra solo le battute cambiate, prima e dopo, per non tenere in memoria cento copie di un file di diversi megabyte.
 - **Disegno**: Verovio in un Web Worker, con la selezione di un intervallo di battute per disegnare solo la pagina visibile e le battute vicine; il resto si aggiorna in background. La mappa tra `id` e elementi disegnati resta quella della correzione.
 - **Ascolto**: il lettore esistente, che già legge una parte qualsiasi di un file a più parti e applica trasposizioni e suoni.
-- **MIDI**: un servizio legge i dispositivi con Web MIDI, riunisce in un accordo le note arrivate entro la soglia mentre la prima è premuta, sceglie la grafia dall'armatura, traduce le note di batteria in voce e posizione per le percussioni e passa le note alle stesse operazioni di inserimento della tastiera del computer.
+- **MIDI**: un servizio (`MidiInputService`) legge i dispositivi con Web MIDI e riunisce in un accordo le note arrivate entro la soglia mentre la prima è premuta; `score-input.ts` sceglie la grafia dall'armatura, scrive l'altezza esatta conservando il suono delle altre note della battuta e traduce le note di batteria in voce e posizione per le percussioni, sopra le stesse operazioni di inserimento della tastiera del computer. Il pianoforte a schermo passa i suoi tocchi alla stessa strada.
 - **Bozze e blocco**: un servizio che salva la bozza con ritardo, ne conserva una copia in IndexedDB e rinnova il blocco ogni 30 secondi. La copia resta in IndexedDB anche quando il server la rifiuta, fino all'accettazione o allo scarto. L'editor di correzione usa lo stesso servizio per il blocco, senza bozze.
 
 ### Backend
