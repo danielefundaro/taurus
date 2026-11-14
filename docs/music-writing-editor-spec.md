@@ -199,9 +199,11 @@ La copia nel browser non si elimina mai per un rifiuto del server: si elimina so
    - **Numeri di battuta**: all'inizio di ogni rigo (proposto), su ogni battuta per le [parti di studio](#estensioni-approvate) o nessuno.
    - **Righe e pagine**: le interruzioni di riga della parte restano, come nella scrittura, e una riga piena va a capo da sola; un'interruzione di pagina inizia una pagina nuova, che ripete chiave, armatura e tempo.
 2. Il browser mostra subito un'anteprima con Verovio.
-3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF.
-4. Al termine Taurus chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**; per una parte scritta da zero, senza pagine, le aggiunge direttamente. Le pagine sostituite restano come media della traccia secondo le regole di pulizia esistenti.
-5. Pagine e PDF ricordano la versione da cui derivano: l'editor segnala quando la versione corrente è più recente delle pagine e propone di impaginare di nuovo.
+3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF. Una parte ha una sola impaginazione in coda o in corso alla volta; il PDF si scarica appena il job termina, anche prima di assegnare le pagine.
+4. Al termine Taurus chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**, con la stessa descrizione e gli stessi strumenti; per una parte scritta da zero, senza pagine, le aggiunge direttamente. Le pagine sostituite seguono le regole delle pagine tolte da una parte: il file si elimina quando nessun'altra parte lo usa.
+   - **Pagine non assegnate**: restano con il job finché l'archivista non sceglie. Una nuova impaginazione della stessa parte le sostituisce, e la pulizia notturna le elimina, con il loro PDF, dopo 7 giorni o quando la parte viene eliminata.
+   - **PDF**: resta scaricabile finché la parte non riceve altre pagine impaginate; quello delle pagine sostituite si elimina con esse.
+5. Pagine e PDF ricordano la versione da cui derivano: l'editor segnala quando la versione corrente è più recente delle pagine e propone di impaginare di nuovo. Il legame vale finché la parte conserva le pagine assegnate: se le pagine cambiano a mano, la parte non risulta più impaginata da una versione.
 
 ### Parti da impaginare
 
@@ -223,7 +225,7 @@ L'organico è l'elenco ordinato degli strumenti che suonano abitualmente nella b
 
 ### Scaricamento
 
-MusicXML compresso, MIDI e PDF di una versione, come oggi il MusicXML per MuseScore.
+MusicXML compresso, MIDI e PDF di una versione, come oggi il MusicXML per MuseScore. Il PDF è quello dell'ultima impaginazione della versione; il MIDI arriva con le [parti ricavate](#piano-di-implementazione).
 
 ## Interfaccia utente
 
@@ -305,7 +307,11 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Versioni delle parti**: `score_version` esistente, con le nuove origini `WRITING` e `ARRANGEMENT`. Il salvataggio usa la stessa richiesta JSON della correzione, con controlli e limiti invariati, più il controllo del blocco, che vale anche per le correzioni.
 - **Partiture**: nuove entità per la partitura della traccia e le sue versioni, con lo stesso modello immutabile delle parti.
 - **Estrazione**: il backend divide la versione della partitura in parti, applica la trasposizione dello strumento e crea le versioni delle parti in una transazione; i controlli MusicXML esistenti (`MusicXmlInspector`) valgono anche qui.
-- **Impaginazione**: job su una nuova coda RabbitMQ, con lo stesso schema del riconoscimento (tabella dei job come fonte di verità, recupero pianificato), senza notifica al termine: l'editor legge lo stato del job.
+- **Impaginazione**: job su una nuova coda RabbitMQ, `score.engraving` con la coda di scarto `score.engraving.dead`, con lo stesso schema del riconoscimento, senza notifica al termine: l'editor legge lo stato del job.
+  - **Job**: la tabella dei job è la fonte di verità. Un worker prende il job con un aggiornamento atomico, chiama il servizio fuori da ogni transazione e scarta il risultato se nel frattempo il job è passato a un altro tentativo. Il recupero pianificato rimette in coda i job interrotti, fino a tre tentativi (`interrupted` dopo l'ultimo), e ripubblica quelli rimasti in coda.
+  - **Opzioni**: si controllano prima di accodare il job (rigo da 4 a 9,6 mm, margini da 3 a 30 mm, testi dell'intestazione fino a 200 caratteri, quelli vuoti tolti) e si salvano con il job, che le manda al servizio così come sono.
+  - **Pagine e PDF**: media della categoria delle parti, con il nome della parte (`basso-in-do-pagina-1.png`, `basso-in-do.pdf`). Le pagine restano legate al job (`score_engraving_page`) fino all'assegnazione, che blocca la traccia e ne controlla la versione come la modifica delle parti.
+  - **Versione impaginata**: l'assegnazione salva con la parte la versione e l'impronta delle pagine; l'ascolto la riporta, solo a chi gestisce la traccia, finché l'impronta coincide.
 
 ### Servizio musicale
 
@@ -330,12 +336,13 @@ Changelog nello schema del tenant. Tutte le nuove tabelle hanno i campi di audit
 | `arrangement_version` | `id`, `arrangement_id`, `version_number`, `status`, `media_asset_id` (MusicXML compresso a più parti), `parent_version_id`, `part_map_json` (parte della partitura → parte della traccia), `measure_count`, `checks_json`, approvazione; univoco `(arrangement_id, version_number)` |
 | `score_draft` | `id`, tipo e identificativo del bersaglio (parte o partitura), `base_version_id`, `content` (MusicXML compresso; il testo inviato non supera il limite dei caricamenti, 10 MB), `saved_by`, `saved_at`, `entity_version`; una bozza per bersaglio |
 | `score_edit_lock` | tipo e identificativo del bersaglio, `owner`, `owner_name`, `acquired_at`, `heartbeat_at`, `expires_at`; univoco per bersaglio |
-| `score_engraving_job` | `id`, `sheet_music_id`, `score_version_id`, `options_json`, `status`, `attempts`, `error_code`, `pdf_media_asset_id`, `page_count`, audit |
-| `sheet_music` (esistente) | `engraved_from_version_id` facoltativo: versione da cui derivano le pagine generate |
+| `score_engraving_job` | `id`, `sheet_music_id`, `track_id`, `score_version_id`, `options_json`, `status`, `attempts`, `requested_by`, `started_at`, `finished_at`, `error_code`, `engine_version`, `duration_millis`, `page_count`, `pdf_media_asset_id`, `applied_at`, `applied_sheet_music_id`, `entity_version`, audit; un solo job in coda o in corso per parte |
+| `score_engraving_page` | `job_id`, `page_index`, `media_asset_id`: pagine di un job non ancora assegnate |
+| `sheet_music` (esistente) | `engraved_from_version_id` facoltativo: versione da cui derivano le pagine generate; `engraved_pages_fingerprint`: impronta delle pagine assegnate, presente con la versione |
 | `instrument` (esistente) | `lowest_written_pitch`, `highest_written_pitch`: estensione scritta come numeri di nota MIDI, facoltativi, proposti dal catalogo di riferimento come suono e trasposizione; `ensemble_position` facoltativo: posizione nell'[organico della banda](#organico-della-banda) |
-| `track` (esistente) | `arranger` facoltativo, come `composer`: mostrato nel dettaglio della traccia e nell'intestazione delle pagine |
+| `track` (esistente) | `arranger` facoltativo, già presente accanto a `composer`: mostrato nel dettaglio della traccia e proposto nell'intestazione delle pagine |
 
-Pagine e PDF generati sono media delle categorie esistenti; `MediaRepository.isUnreferenced` aggiunge i riferimenti dei job e delle partiture. La funzionalità `SCORE_WRITING` richiede una colonna del flag nel registro dei tenant, come le altre funzionalità.
+Pagine e PDF generati sono media della categoria delle parti (`scores`); `MediaRepository.isUnreferenced` aggiunge i riferimenti dei job, PDF e pagine non assegnate, e con la [partitura](#piano-di-implementazione) quelli delle sue versioni. La pulizia delle versioni non elimina una versione da cui derivano le pagine di una parte, né una con un'impaginazione in coda, in corso o non assegnata. La funzionalità `SCORE_WRITING` richiede una colonna del flag nel registro dei tenant, come le altre funzionalità.
 
 ## API REST
 
@@ -351,14 +358,18 @@ Sotto `/api/tracks/{trackId}`, per super amministratore, amministratore e archiv
 | `GET`, `POST /arrangements`, `GET /arrangements/{id}/versions` | partiture della traccia e loro versioni |
 | `POST /arrangements/{id}/versions/{versionId}/extract` | estrazione delle parti, con la corrispondenza confermata |
 | `GET`, `PUT`, `DELETE /arrangements/{id}/draft`, `.../edit-lock` | bozza e blocco della partitura |
-| `POST /scores/{scoreId}/score-versions/{versionId}/engravings` | avvia l'impaginazione; `GET` ne legge lo stato |
-| `GET /scores/{scoreId}/score-versions/{versionId}/file` (esistente) | scaricamento del MusicXML; nuovo parametro `format=midi\|pdf` |
+| `POST /scores/{scoreId}/score-versions/{versionId}/engravings` | avvia l'impaginazione con le opzioni, tutte facoltative, e risponde 202 con il job; `GET` legge l'ultimo job della versione, 204 se non ce ne sono |
+| `POST /scores/{scoreId}/score-versions/{versionId}/engravings/{jobId}/apply` | assegna le pagine del job: `target` `REPLACE`, al posto delle pagine della parte, o `NEW_PART`, e `trackVersion` facoltativa; restituisce la parte e la nuova versione della traccia |
+| `GET /scores/{scoreId}/score-versions/{versionId}/engravings/pdf` | scaricamento del PDF dell'ultima impaginazione della versione |
+| `GET /scores/{scoreId}/score-versions/{versionId}/file` (esistente) | scaricamento del MusicXML; nuovo parametro `format=midi` con le parti ricavate |
 
 L'organico si salva con `PUT /api/instruments/ensemble`, che riceve l'elenco ordinato degli strumenti che ne fanno parte, per chi gestisce gli strumenti; `GET /api/instruments/ensemble/reference` restituisce l'ordine di riferimento proposto, senza salvarlo.
 
 Il blocco di una parte (`/scores/{scoreId}/edit-lock`) richiede solo l'ascolto (`SCORE_PLAYBACK`), perché lo usa anche l'editor di correzione; con `SCORE_WRITING` disattivata restano disponibili solo il blocco e il salvataggio delle correzioni.
 
-Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriting.locked` (409, con nome e ora di chi scrive; anche per bozze e versioni inviate senza il blocco), `scoreWriting.draftOutdated` (409), `scoreWriting.instrumentNotFound` (400, per uno strumento inesistente nella parte scritta da zero), `scoreWriting.instrumentNotConfigured` (422, per l'estrazione), `scoreWriting.engravingUnavailable` (503). Una parte scritta da zero su una traccia modificata nel frattempo riceve `version.conflict` (409).
+Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriting.locked` (409, con nome e ora di chi scrive; anche per bozze e versioni inviate senza il blocco), `scoreWriting.draftOutdated` (409), `scoreWriting.instrumentNotFound` (400, per uno strumento inesistente nella parte scritta da zero), `scoreWriting.instrumentNotConfigured` (422, per l'estrazione), `scoreWriting.engravingUnavailable` (503, senza servizio musicale), `scoreWriting.engravingOptionsInvalid` (400, con `field`), `scoreWriting.engravingRunning` (409, un'impaginazione della parte è già in coda o in corso), `scoreWriting.engravingNotFound` (404), `scoreWriting.engravingNotReady` (409, job non terminato, già assegnato o con le pagine ormai sostituite). Una parte scritta da zero, o un'assegnazione di pagine, su una traccia modificata nel frattempo riceve `version.conflict` (409).
+
+Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOptions`, `tooManyPages`, `tooLarge`, `engineFailed`, `engineTimeout`, `serviceUnavailable` quando non risponde) o del backend (`versionNotFound` per una versione o una parte eliminata nel frattempo, `interrupted`, `unexpected`); un risultato senza pagine o con un numero di pagine diverso da quello dichiarato vale `engineFailed`.
 
 ## Autorizzazioni e isolamento tenant
 
@@ -368,7 +379,7 @@ Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriti
 
 ## Osservabilità e sicurezza
 
-- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` e la durata dell'impaginazione.
+- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` (`done` o il codice dell'errore), la durata dell'impaginazione (`taurus.score.engraving.duration`) e `taurus.score.engravings.applied{target}` (`replace`, `newPart`).
 - Log con identificativi di parte, partitura, versione e job; mai il contenuto MusicXML.
 - Gli stessi limiti di sicurezza dei file MusicXML caricati (entità e DTD disattivate, limiti di dimensione); bozze entro lo stesso limite dei caricamenti (`application.score-playback.max-upload-bytes`, 10 MB di MusicXML non compresso) e al più un salvataggio ogni due secondi per bozza (`application.score-writing.draft-min-interval`), che una sola finestra alla volta può scrivere perché serve il blocco.
 - Il servizio musicale resta sulla rete interna con la chiave condivisa; l'impaginazione ha un tempo massimo come il riconoscimento.

@@ -997,6 +997,11 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scoreWriting.draftTooFrequent` | 429 | Salvataggio della stessa bozza prima dell'intervallo minimo dal precedente | — | Nessuno: l'editor riprova al salvataggio successivo |
 | `scoreWriting.draftOutdated` | 409 | Salvataggio di una versione scritta quando un'altra versione è diventata corrente dopo l'inizio della scrittura, senza la conferma esplicita | — | «Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla» |
 | `scoreWriting.instrumentNotFound` | 400 | Uno degli strumenti scelti per una parte scritta da zero non esiste o è stato eliminato | — | «Uno degli strumenti scelti non esiste più: ricaricare la pagina» |
+| `scoreWriting.engravingUnavailable` | 503 | Avvio di un'impaginazione senza il servizio musicale configurato (`application.omr.url` e chiave) | — | «Impaginazione non disponibile: il servizio musicale non è configurato» |
+| `scoreWriting.engravingOptionsInvalid` | 400 | Opzione di impaginazione fuori dai limiti, o assegnazione delle pagine senza la destinazione | `field`: `staffSize` (rigo fuori da 4–9,6 mm), `margin` (margini fuori da 3–30 mm), `header.title`, `header.composer`, `header.arranger`, `header.partName` (testo oltre 200 caratteri), `target` (destinazione mancante) | Testo per campo, per esempio «I margini devono essere tra 3 e 30 mm» |
+| `scoreWriting.engravingRunning` | 409 | Un'impaginazione della stessa parte è già in coda o in corso | — | «La parte è già in impaginazione: attendere che finisca» |
+| `scoreWriting.engravingNotFound` | 404 | Il job non esiste o è di un'altra parte o versione; per il PDF, la versione non ha impaginazioni con un PDF | — | «Impaginazione non trovata: impaginare di nuovo la versione» |
+| `scoreWriting.engravingNotReady` | 409 | Assegnazione di pagine di un job non terminato, già assegnato o con le pagine ormai eliminate, da un'impaginazione più recente della parte o dalla pulizia | — | «Le pagine impaginate non sono più disponibili: impaginare di nuovo la versione» |
 
 ### Onboarding
 
