@@ -124,10 +124,24 @@ Una parte della traccia senza versioni né bozza, per esempio senza pagine da ri
 - **Altre parti**: si incolla anche in un'altra parte o in un altro brano, con l'altezza scritta, alterazioni comprese: nell'armatura di arrivo l'editor scrive gli accidenti che servono, per esempio il diesis di un Fa♯ copiato da Sol maggiore e incollato in Do maggiore.
 - **Ripeti** (`R`) incolla il passaggio subito dopo di lui; ripetendo battute intere alla fine della parte si aggiunge una battuta.
 - **Cancella** (`Canc`) trasforma il passaggio in pause: una voce oltre la prima rimasta solo di pause si toglie, e la prima voce di una battuta rimasta solo di pause torna una pausa di battuta.
-- **Cosa si copia**: note, accordi, pause, abbellimenti, articolazioni, gruppi irregolari interi (terzina, quintina e sestina di una figura senza punti) e le dinamiche scritte prima delle note. Legature di portamento e forcelle si copiano solo con entrambi gli estremi nel passaggio; le legature di valore solo verso una nota del passaggio. Gli altri segni della battuta (testi, tempi, segni di struttura) restano dove sono.
+- **Cosa si copia**: note, accordi, pause, abbellimenti, articolazioni, corone, gruppi irregolari interi (terzina, quintina e sestina di una figura senza punti), le dinamiche e i testi di espressione scritti prima delle note. Legature di portamento e forcelle si copiano solo con entrambi gli estremi nel passaggio; le legature di valore solo verso una nota del passaggio. Gli altri segni della battuta (lettere di prova, tempi, segni di struttura, interruzioni) restano dove sono.
 - **Trasposizione**: nella scheda **Passaggio** si sceglie l'intervallo, dall'unisono aumentato all'ottava con la grafia di arrivo (la seconda minore porta Do a Re♭), verso l'alto o verso il basso, per la selezione o per tutta la parte, che traspone anche le armature. Un'armatura di arrivo con più di sette alterazioni, o una nota con più di due, si rifiuta con l'invito a scegliere l'intervallo enarmonico. `↑` `↓` spostano il passaggio di un grado nella tonalità, con `Ctrl` di un'ottava; le note legate a quelle del passaggio si spostano con loro.
 - **Altezze conservate**: incollando, cancellando e trasponendo, le note non toccate della battuta conservano la loro altezza, e l'editor scrive gli accidenti che servono, per esempio un bequadro dopo un Fa diventato Fa♯.
 - **Passaggi rifiutati**: incollare o cancellare solo una parte di un gruppo irregolare, e incollare un gruppo che non entra nella battuta di arrivo.
+
+### Segni di espressione e impaginazione
+
+I segni non cambiano le durate: si scrivono anche nella correzione, tranne le interruzioni, che solo la scrittura disegna.
+
+- **Legatura di portamento** (`S`): sul passaggio va dalla sua prima alla sua ultima nota, nella voce del passaggio, saltando le pause agli estremi; su una nota va alla nota seguente della voce, da un abbellimento all'elemento seguente. La stessa legatura si toglie, e su una nota che inizia o finisce una legatura si tolgono le sue. Una legatura dentro un'altra prende il numero libero più basso.
+- **Forcelle** (`<` crescendo, `>` diminuendo): dal primo all'ultimo elemento del passaggio, pause comprese, oppure dalla nota all'elemento seguente della voce, anche nella battuta dopo. Sono due direzioni scritte prima delle note di inizio e di fine, che le portano con sé come le dinamiche; la stessa forcella si toglie, quella opposta cambia verso. **Togli** elimina legature di portamento e forcelle con un estremo nella nota o nel passaggio.
+- **Sempre intere**: nella scrittura, dopo ogni modifica, legature di portamento e forcelle rimaste senza inizio o senza fine si tolgono, per esempio quando la nota dove finivano diventa una pausa. Riscrivendo una nota con un'altra figura la legatura resta sul suo primo pezzo.
+- **Corona** su note, accordi e pause; **Respiro** tra le articolazioni, dopo la nota.
+- **Abbellimenti**: **Acciaccatura** (barrata) e **Appoggiatura** aggiungono prima della nota una croma della stessa altezza, selezionata per spostarla con le frecce e cambiarne la figura; su un abbellimento selezionato i due comandi ne cambiano il tipo, `Canc` lo toglie. Gli abbellimenti non diventano pause, non si legano di valore e non entrano nei gruppi irregolari.
+- **Testo di espressione**: in corsivo prima della nota, con proposte («dolce», «espress.», «rit.», «a tempo», «solo»…) e testo libero fino a 60 caratteri; le indicazioni di tempo e di chi suona vanno sopra il rigo, le altre sotto. Ogni nota ha un testo, che appartiene a lei come le dinamiche.
+- **Lettere di prova**: all'inizio della battuta, con la lettera seguente proposta (A, B… Z, poi AA, BB) o il numero della battuta come numero di riferimento.
+- **Tempo con testo**: «Allegro» accanto al metronomo, in grassetto; il testo accompagna sempre le semiminime al minuto, che servono all'ascolto. Un'indicazione senza metronomo si scrive come testo di espressione.
+- **Interruzioni**: la battuta selezionata può iniziare una nuova riga o una nuova pagina, e **Battute per riga** mette una nuova riga ogni tante battute in tutta la parte, contate dall'inizio e da ogni nuova pagina, al posto delle interruzioni di riga che c'erano. Le interruzioni restano nel MusicXML per l'impaginazione e per MuseScore; la scrittura le disegna, con la nuova pagina mostrata come nuova riga perché lo spartito scorre, mentre correzione e lettore seguono la larghezza dello schermo.
 
 ### Partitura e arrangiamento
 
@@ -198,6 +212,9 @@ L'editor si apre a schermo intero, come quello di correzione.
 
 - **Barra superiore**: titolo «Scrittura · nome della parte» con lo stato della bozza sotto («Bozza salvata alle 10:41»), annulla e ripristina, ascolto dal punto selezionato, **Tastiera MIDI**, **Salva**, **Salva e approva**, **Impagina**.
 - **Scheda Nota**: l'interruttore **Inserimento**, la voce del cursore da 1 a 4 e lo spostamento del cursore, poi durata e punti, che durante l'inserimento valgono per le note seguenti. Nella scrittura «Inserisci prima» e «Inserisci dopo» della correzione non compaiono, ed «Elimina» diventa **Cancella**, che trasforma la nota in pausa.
+- **Scheda Espressione**: dinamiche; **Crescendo**, **Diminuendo**, **Legatura di portamento** e **Togli**, sulla nota o sul passaggio; articolazioni con **Respiro** e **Corona**; **Acciaccatura** e **Appoggiatura**; il testo di espressione con le proposte. I pulsanti si evidenziano quando la nota selezionata ha già il segno.
+- **Scheda Struttura**: ritornelli, volte, segni e salti, la lettera di prova con **Numero di battuta**, il tempo con il suo testo.
+- **Scheda Impaginazione**, solo nella scrittura: **Continua**, **Nuova riga** o **Nuova pagina** dalla battuta selezionata, e le battute per riga di tutta la parte.
 - **Scheda Passaggio**: **Tutta la parte** e **Togli la selezione**; **Copia**, **Taglia**, **Incolla**, con ciò che è negli appunti, e **Ripeti**; la trasposizione con intervallo, direzione e note da trasporre (la selezione o tutta la parte). Le note del passaggio si colorano sullo spartito e le sue battute si evidenziano; la barra di stato lo descrive («Selezione · battute 3–5 · voce 1 · 12 elementi», «Selezione · battute 3–5 · tutte le voci») e l'ascolto suona le sue battute.
 - **Palette laterale** a schede: Note, Battuta (metro, armatura, chiave, battute), Struttura (ritornelli, volte, salti, lettere di prova), Espressione (dinamiche, forcelle, articolazioni, legature, testo), Impaginazione (interruzioni di riga e di pagina). Ogni comando indica la sua scorciatoia.
 - **Spartito** al centro, con il cursore di inserimento visibile come una barra verticale colorata nella posizione dove andrà la prossima nota.
@@ -226,7 +243,8 @@ L'editor si apre a schermo intero, come quello di correzione.
 | `Esc` | esce dalla modalità di inserimento; fuori dall'inserimento toglie la selezione del passaggio |
 | `Maiusc` + clic, `Maiusc` + `←` `→` | seleziona un passaggio dalla nota selezionata |
 | `Ctrl` + `A` | seleziona tutta la parte |
-| `S` | legatura di portamento sulla selezione |
+| `S` | legatura di portamento sulla selezione o fino alla nota seguente; sulla nota legata la toglie |
+| `<` `>` | forcella di crescendo o di diminuendo sulla selezione o fino all'elemento seguente |
 | `Alt` + `3` | terzina al cursore, lunga quanto la durata corrente (con `5`, `6` gli altri gruppi irregolari) |
 | `Ctrl` + `Alt` + `1`–`4` | voce attiva |
 | `Ctrl` + `C`, `X`, `V` | copia, taglia, incolla, anche in un'altra parte |
