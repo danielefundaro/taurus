@@ -10,5 +10,5 @@ fonttools==4.68.0
 pillow==13.0.0
 pycparser==3.12
 tinycss2==1.5.1
-verovio==6.4.0
+verovio==6.4.1
 webencodings==0.6.1

@@ -141,6 +141,7 @@ services:
       TAURUS_OMR_API_KEY: ${TAURUS_OMR_API_KEY:?impostare TAURUS_OMR_API_KEY, almeno 16 caratteri}
       TAURUS_OMR_CONCURRENCY: ${TAURUS_OMR_CONCURRENCY:-1}
       TAURUS_OMR_TEXT_CONCURRENCY: ${TAURUS_OMR_TEXT_CONCURRENCY:-1}
+      TAURUS_OMR_ENGRAVING_CONCURRENCY: ${TAURUS_OMR_ENGRAVING_CONCURRENCY:-1}
     # Le restrizioni di omr.yml: nessuna porta pubblicata, file system in sola lettura, /tmp in
     # memoria, nessuna capability e nessun privilegio nuovo.
     read_only: true

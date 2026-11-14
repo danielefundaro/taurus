@@ -96,6 +96,10 @@ jobs:
       # disponibilita' di AgID; il confronto con la fonte lo fa il workflow `cie-trust-anchors`.
       - name: Verify the CIE trust anchors
         run: node scripts/ops/fetch-cie-trust-anchors.mjs --verify-bundle
+      # Verovio con la stessa versione nel frontend e nel servizio musicale, perche' l'anteprima
+      # dell'impaginazione nel browser coincida con le pagine generate.
+      - name: Check the Verovio versions
+        run: node scripts/ops/check-verovio-versions.mjs
 
   backend:
     needs: [changes, documentation]
@@ -168,7 +172,12 @@ jobs:
           cache: pip
           cache-dependency-path: taurus-omr/requirements-test.txt
       - run: pip install -r requirements-test.txt
+      # Cairo and the Times-compatible font of the image, for the engraving tests; with TAURUS_OMR_REQUIRE_CAIRO a
+      # missing Cairo fails those tests instead of skipping them.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcairo2 fonts-liberation
       - run: python -m pytest
+        env:
+          TAURUS_OMR_REQUIRE_CAIRO: 'true'
       # Builds the complete image: every pinned download and checksum is verified again.
       - run: docker build -t taurus-omr:verify .
       # Accuracy of the real engines on the reference corpus, with the restrictions of omr.yml; the results are in the

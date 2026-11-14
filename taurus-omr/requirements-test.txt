@@ -1,14 +1,21 @@
-# Pinned environment for the unit tests, without the engines: they are replaced by fake programs in the tests.
+# Pinned environment for the unit tests, without the recognition engines: they are replaced by fake programs in the
+# tests. The engraving tests use the real Verovio and CairoSVG, which also need the Cairo library.
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.15.1
+brotli==1.2.1
+cairocffi==1.7.1
+CairoSVG==2.9.1
 certifi==2026.10.23
+cffi==2.1.1
 chardet==7.7.0
 charset-normalizer==3.5.2
 click==8.5.0
 cloudpickle==3.1.2
 contourpy==1.4.0
+cssselect2==0.10.1
 cycler==0.12.1
+defusedxml==0.7.1
 fastapi==0.162.0
 fonttools==4.68.0
 h11==0.16.0
@@ -27,6 +34,7 @@ opentelemetry-api==1.45.2
 packaging==26.3
 pillow==13.0.0
 pluggy==1.7.0
+pycparser==3.12
 pydantic==2.14.2
 pydantic_core==2.50.2
 Pygments==2.21.0
@@ -37,9 +45,12 @@ python-multipart==0.0.33
 requests==2.34.2
 six==1.17.0
 starlette==1.10.0
+tinycss2==1.5.1
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.6
 urllib3==2.8.0
 uvicorn==0.54.0
+verovio==6.4.1
 webcolors==25.10.0
+webencodings==0.6.1

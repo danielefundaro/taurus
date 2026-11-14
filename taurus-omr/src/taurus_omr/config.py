@@ -38,6 +38,11 @@ class Settings:
     text_concurrency: int = 1
     text_threads: int = 2
     text_timeout_seconds: int = 60
+    # Engraving runs in its own process too, with its own slots: a part of a few pages must not wait for a recognition.
+    engraving_command: tuple[str, ...] = field(default_factory=lambda: (sys.executable, "-m", "taurus_omr.engrave"))
+    engraving_concurrency: int = 1
+    engraving_timeout_seconds: int = 120
+    max_score_bytes: int = 20 * MEGABYTE
     work_dir: str = field(default_factory=tempfile.gettempdir)
 
     def __post_init__(self) -> None:
@@ -45,7 +50,8 @@ class Settings:
             raise ConfigurationError(f"TAURUS_OMR_API_KEY must be at least {MIN_API_KEY_LENGTH} characters long")
         for name in (
             "engine_timeout_seconds", "max_pages", "max_request_bytes", "max_midi_bytes", "max_image_pixels", "concurrency",
-            "text_concurrency", "text_threads", "text_timeout_seconds",
+            "text_concurrency", "text_threads", "text_timeout_seconds", "engraving_concurrency", "engraving_timeout_seconds",
+            "max_score_bytes",
         ):
             if getattr(self, name) <= 0:
                 raise ConfigurationError(f"{name} must be positive")
@@ -63,6 +69,8 @@ class Settings:
             values["homr_command"] = tuple(shlex.split(env["TAURUS_OMR_HOMR_COMMAND"]))
         if "TAURUS_OMR_TEXT_COMMAND" in env:
             values["text_command"] = tuple(shlex.split(env["TAURUS_OMR_TEXT_COMMAND"]))
+        if "TAURUS_OMR_ENGRAVING_COMMAND" in env:
+            values["engraving_command"] = tuple(shlex.split(env["TAURUS_OMR_ENGRAVING_COMMAND"]))
         integers = {
             "TAURUS_OMR_ENGINE_TIMEOUT_SECONDS": ("engine_timeout_seconds", 1),
             "TAURUS_OMR_MAX_PAGES": ("max_pages", 1),
@@ -73,6 +81,9 @@ class Settings:
             "TAURUS_OMR_TEXT_CONCURRENCY": ("text_concurrency", 1),
             "TAURUS_OMR_TEXT_THREADS": ("text_threads", 1),
             "TAURUS_OMR_TEXT_TIMEOUT_SECONDS": ("text_timeout_seconds", 1),
+            "TAURUS_OMR_ENGRAVING_CONCURRENCY": ("engraving_concurrency", 1),
+            "TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS": ("engraving_timeout_seconds", 1),
+            "TAURUS_OMR_MAX_SCORE_MB": ("max_score_bytes", MEGABYTE),
         }
         for variable, (name, unit) in integers.items():
             if variable in env:

@@ -40,6 +40,24 @@ def test_reads_the_text_reading_settings() -> None:
     assert settings.text_command == ("python3", "-m", "taurus_omr.text")
 
 
+def test_reads_the_engraving_settings() -> None:
+    defaults = Settings.from_env({"TAURUS_OMR_API_KEY": "k" * 32})
+    settings = Settings.from_env(
+        {
+            "TAURUS_OMR_API_KEY": "k" * 32,
+            "TAURUS_OMR_ENGRAVING_CONCURRENCY": "2",
+            "TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS": "45",
+            "TAURUS_OMR_MAX_SCORE_MB": "5",
+            "TAURUS_OMR_ENGRAVING_COMMAND": "python3 -m taurus_omr.engrave",
+        }
+    )
+
+    assert (defaults.engraving_concurrency, defaults.engraving_timeout_seconds, defaults.max_score_bytes) == (1, 120, 20 * 1024 * 1024)
+    assert defaults.engraving_command[1:] == ("-m", "taurus_omr.engrave")
+    assert (settings.engraving_concurrency, settings.engraving_timeout_seconds, settings.max_score_bytes) == (2, 45, 5 * 1024 * 1024)
+    assert settings.engraving_command == ("python3", "-m", "taurus_omr.engrave")
+
+
 @pytest.mark.parametrize(
     "environ",
     [
@@ -48,6 +66,7 @@ def test_reads_the_text_reading_settings() -> None:
         {"TAURUS_OMR_API_KEY": "k" * 32, "TAURUS_OMR_MAX_PAGES": "0"},
         {"TAURUS_OMR_API_KEY": "k" * 32, "TAURUS_OMR_CONCURRENCY": "two"},
         {"TAURUS_OMR_API_KEY": "k" * 32, "TAURUS_OMR_TEXT_THREADS": "0"},
+        {"TAURUS_OMR_API_KEY": "k" * 32, "TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS": "0"},
     ],
 )
 def test_refuses_to_start_without_a_valid_configuration(environ: dict[str, str]) -> None:
