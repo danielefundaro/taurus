@@ -12,7 +12,7 @@ Il documento è una checklist eseguibile e una matrice di copertura. Non sostitu
 Copertura presente nel repository (la data dell'ultima verifica è nel catalogo):
 
 - backend: 239 file Java di test e supporto sotto `src/test`, con unit test, test Spring e integrazioni PostgreSQL/Testcontainers;
-- frontend: 68 specifiche Jasmine/Karma;
+- frontend: 130 specifiche Jasmine/Karma;
 - servizio OMR: 9 file pytest, con test sui motori finti, test dell'impaginazione con Verovio e Cairo veri e test di accuratezza sui motori reali, eseguiti solo con il servizio in esecuzione;
 - provider Keycloak: 7 classi di test, fra cui `TaurusOtpTest`, `TaurusOtpResourceIT`, `EmailTemplatesTest` sui modelli di posta del tema, `EmailDeliveryIT`, che fa partire un'e-mail vera verso Mailpit, e `TenantRoleFlowIT`, che attraversa il browser flow e legge i claim del mapper su un Keycloak reale;
 - sito informativo: type-check, build e `pnpm test`/`pnpm test:image`, che controllano il sito costruito e l'immagine nginx che lo serve;
@@ -460,7 +460,7 @@ Serve Docker Compose v2 per il primo e solo `curl` per il secondo. Nessuno dei d
 | Preparazione evento | Casi `PREP-*`, `EventPreparationServiceTest`, `PreparationHashesTest`, `EventPreparationIT`, `EventPreparationSecurityConfigurationTest`, `EventPreparationNotificationSchedulerTest`, `CalendarOperationProviderTest` e `OperationalDashboardIT`, spec di `calendar-events/detail` e `detail/preparation/`, `e2e/specs/event-preparation.spec.ts` con `E2E_PREPARATION_EVENT_ID` |
 | Firma elettronica | Casi `SIG-*` interessati, `SignatureIT`, `LoanSheetSignatureIT` e test di `service/signature`, specifiche delle finestre di firma e del codice, invio reale con Mailpit e con il server SMTP dell'ambiente, stampa del modello predefinito; per l'app di autenticazione anche `mvnw verify` di `keycloak-authenticator` |
 | Ascolto, riconoscimento e correzione delle parti | Casi `PLY-*` interessati, `ScorePlaybackIT` e `ScoreRecognitionIT`, specifiche di `score-player/` e `score-editor/`, prova nel browser anche a larghezza di telefono |
-| Scrittura e impaginazione delle parti | `ScoreWritingIT`, `ScoreEngravingIT` e i test di `service/scorewriting`, `ScoreWritingResourceFeatureTest`, `OmrClientTest`, specifiche di `score-editor/` e dell'editor a schermo intero, `tests/test_engraving.py` di `taurus-omr` con Cairo |
+| Scrittura e impaginazione delle parti | `ScoreWritingIT`, `ScoreEngravingIT` e i test di `service/scorewriting`, `ScoreWritingResourceFeatureTest`, `OmrClientTest`, specifiche di `score-editor/`, dell'editor a schermo intero, del dialogo `engrave-dialog`, della scheda Ascolto, del Workspace Parti e dell'anteprima, `tests/test_engraving.py` di `taurus-omr` con Cairo; dopo un aggiornamento di Verovio, confronto delle pagine dell'anteprima con quelle del servizio sullo stesso MusicXML |
 | Servizio OMR, motori o modelli | `pytest`, build dell'immagine, test di accuratezza sul corpus e, se cambiano i motori, `PLY-018` |
 | Keycloak provider/theme | Build JAR, avvio Keycloak reale, login, selezione tenant/ruolo e rendering temi |
 | Configurazione/manifest | `scripts/ops/validate-deploy-manifest.sh` e `scripts/ops/fetch-cie-trust-anchors.mjs --verify-bundle`, poi deploy staging, probe, secret, rete, restart, rollback e `scripts/ops/smoke-test.sh` |

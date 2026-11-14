@@ -198,20 +198,21 @@ La copia nel browser non si elimina mai per un rifiuto del server: si elimina so
    - **Numeri di pagina**: dalla seconda pagina, al centro sotto la musica, in una fascia lasciata libera sopra il margine inferiore.
    - **Numeri di battuta**: all'inizio di ogni rigo (proposto), su ogni battuta per le [parti di studio](#estensioni-approvate) o nessuno.
    - **Righe e pagine**: le interruzioni di riga della parte restano, come nella scrittura, e una riga piena va a capo da sola; un'interruzione di pagina inizia una pagina nuova, che ripete chiave, armatura e tempo.
-2. Il browser mostra subito un'anteprima con Verovio.
-3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF. Una parte ha una sola impaginazione in coda o in corso alla volta; il PDF si scarica appena il job termina, anche prima di assegnare le pagine.
-4. Al termine Taurus chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**, con la stessa descrizione e gli stessi strumenti; per una parte scritta da zero, senza pagine, le aggiunge direttamente. Le pagine sostituite seguono le regole delle pagine tolte da una parte: il file si elimina quando nessun'altra parte lo usa.
+2. Il browser mostra subito un'anteprima con Verovio, ridisegnata a ogni cambio delle opzioni: stesse opzioni, stessa intestazione e stesse sezioni tra le interruzioni di pagina del servizio, così le pagine dell'anteprima coincidono con quelle generate. L'anteprima segnala una parte oltre le 30 pagine, che il servizio rifiuterebbe; le scelte dell'ultima impaginazione della versione tornano come valori proposti.
+3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF. Una parte ha una sola impaginazione in coda o in corso alla volta; il PDF si scarica appena il job termina, anche prima di assegnare le pagine. Il dialogo legge lo stato ogni 3 secondi e si può chiudere: riaperto sulla stessa versione, riprende dal job, e un job non riuscito ne mostra il motivo sopra le opzioni.
+4. Al termine Taurus mostra le miniature delle pagine e chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**, con la stessa descrizione e gli stessi strumenti; per una parte scritta da zero, senza pagine, offre solo **Aggiungi le pagine alla parte**. Le pagine sostituite seguono le regole delle pagine tolte da una parte: il file si elimina quando nessun'altra parte lo usa.
    - **Pagine non assegnate**: restano con il job finché l'archivista non sceglie. Una nuova impaginazione della stessa parte le sostituisce, e la pulizia notturna le elimina, con il loro PDF, dopo 7 giorni o quando la parte viene eliminata.
    - **PDF**: resta scaricabile finché la parte non riceve altre pagine impaginate; quello delle pagine sostituite si elimina con esse.
-5. Pagine e PDF ricordano la versione da cui derivano: l'editor segnala quando la versione corrente è più recente delle pagine e propone di impaginare di nuovo. Il legame vale finché la parte conserva le pagine assegnate: se le pagine cambiano a mano, la parte non risulta più impaginata da una versione.
+5. Pagine e PDF ricordano la versione da cui derivano: la scheda Ascolto segnala con «Pagine non aggiornate» quando la versione ascoltata è più recente delle pagine, e **Impagina** propone di impaginare di nuovo. Il legame vale finché la parte conserva le pagine assegnate: se le pagine cambiano a mano, la parte non risulta più impaginata da una versione.
 
 ### Parti da impaginare
 
 Una parte scritta o ricavata non ha pagine finché non viene impaginata. Non si genera nulla da sola: la segnalazione guida chi gestisce a impaginarla.
 
-- **Workspace Parti**: l'etichetta «Da impaginare» e il pulsante **Impagina**.
-- **Anteprima e presentazione**: al posto dell'avviso generico «Nessuna pagina da mostrare», «Parte scritta non ancora impaginata», con il collegamento a **Impagina** per chi gestisce la traccia.
-- **Stampa e preparazione degli eventi**: la parte compare come «da impaginare» ed è esclusa dalla stampa, con il conteggio nel riepilogo («2 parti da impaginare non stampate»).
+- **Workspace Parti**: l'icona «Da impaginare» nell'elenco e, nel dettaglio della parte, l'avviso «Parte da impaginare» con **Impagina**, attivo con la traccia salvata. Una parte da impaginare è una parte salvata con una versione e senza pagine.
+- **Scheda Ascolto**: l'etichetta «Da impaginare», o «Pagine non aggiornate», e **Impagina** per ogni parte con una versione, con la scrittura attiva e il servizio musicale configurato.
+- **Anteprima e presentazione**: al posto dell'avviso generico «Nessuna pagina da mostrare», «Parte scritta non ancora impaginata» («Parti scritte non ancora impaginate»), che indica **Impagina** a chi gestisce la traccia e la scheda Ascolto ai soci.
+- **Stampa e preparazione degli eventi**: la parte è esclusa dalla stampa, con il conteggio sotto il titolo dell'anteprima, che segue le parti scelte nei filtri («2 parti da impaginare non stampate»). Nella preparazione degli eventi una parte senza pagine è già «Non pronta»; l'etichetta «da impaginare» arriva con l'[impaginazione per l'evento](#estensioni-approvate).
 - **Soci**: leggono e ascoltano la parte nella scheda Ascolto, con le regole di visibilità dell'ascolto.
 
 ### Organico della banda
@@ -231,7 +232,7 @@ MusicXML compresso, MIDI e PDF di una versione, come oggi il MusicXML per MuseSc
 
 L'editor si apre a schermo intero, come quello di correzione.
 
-- **Barra superiore**: titolo «Scrittura · nome della parte» con lo stato della bozza sotto («Bozza salvata alle 10:41»), annulla e ripristina, ascolto dal punto selezionato, **Tastiera MIDI**, **Salva**, **Salva e approva**, **Impagina**.
+- **Barra superiore**: titolo «Scrittura · nome della parte» con lo stato della bozza sotto («Bozza salvata alle 10:41»), annulla e ripristina, ascolto dal punto selezionato, **Tastiera MIDI**, **Salva**, **Salva e approva**, **Impagina**. **Impagina** chiude l'editor e apre l'impaginazione della versione da cui parte la scrittura, quando non ha modifiche; altrimenti è disattivato con «Salva la versione prima di impaginarla».
 - **Scheda Nota**: l'interruttore **Inserimento**, la voce del cursore da 1 a 4 e lo spostamento del cursore, poi durata e punti, che durante l'inserimento valgono per le note seguenti. Nella scrittura «Inserisci prima» e «Inserisci dopo» della correzione non compaiono, ed «Elimina» diventa **Cancella**, che trasforma la nota in pausa.
 - **Scheda Espressione**: dinamiche; **Crescendo**, **Diminuendo**, **Legatura di portamento** e **Togli**, sulla nota o sul passaggio; articolazioni con **Respiro** e **Corona**; **Acciaccatura** e **Appoggiatura**; il testo di espressione con le proposte. I pulsanti si evidenziano quando la nota selezionata ha già il segno.
 - **Scheda Struttura**: ritornelli, volte, segni e salti, la lettera di prova con **Numero di battuta**, il tempo con il suo testo.
@@ -245,6 +246,7 @@ L'editor si apre a schermo intero, come quello di correzione.
 - **Ricavata da**: per le parti estratte o trasposte, un'etichetta con la parte o la partitura di origine e, se divergono, un avviso.
 - **Scheda Ascolto**: **Nuova parte scritta**, e per ogni parte **Scrivi** oppure, con una bozza, l'etichetta «Bozza non salvata di …» con **Riprendi la bozza** e **Scarta la bozza**. I comandi stanno accanto a **Correggi** e alle versioni, che sono già nella scheda Ascolto, e sono disattivati finché la traccia ha modifiche da salvare.
 - **Workspace Parti**: l'etichetta «Da impaginare», con **Impagina**.
+- **Impagina**: un dialogo con le opzioni a sinistra e l'anteprima delle pagine a destra, una sotto l'altra sul telefono; durante il job lo stato, al termine le miniature con le scelte di assegnazione, **Scarica il PDF** e **Impagina di nuovo**.
 
 ### Scorciatoie principali
 
@@ -300,6 +302,7 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Disegno**: Verovio in un Web Worker, con la selezione di un intervallo di battute per disegnare solo la pagina visibile e le battute vicine; il resto si aggiorna in background. La mappa tra `id` e elementi disegnati resta quella della correzione.
 - **Ascolto**: il lettore esistente, che già legge una parte qualsiasi di un file a più parti e applica trasposizioni e suoni.
 - **MIDI**: un servizio (`MidiInputService`) legge i dispositivi con Web MIDI e riunisce in un accordo le note arrivate entro la soglia mentre la prima è premuta; `score-input.ts` sceglie la grafia dall'armatura, scrive l'altezza esatta conservando il suono delle altre note della battuta e traduce le note di batteria in voce e posizione per le percussioni, sopra le stesse operazioni di inserimento della tastiera del computer. Il pianoforte a schermo passa i suoi tocchi alla stessa strada.
+- **Impaginazione**: `score-engraving.ts` riproduce in TypeScript la preparazione dell'MEI, le opzioni di Verovio, le sezioni tra le interruzioni di pagina e i numeri di pagina del servizio (`engrave.py`); `ScoreRendererService.engrave` disegna l'anteprima con un toolkit Verovio separato da quello del lettore e dell'editor, perché le opzioni dell'impaginazione non passino al loro disegno.
 - **Bozze e blocco**: un servizio che salva la bozza con ritardo, ne conserva una copia in IndexedDB e rinnova il blocco ogni 30 secondi. La copia resta in IndexedDB anche quando il server la rifiuta, fino all'accettazione o allo scarto. L'editor di correzione usa lo stesso servizio per il blocco, senza bozze.
 
 ### Backend
@@ -399,7 +402,7 @@ Le misure seguono il metodo della [fase 4 dell'ascolto](track-score-playback-spe
 
 ## Strategia di test
 
-- **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura.
+- **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura; preparazione dell'MEI, opzioni, sezioni e numeri di pagina dell'impaginazione, dialogo con il job simulato, parti da impaginare nella scheda Ascolto, nel Workspace Parti e nell'anteprima.
 - **Validità**: ogni documento prodotto dai test viene validato contro lo schema XSD di MusicXML 4.0; un campione si apre in MuseScore durante la verifica manuale.
 - **Andata e ritorno**: scrivere, salvare, riaprire e scaricare produce lo stesso MusicXML, senza attributi di lavoro.
 - **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, bozze e versioni scritte o corrette rifiutate senza il blocco, estrazione con trasposizione per rigo e strumenti non configurati, derivazione rifiutata per parti con più strumenti, job di impaginazione con il servizio simulato, autorizzazioni e isolamento tenant.
