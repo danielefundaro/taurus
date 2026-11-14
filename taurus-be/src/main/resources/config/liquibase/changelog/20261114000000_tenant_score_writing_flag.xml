@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261114000000-1" author="taurus">
+    <comment>Per-tenant switch for the music writing editor: off for every tenant, nobody used it before.</comment>
+    <addColumn schemaName="public" tableName="tenant">
+      <column name="score_writing_enabled" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+    </addColumn>
+    <rollback>
+      <dropColumn schemaName="public" tableName="tenant" columnName="score_writing_enabled"/>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

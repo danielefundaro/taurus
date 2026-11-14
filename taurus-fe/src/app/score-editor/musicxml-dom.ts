@@ -112,3 +112,9 @@ export function removeChildren(parent: Element, name: string): void {
 export function removeIfEmpty(target: Element | null): void {
     if (target && target.children.length === 0 && !text(target)) target.remove();
 }
+
+/** Inserisce un elemento all'inizio della battuta, dopo stampa, attributi e stanghetta iniziale. */
+export function insertAtStart(measure: Element, node: Element): void {
+    const anchor = children(measure).find((item) => !['print', 'attributes', 'barline'].includes(item.tagName) || (item.tagName === 'barline' && item.getAttribute('location') !== 'left'));
+    measure.insertBefore(node, anchor ?? null);
+}

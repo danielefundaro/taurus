@@ -17,6 +17,9 @@
                         (onClick)="recognizeAll()"
                     />
                 }
+                @if (canWrite) {
+                    <p-button label="Nuova parte scritta" icon="pi pi-plus" severity="secondary" outlined [disabled]="trackDirty" pTooltip="Aggiunge in fondo alla traccia una parte senza pagine, da scrivere nell'editor" (onClick)="newPart()" />
+                }
                 <p-button label="Ascolta la partitura" icon="pi pi-play" [disabled]="!anyAvailable" (onClick)="openPlayer('score')" />
             </div>
         </div>
@@ -54,6 +57,12 @@
                             <span class="text-sm text-muted-color">versione {{ part.version.versionNumber }} · {{ part.version.measureCount }} battute</span>
                         } @else {
                             <p-tag severity="secondary" value="Ascolto non ancora disponibile" />
+                        }
+                        @if (canManage && part.editing; as editing) {
+                            <p-tag severity="info" icon="pi pi-pencil" [value]="editingLabel(editing)" />
+                        }
+                        @if (canManage && part.draft; as draft) {
+                            <p-tag severity="warn" icon="pi pi-file-edit" [value]="draftLabel(draft)" [pTooltip]="draft.outdated ? 'Dopo l\'inizio della scrittura è stata salvata un\'altra versione della parte' : undefined" />
                         }
                         @if (canManage && part.openReports) {
                             <button type="button" class="p-0 border-0 bg-transparent cursor-pointer" [attr.aria-label]="'Apri le segnalazioni di ' + label(part)" (click)="reports(part)">
@@ -124,6 +133,32 @@
                                 pTooltip="Corregge la versione ascoltata con lo spartito accanto alla pagina originale"
                                 (onClick)="correct(part)"
                             />
+                        }
+                        @if (canWrite) {
+                            @if (part.draft) {
+                                <p-button label="Riprendi la bozza" icon="pi pi-file-edit" size="small" severity="secondary" outlined [disabled]="trackDirty" (onClick)="write(part, true)" />
+                                <p-button
+                                    label="Scarta la bozza"
+                                    icon="pi pi-trash"
+                                    size="small"
+                                    severity="danger"
+                                    text
+                                    [disabled]="trackDirty || !!part.editing"
+                                    [pTooltip]="part.editing ? 'Qualcuno sta scrivendo la parte' : undefined"
+                                    (onClick)="discardDraft(part)"
+                                />
+                            } @else {
+                                <p-button
+                                    label="Scrivi"
+                                    icon="pi pi-pen-to-square"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    [disabled]="trackDirty"
+                                    pTooltip="Scrive la parte nell'editor, con la modalità di inserimento e le bozze salvate da sole"
+                                    (onClick)="write(part)"
+                                />
+                            }
                         }
                         <p-button [label]="playback.recognitionAvailable ? 'Carica MusicXML o MIDI' : 'Carica MusicXML'" icon="pi pi-upload" size="small" severity="secondary" outlined [disabled]="trackDirty" (onClick)="upload(part)" />
                         <p-button label="Versioni e suono" icon="pi pi-history" size="small" severity="secondary" text [disabled]="trackDirty" (onClick)="versions(part)" />

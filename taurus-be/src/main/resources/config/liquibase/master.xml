@@ -33,4 +33,5 @@
   <include file="config/liquibase/changelog/20261104000000_tenant_calendar_flag.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261106000000_legal_document_content.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261113000000_tenant_event_payouts_flag.xml" relativeToChangelogFile="false"/>
+  <include file="config/liquibase/changelog/20261114000000_tenant_score_writing_flag.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

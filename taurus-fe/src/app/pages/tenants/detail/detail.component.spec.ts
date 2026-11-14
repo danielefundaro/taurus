@@ -65,15 +65,7 @@ describe('Tenant DetailComponent', () => {
         expect(modules[0]).toBe('Calendario');
         expect(modules).toContain('Inventario');
         expect(modules).toContain('Preferenze notifiche');
-        expect(extensions).toEqual([
-            'Feed calendario esterno',
-            'Preparazione evento',
-            'QR code inventario',
-            'Fogli di affidamento',
-            'Firma elettronica',
-            'Compensi ai presenti',
-            'Promemoria eventi Web Push'
-        ]);
+        expect(extensions).toEqual(['Feed calendario esterno', 'Preparazione evento', 'QR code inventario', 'Fogli di affidamento', 'Firma elettronica', 'Compensi ai presenti', 'Scrittura delle parti', 'Promemoria eventi Web Push']);
         expect(modules.length + extensions.length).toBe(component['tenantFeatures'].length);
     });
 
@@ -109,6 +101,23 @@ describe('Tenant DetailComponent', () => {
         component.tenant = tenant({ ...enabled, financeEnabled: false });
         component.save();
         expect(confirmService.confirmReversible.calls.mostRecent().args[0].consequence).toContain('Compensi ai presenti (per dipendenza)');
+    });
+
+    it('offers the writing editor among the extensions of the score playback', () => {
+        const { component, confirmService } = create();
+        const writing = component['tenantFeatures'].find((item) => item.feature === TenantFeature.SCORE_WRITING)!;
+
+        expect(writing.label).toBe('Scrittura delle parti');
+        expect(writing.dependencies).toEqual(['scorePlaybackEnabled']);
+        component.tenant = tenant({ scorePlaybackEnabled: false, scoreWritingEnabled: true });
+        expect(component['featureStatus'](writing)).toBe('Richiede un’altra funzionalità');
+        component.tenant.scorePlaybackEnabled = true;
+        expect(component['featureStatus'](writing)).toBe('Disponibile');
+
+        component['originalFeatureValues'] = { scorePlaybackEnabled: true, scoreWritingEnabled: true };
+        component.tenant = tenant({ scorePlaybackEnabled: false, scoreWritingEnabled: true });
+        component.save();
+        expect(confirmService.confirmReversible.calls.mostRecent().args[0].consequence).toContain('Scrittura delle parti (per dipendenza)');
     });
 
     it('asks every module of the Web Push reminders before calling them available', () => {

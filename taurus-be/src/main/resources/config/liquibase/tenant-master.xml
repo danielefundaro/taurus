@@ -96,4 +96,5 @@
   <include file="config/liquibase/changelog/20261106000001_user_legal_acceptance_content_hash.xml"
            relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261113000001_event_payouts.xml" relativeToChangelogFile="false"/>
+  <include file="config/liquibase/changelog/20261114000001_score_writing.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

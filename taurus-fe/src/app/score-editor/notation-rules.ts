@@ -140,6 +140,14 @@ export function multiply(left: Fraction, right: Fraction): Fraction {
     return fraction(left.num * right.num, left.den * right.den);
 }
 
+export function plus(left: Fraction, right: Fraction): Fraction {
+    return fraction(left.num * right.den + right.num * left.den, left.den * right.den);
+}
+
+export function minus(left: Fraction, right: Fraction): Fraction {
+    return fraction(left.num * right.den - right.num * left.den, left.den * right.den);
+}
+
 export function toNumber(value: Fraction): number {
     return value.num / value.den;
 }

@@ -7,4 +7,6 @@ public enum ScoreVersionOrigin {
     UPLOAD_MUSICXML,
     UPLOAD_MIDI,
     CORRECTION,
+    /** Written in the music writing editor. */
+    WRITING,
 }

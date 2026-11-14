@@ -1,0 +1,54 @@
+<app-dialog-shell #shell [heading]="heading" [subtitle]="subtitle" [confirmLabel]="data.part ? 'Apri l\'editor' : 'Crea e scrivi'" [saving]="saving" [invalidCount]="loading ? 1 : errors.length" [dirty]="dirty" (cancel)="cancel()" (confirm)="save()">
+    @if (loading) {
+        <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Lettura delle parti della traccia…</span>
+    } @else {
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            @if (!data.part) {
+                <app-form-field class="sm:col-span-2" label="Nome della parte" forId="newPartDescription" hint="Vuoto: la parte prende il nome degli strumenti.">
+                    <input pInputText id="newPartDescription" class="w-full" [(ngModel)]="description" (ngModelChange)="changed()" maxlength="255" autocomplete="off" />
+                </app-form-field>
+                <app-form-field class="sm:col-span-2" label="Strumenti" forId="newPartInstruments" hint="Gli strumenti propongono la chiave e, se è uno solo, l'armatura trasportata.">
+                    <p-multiselect
+                        inputId="newPartInstruments"
+                        class="w-full"
+                        [options]="instruments"
+                        [(ngModel)]="instrumentIds"
+                        (ngModelChange)="changedInstruments()"
+                        optionLabel="name"
+                        optionValue="id"
+                        display="chip"
+                        [filter]="true"
+                        filterBy="name"
+                        filterPlaceHolder="Cerca uno strumento"
+                        emptyFilterMessage="Nessuno strumento trovato"
+                        placeholder="Nessuno strumento"
+                        ariaLabel="Strumenti della parte"
+                        appendTo="body"
+                    />
+                </app-form-field>
+            }
+            <app-form-field label="Chiave" forId="newPartClef" required [error]="shell.validationAttempted ? error('Scegli la chiave') : undefined">
+                <p-select inputId="newPartClef" class="w-full" [options]="clefs" [(ngModel)]="clef" (ngModelChange)="changedClef()" optionLabel="label" optionValue="value" appendTo="body" />
+            </app-form-field>
+            <app-form-field label="Armatura" forId="newPartKey" required [hint]="keyHint" [error]="shell.validationAttempted ? error('Scegli l\'armatura') : undefined">
+                <p-select inputId="newPartKey" class="w-full" [options]="keys" [(ngModel)]="fifths" (ngModelChange)="changedKey()" optionLabel="label" optionValue="value" appendTo="body" />
+            </app-form-field>
+            <app-form-field label="Metro" forId="newPartBeats" required [error]="shell.validationAttempted ? (error('Il numeratore') ?? error('Il denominatore')) : undefined">
+                <div class="flex items-center gap-2">
+                    <p-inputnumber inputId="newPartBeats" [(ngModel)]="beats" (ngModelChange)="changed()" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-14" ariaLabel="Numeratore del metro" />
+                    <span aria-hidden="true">/</span>
+                    <p-select [options]="beatTypes" [(ngModel)]="beatType" (ngModelChange)="changed()" optionLabel="label" optionValue="value" ariaLabel="Denominatore del metro" appendTo="body" />
+                </div>
+            </app-form-field>
+            <app-form-field label="Tempo" forId="newPartTempo" hint="Semiminime al minuto. Vuoto: nessuna indicazione di tempo." [error]="shell.validationAttempted ? error('Il tempo') : undefined">
+                <p-inputnumber inputId="newPartTempo" class="w-full" [(ngModel)]="tempo" (ngModelChange)="changed()" [min]="20" [max]="400" [showButtons]="true" [step]="5" />
+            </app-form-field>
+            <app-form-field label="Battute" forId="newPartMeasures" required hint="Battute intere, levare esclusa: si possono aggiungere o togliere nell'editor." [error]="shell.validationAttempted ? error('Le battute') : undefined">
+                <p-inputnumber inputId="newPartMeasures" class="w-full" [(ngModel)]="measures" (ngModelChange)="changed()" [min]="1" [max]="maxMeasures" [showButtons]="true" />
+            </app-form-field>
+            <app-form-field [label]="pickupLabel" forId="newPartPickup" hint="0 se la parte non inizia in levare." [error]="shell.validationAttempted ? error('La levare') : undefined">
+                <p-inputnumber inputId="newPartPickup" class="w-full" [(ngModel)]="pickupBeats" (ngModelChange)="changed()" [min]="0" [max]="beats - 1" [showButtons]="true" />
+            </app-form-field>
+        </div>
+    }
+</app-dialog-shell>

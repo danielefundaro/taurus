@@ -15,7 +15,8 @@ public enum TenantFeature {
     INVENTORY_LOAN_SHEET("inventoryLoanSheet"),
     INVENTORY_SIGNATURE("inventorySignature"),
     CALENDAR("calendar"),
-    EVENT_PAYOUTS("eventPayouts");
+    EVENT_PAYOUTS("eventPayouts"),
+    SCORE_WRITING("scoreWriting");
 
     private final String errorKey;
 
@@ -39,6 +40,8 @@ public enum TenantFeature {
             case EXTERNAL_CALENDAR_FEED, EVENT_PREPARATION -> List.of(CALENDAR);
             // The shares come from the presences and the budget of the events, and are paid with a finance movement.
             case EVENT_PAYOUTS -> List.of(FINANCE, CALENDAR);
+            // The written parts are versions of the score playback, listened to and corrected in the same pages.
+            case SCORE_WRITING -> List.of(SCORE_PLAYBACK);
             default -> List.of();
         };
     }

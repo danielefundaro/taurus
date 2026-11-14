@@ -1,24 +1,26 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { DialogService } from 'primeng/dynamicdialog';
 import { finalize, first, Subscription, timer } from 'rxjs';
+import { NewPartDialogComponent, NewPartDialogData, NewPartDialogResult } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
 import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { ScoreReportsDialogComponent, ScoreReportsDialogData, ScoreReportsDialogResult } from '../../../../dialogs/score-reports-dialog/score-reports-dialog.component';
 import { ScoreUploadDialogComponent, ScoreUploadDialogData } from '../../../../dialogs/score-upload-dialog/score-upload-dialog.component';
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData, ScoreVersionsDialogResult } from '../../../../dialogs/score-versions-dialog/score-versions-dialog.component';
 import { ImportsModule } from '../../../../imports';
-import { PartPlayback, RecognitionJob, ScoreVersion, TrackPlayback } from '../../../../module';
+import { editLockMessage } from '../../../../constants';
+import { DraftSummary, EditLock, PartPlayback, RecognitionJob, ScoreVersion, TrackPlayback } from '../../../../module';
 import { drumName, programName } from '../../../../score-player/general-midi';
 import { checksSummary, isRecognitionActive, partLabel, recognitionLabel } from '../../../../score-player/playback-labels';
-import { ScorePlaybackService, ToastService, withErrorSummary } from '../../../../service';
+import { ConfirmService, ScoreDraftService, ScorePlaybackService, TenantFeatureService, ToastService, withErrorSummary } from '../../../../service';
 
 /** Intervallo di aggiornamento dello stato mentre un riconoscimento è in coda o in corso. */
 export const RECOGNITION_POLL_MILLIS = 5000;
 
 /**
  * Ascolto delle parti di una traccia: disponibilità per parte, apertura del lettore e, per archivisti e amministratori,
- * riconoscimento delle pagine, caricamento dei file MusicXML o MIDI, correzione, versioni, segnalazioni d'errore, suono
- * delle parti e impostazioni della partitura.
+ * riconoscimento delle pagine, caricamento dei file MusicXML o MIDI, correzione, scrittura con le bozze, versioni,
+ * segnalazioni d'errore, suono delle parti e impostazioni della partitura.
  */
 @Component({
     selector: 'app-score-playback-panel',
@@ -33,6 +35,8 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     @Input({ required: true }) trackId!: number;
     @Input() trackDirty = false;
     @Output() trackVersionChange = new EventEmitter<number>();
+    /** Una parte scritta da zero è stata aggiunta alla traccia: la pagina ricarica le parti. */
+    @Output() partsChange = new EventEmitter<void>();
 
     protected playback?: TrackPlayback;
     protected loading = false;
@@ -45,7 +49,10 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     constructor(
         protected readonly playbackService: ScorePlaybackService,
         private readonly dialogService: DialogService,
-        private readonly toastService: ToastService
+        private readonly toastService: ToastService,
+        private readonly draftService: ScoreDraftService,
+        private readonly confirmService: ConfirmService,
+        private readonly tenantFeatureService: TenantFeatureService
     ) {}
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -58,6 +65,11 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
 
     protected get canManage(): boolean {
         return this.playbackService.canManage;
+    }
+
+    /** Scrittura delle parti: per chi gestisce la traccia, con la funzionalità attiva per l'associazione. */
+    protected get canWrite(): boolean {
+        return this.canManage && this.tenantFeatureService.scoreWritingEnabled();
     }
 
     protected get anyAvailable(): boolean {
@@ -78,6 +90,18 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     protected summary = checksSummary;
     protected recognitionStatus = recognitionLabel;
     protected recognizing = isRecognitionActive;
+
+    /** Chi sta correggendo o scrivendo la parte: «In modifica da Mario Rossi dalle 10:32». */
+    protected editingLabel(editing: EditLock): string {
+        return editLockMessage(editing.ownerName, editing.since, false);
+    }
+
+    /** «Bozza non salvata di Mario Rossi, 14/11/2026 10:32». */
+    protected draftLabel(draft: DraftSummary): string {
+        const date = new Date(draft.savedAt);
+        const when = Number.isNaN(date.getTime()) ? '' : `, ${date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+        return `Bozza non salvata${draft.savedBy ? ` di ${draft.savedBy}` : ''}${when}`;
+    }
 
     protected soundLabel(part: PartPlayback): string {
         const sound = part.sound;
@@ -184,6 +208,58 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         });
     }
 
+    /** Nuova parte scritta da zero, in fondo alla traccia, aperta subito nell'editor di scrittura. */
+    protected newPart(): void {
+        if (!this.playback) return;
+        const data: NewPartDialogData = { trackId: this.trackId, playback: this.playback };
+        const ref = this.dialogService.open(NewPartDialogComponent, { showHeader: false, width: 'min(40rem, 95vw)', modal: true, focusOnShow: false, data });
+        ref?.onClose.pipe(first()).subscribe((result: NewPartDialogResult | undefined) => {
+            if (result?.kind !== 'created') return;
+            this.trackVersionChange.emit(result.trackVersion);
+            this.partsChange.emit();
+            this.reload((playback) => {
+                const part = playback.parts.find((candidate) => candidate.scoreId === result.scoreId);
+                if (part) this.write(part);
+            });
+        });
+    }
+
+    /**
+     * Apre l'editor di scrittura sulla parte: dalla versione ascoltata o dalla bozza, che l'editor propone di riprendere.
+     * Una parte senza versioni né bozza si imposta prima, come una parte nuova.
+     */
+    protected write(part: PartPlayback, resume = false): void {
+        if (!part.version && !part.draft) {
+            const data: NewPartDialogData = { trackId: this.trackId, playback: this.playback!, part };
+            const ref = this.dialogService.open(NewPartDialogComponent, { showHeader: false, width: 'min(40rem, 95vw)', modal: true, focusOnShow: false, data });
+            ref?.onClose.pipe(first()).subscribe((result: NewPartDialogResult | undefined) => {
+                if (result?.kind === 'prepared') this.openWriting(part, { initialContent: result.content });
+            });
+            return;
+        }
+        this.openWriting(part, { resume });
+    }
+
+    /** Scarta la bozza di una parte che nessuno sta scrivendo. */
+    protected discardDraft(part: PartPlayback): void {
+        const draft = part.draft;
+        if (!draft) return;
+        this.confirmService.confirmDestructive({
+            title: 'Scartare la bozza?',
+            consequence: `${this.draftLabel(draft)} della parte «${partLabel(part)}» andrà persa: non si potrà recuperare.`,
+            actionLabel: 'Scarta la bozza',
+            accept: () =>
+                void this.draftService.discard(this.trackId, part.scoreId).then(
+                    () => {
+                        this.toastService.success('Bozza scartata', `La parte «${partLabel(part)}» torna alla versione ascoltata.`);
+                        this.reload();
+                    },
+                    // L'avviso dell'errore è già mostrato; le parti si ricaricano per mostrare chi sta scrivendo.
+                    () => this.reload()
+                )
+        });
+    }
+
     protected reports(part: PartPlayback): void {
         const data: ScoreReportsDialogData = { trackId: this.trackId, scoreId: part.scoreId, partLabel: partLabel(part), canCorrect: !!part.version };
         const ref = this.dialogService.open(ScoreReportsDialogComponent, { showHeader: false, width: 'min(48rem, 95vw)', modal: true, focusOnShow: false, data });
@@ -209,7 +285,7 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             });
     }
 
-    reload(): void {
+    reload(loaded?: (playback: TrackPlayback) => void): void {
         this.loading = true;
         this.playbackService
             .playback(this.trackId)
@@ -222,7 +298,41 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
                 this.tempoBpm = playback.tempoBpm ?? null;
                 this.referenceScoreId = playback.referenceScoreId ?? null;
                 this.watchRecognitions();
+                loaded?.(playback);
             });
+    }
+
+    private openWriting(part: PartPlayback, options: { resume?: boolean; initialContent?: string }): void {
+        const data: ScoreEditorDialogData = {
+            trackId: this.trackId,
+            scoreId: part.scoreId,
+            versionId: part.version?.id ?? null,
+            partLabel: partLabel(part),
+            sound: part.sound,
+            mode: 'writing',
+            ...options
+        };
+        const ref = this.dialogService.open(ScoreEditorDialogComponent, {
+            showHeader: false,
+            width: '100vw',
+            height: '100vh',
+            modal: true,
+            closeOnEscape: false,
+            focusOnShow: false,
+            focusTrap: false,
+            data,
+            style: { 'max-height': '100vh', 'border-radius': '0' },
+            contentStyle: { padding: '0', overflow: 'hidden', height: '100vh' }
+        });
+        ref?.onClose.pipe(first()).subscribe((version: ScoreVersion | undefined) => {
+            if (version?.status === 'APPROVED') {
+                this.toastService.success('Versione approvata', `La versione ${version.versionNumber} scritta è approvata e ascoltata per la parte.`);
+            } else if (version) {
+                this.toastService.success('Versione salvata', `La versione ${version.versionNumber} scritta, da verificare, è ora quella ascoltata per la parte.`);
+            }
+            // Anche senza una versione la bozza è cambiata.
+            this.reload();
+        });
     }
 
     private start(request: ReturnType<ScorePlaybackService['recognize']>, detail: string): void {

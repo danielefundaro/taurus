@@ -46,7 +46,8 @@ public class TenantFeatureService {
             enabled(tenant, TenantFeature.INVENTORY_LOAN_SHEET),
             enabled(tenant, TenantFeature.INVENTORY_SIGNATURE),
             enabled(tenant, TenantFeature.CALENDAR),
-            enabled(tenant, TenantFeature.EVENT_PAYOUTS)
+            enabled(tenant, TenantFeature.EVENT_PAYOUTS),
+            enabled(tenant, TenantFeature.SCORE_WRITING)
         );
     }
 
@@ -117,6 +118,8 @@ public class TenantFeatureService {
             case EVENT_PAYOUTS -> Boolean.TRUE.equals(tenant.getEventPayoutsEnabled())
                 && enabled(tenant, TenantFeature.FINANCE)
                 && enabled(tenant, TenantFeature.CALENDAR);
+            case SCORE_WRITING -> Boolean.TRUE.equals(tenant.getScoreWritingEnabled())
+                && enabled(tenant, TenantFeature.SCORE_PLAYBACK);
         };
     }
 
@@ -133,6 +136,8 @@ public class TenantFeatureService {
             case WEB_PUSH_REMINDERS -> vapidConfigured();
             case EVENT_PREPARATION -> properties.getEventPreparation().isEnabled();
             case SCORE_PLAYBACK -> properties.getScorePlayback().isEnabled();
+            // Off until the engraving of the written parts (phase 2) is installed too.
+            case SCORE_WRITING -> properties.getScoreWriting().isEnabled() && properties.getScorePlayback().isEnabled();
         };
     }
 

@@ -77,6 +77,7 @@ inventory_loan_sheet_enabled       BOOLEAN NOT NULL DEFAULT FALSE
 inventory_signature_enabled        BOOLEAN NOT NULL DEFAULT FALSE
 calendar_enabled                   BOOLEAN NOT NULL DEFAULT FALSE
 event_payouts_enabled              BOOLEAN NOT NULL DEFAULT FALSE
+score_writing_enabled              BOOLEAN NOT NULL DEFAULT FALSE
 ```
 
 Il valore predefinito è `FALSE`: nessuna funzionalità opzionale viene concessa implicitamente a un nuovo tenant. La creazione richiede quindi un'abilitazione esplicita da parte del super amministratore, oltre alla disponibilità applicativa e alle eventuali dipendenze.
@@ -86,6 +87,8 @@ La migration non deve sovrascrivere i valori `finance_enabled` e `inventory_enab
 `20261104000000_tenant_calendar_flag.xml` aggiunge `calendar_enabled` con `DEFAULT FALSE` e, in un secondo changeset, lo porta a `TRUE` per tutti i tenant già presenti: prima di questo flag il calendario era sempre attivo e il rilascio non deve toglierlo a nessuno. Un tenant creato dopo la migration segue la regola generale e riceve il calendario solo se il super amministratore lo spunta.
 
 `20261113000000_tenant_event_payouts_flag.xml` aggiunge `event_payouts_enabled` con `DEFAULT FALSE` e non lo attiva per nessun tenant esistente: prima del rilascio nessuno usava i compensi ai presenti, quindi non c'è un comportamento da preservare.
+
+`20261114000000_tenant_score_writing_flag.xml` aggiunge `score_writing_enabled` con `DEFAULT FALSE`, per la stessa ragione: l'editor di scrittura è nuovo e nessun tenant lo riceve senza una scelta esplicita.
 
 Non è necessario modificare gli schemi tenant: la configurazione è globale rispetto all'istanza del tenant e risiede nel catalogo pubblico.
 
@@ -118,6 +121,7 @@ inventoryLoanSheetEnabled: boolean = false;
 inventorySignatureEnabled: boolean = false;
 calendarEnabled: boolean = false;
 eventPayoutsEnabled: boolean = false;
+scoreWritingEnabled: boolean = false;
 ```
 
 I nuovi tenant nascono con tutti i flag configurati a `false`. La pagina di creazione può consentire al super amministratore di abilitarli esplicitamente prima del salvataggio; in assenza di scelta rimangono disabilitati.
@@ -172,7 +176,8 @@ Esempio di risposta:
   "inventoryLoanSheetEnabled": true,
   "inventorySignatureEnabled": false,
   "calendarEnabled": true,
-  "eventPayoutsEnabled": false
+  "eventPayoutsEnabled": false,
+  "scoreWritingEnabled": false
 }
 ```
 
@@ -221,7 +226,8 @@ public record TenantFeaturesDTO(
     boolean inventoryLoanSheetEnabled,
     boolean inventorySignatureEnabled,
     boolean calendarEnabled,
-    boolean eventPayoutsEnabled
+    boolean eventPayoutsEnabled,
+    boolean scoreWritingEnabled
 ) {}
 ```
 
@@ -243,7 +249,8 @@ public enum TenantFeature {
     INVENTORY_LOAN_SHEET,
     INVENTORY_SIGNATURE,
     CALENDAR,
-    EVENT_PAYOUTS
+    EVENT_PAYOUTS,
+    SCORE_WRITING
 }
 ```
 
@@ -281,6 +288,7 @@ Non deve utilizzare uno stato statico condiviso tra tenant. Può leggere la conf
 | `EVENT_PREPARATION` | `application.event-preparation.enabled` | `CALENDAR` | globale AND `event_preparation_enabled` AND `calendar_enabled` |
 | `SCORE_PLAYBACK` | `application.score-playback.enabled` | nessuna | globale AND `score_playback_enabled` |
 | `EVENT_PAYOUTS` | sempre disponibile dopo il deploy | `FINANCE`, `CALENDAR` | `event_payouts_enabled` AND `finance_enabled` AND `calendar_enabled` |
+| `SCORE_WRITING` | `application.score-writing.enabled` e capacità dell'ascolto | `SCORE_PLAYBACK` | globale AND `score_writing_enabled` AND ascolto effettivo |
 
 Economia non dipende dal Calendario e il Calendario non dipende da Economia: con il calendario spento Economia resta attiva e perde soltanto le informazioni economiche degli eventi (vedi [Comportamento del Calendario](#comportamento-del-calendario)). Economia e Inventario non sono prerequisiti dell'intera Preparazione evento. Quando sono disabilitati, soltanto le aree dipendenti escono dalla valutazione, come descritto nella [specifica di preparazione](event-preparation-spec.md#contratto-della-vista-completa).
 
@@ -317,6 +325,8 @@ Applicazioni:
 | configurazione e pianificazione promemoria calendario | `WEB_PUSH_REMINDERS` |
 | endpoint di preparazione amministrativi, personali, esterni ed economici | `EVENT_PREPARATION` |
 | ascolto e correzione delle parti sotto `/api/tracks/{trackId}`, `/api/user/tracks/{trackId}` e `/api/external/tracks/{trackId}`; `GET /api/instruments/playback-suggestion` in `InstrumentsResource` | `SCORE_PLAYBACK` |
+| blocco di modifica di una parte, `/api/tracks/{trackId}/scores/{scoreId}/edit-lock`, usato anche dall'editor di correzione | `SCORE_PLAYBACK` |
+| bozza dell'editor di scrittura, `/api/tracks/{trackId}/scores/{scoreId}/score-draft`; il salvataggio di una versione scritta (`origin: WRITING`) lo verifica il servizio | `SCORE_WRITING` |
 
 I requisiti sono cumulativi: gli endpoint economici degli eventi richiedono `FINANCE` e `CALENDAR`; quelli dei compensi ai presenti richiedono `EVENT_PAYOUTS`, che incorpora già entrambe le dipendenze; quelli economici di Preparazione richiedono `EVENT_PREPARATION` e `FINANCE`; quelli QR richiedono `INVENTORY_QR`, che incorpora già la dipendenza da `INVENTORY`. Consultazione di elenco, esiti, righe, problemi e rapporti Onboarding, eliminazione di un job, `retry-compensation`, `retry-setup-emails`, retention e cleanup non portano l'annotazione e non vengono bloccati dal flag.
 
@@ -350,6 +360,7 @@ error.tenantFeature.inventoryLoanSheet.disabled
 error.tenantFeature.inventorySignature.disabled
 error.tenantFeature.calendar.disabled
 error.tenantFeature.eventPayouts.disabled
+error.tenantFeature.scoreWriting.disabled
 ```
 
 Il resolver anonimo del feed calendario e gli identificatori QR non restituiscono `403`: per non rivelare l'esistenza di token, tenant o oggetti rispondono `404` con lo stesso corpo usato per una credenziale inesistente. Gli endpoint autenticati di amministrazione e profilo usano invece il `403` applicativo distinguibile.
@@ -575,6 +586,16 @@ Quando la funzionalità non è effettiva:
 - la validazione dell'onboarding non propone suono e trasposizione degli strumenti;
 - parti, versioni e configurazioni degli strumenti restano conservate.
 
+## Scrittura delle parti
+
+`scoreWritingEnabled` (checkbox **Scrittura delle parti**, gruppo **Estensioni**) governa l'editor di scrittura descritto in [Editor di scrittura musicale](music-writing-editor-spec.md). La capacità applicativa è `application.score-writing.enabled`, insieme a quella dell'ascolto; dipende dall'Ascolto delle parti, perché le parti scritte diventano versioni ascoltabili.
+
+Quando la funzionalità non è effettiva:
+
+- gli endpoint della bozza rispondono `403 tenantFeature.scoreWriting.disabled`, e così il salvataggio di una versione scritta;
+- il blocco di modifica delle parti resta attivo, perché lo prende anche l'editor di correzione, e con lui il salvataggio delle correzioni;
+- bozze e versioni scritte restano conservate; la pulizia notturna dei blocchi scaduti e delle bozze di parti eliminate vale per ogni tenant attivo, anche con la funzionalità spenta.
+
 ## Protezione dei file
 
 Gli endpoint specifici di fotografie e allegati sono coperti dal controllo del rispettivo modulo. Anche l'accesso generico a `/api/media/**`, aperto agli utenti privilegiati del tenant, verifica le funzionalità.
@@ -605,6 +626,7 @@ inventoryLoanSheetEnabled: Signal<boolean>;
 inventorySignatureEnabled: Signal<boolean>;
 calendarEnabled: Signal<boolean>;
 eventPayoutsEnabled: Signal<boolean>;
+scoreWritingEnabled: Signal<boolean>;
 loaded: Signal<boolean>;
 refresh(force?: boolean): Observable<TenantFeatures>;
 ```

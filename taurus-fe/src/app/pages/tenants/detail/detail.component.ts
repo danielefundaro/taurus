@@ -66,6 +66,13 @@ export class DetailComponent extends DetailPageBase implements OnInit {
             dependencies: ['financeEnabled', 'calendarEnabled']
         },
         {
+            key: 'scoreWritingEnabled',
+            feature: TenantFeature.SCORE_WRITING,
+            label: 'Scrittura delle parti',
+            description: 'Scrittura di nuove parti con mouse, tastiera e tastiera MIDI, bozze e versioni scritte.',
+            dependencies: ['scorePlaybackEnabled']
+        },
+        {
             key: 'webPushRemindersEnabled',
             feature: TenantFeature.WEB_PUSH_REMINDERS,
             label: 'Promemoria eventi Web Push',
@@ -312,4 +319,5 @@ type TenantFeatureField =
     | 'inventoryLoanSheetEnabled'
     | 'inventorySignatureEnabled'
     | 'calendarEnabled'
-    | 'eventPayoutsEnabled';
+    | 'eventPayoutsEnabled'
+    | 'scoreWritingEnabled';

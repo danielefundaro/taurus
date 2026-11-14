@@ -5,6 +5,8 @@ import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreErrorReportStatus;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreRecognitionJobStatus;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionOrigin;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionStatus;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DraftSummaryDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EditLockDTO;
 import com.fundaro.zodiac.taurus.service.scoreplayback.MusicXmlInspector.ScoreChecks;
 
 import java.time.ZonedDateTime;
@@ -124,6 +126,8 @@ public final class ScorePlaybackDtos {
      * @param hasPages    the part has page images that can be recognized
      * @param recognition latest recognition job of the part, returned to archivists and administrators only
      * @param openReports error reports of the part still open, counted for archivists and administrators only
+     * @param editing     who is editing the part in an editor, returned to archivists and administrators only
+     * @param draft       draft of the writing editor, returned to archivists and administrators only
      */
     public record PartPlaybackDTO(
         Long scoreId,
@@ -137,7 +141,9 @@ public final class ScorePlaybackDtos {
         PartPlaybackSettingsDTO settings,
         boolean hasPages,
         RecognitionJobDTO recognition,
-        int openReports
+        int openReports,
+        EditLockDTO editing,
+        DraftSummaryDTO draft
     ) {}
 
     /**
@@ -172,16 +178,30 @@ public final class ScorePlaybackDtos {
     public record ScoreEditorDTO(ScoreVersionDTO version, String musicXml, List<Long> pages, List<MeasureBoxDTO> layout) {}
 
     /**
-     * A version written in the correction editor.
+     * A version written in the correction or in the writing editor.
      *
-     * @param parentVersionId version the correction starts from
+     * @param parentVersionId version the correction starts from, required; for the writing editor the version the writing
+     *                        started from, {@code null} for a part without versions
      * @param content         plain MusicXML with a single part
      * @param approve         stores the version as already approved
      * @param measureSources  for each measure of the correction, the position from 0 of the measure of the parent it comes
      *                        from, {@code null} for an inserted measure; used to keep the positions on the pages. When
-     *                        omitted the positions are kept only if the number of measures did not change
+     *                        omitted the positions are kept only if the number of measures did not change. Ignored for
+     *                        the writing editor
+     * @param origin          {@code CORRECTION} (also when omitted) or {@code WRITING}
+     * @param editSession     session of the editor, which must hold the edit lock of the part
+     * @param confirmOutdated for the writing editor: the author confirmed that the version replaces one saved after the
+     *                        writing started
      */
-    public record CorrectionDTO(Long parentVersionId, String content, boolean approve, List<Integer> measureSources) {}
+    public record CorrectionDTO(
+        Long parentVersionId,
+        String content,
+        boolean approve,
+        List<Integer> measureSources,
+        ScoreVersionOrigin origin,
+        String editSession,
+        boolean confirmOutdated
+    ) {}
 
     /** An error heard by a listener; the measure is optional. */
     public record ErrorReportRequestDTO(String measureNumber, String message) {}
