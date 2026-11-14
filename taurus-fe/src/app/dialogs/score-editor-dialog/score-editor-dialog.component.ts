@@ -9,6 +9,7 @@ import { excerpt } from '../../score-editor/excerpt';
 import { Alteration, ALTERATIONS, CLEF_OPTIONS, fraction, KEY_OPTIONS, NOTE_TYPES, NoteType, Step, STEP_NAMES, STEPS, toNumber } from '../../score-editor/notation-rules';
 import { EditError, ScoreDocument, ScoreDocumentChecks } from '../../score-editor/score-document';
 import * as edits from '../../score-editor/score-edits';
+import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
 import * as writing from '../../score-editor/score-writing';
 import { parseMusicXml } from '../../score-player/musicxml-score';
@@ -193,6 +194,15 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         { label: 'Selezione', value: 'passage' },
         { label: 'Tutta la parte', value: 'part' }
     ];
+    protected readonly wedges = notation.WEDGES;
+    protected readonly graceKinds = notation.GRACE_KINDS;
+    protected readonly expressionTexts = notation.EXPRESSION_TEXTS;
+    protected readonly tempoTexts = edits.TEMPO_TEXTS;
+    protected readonly breakOptions: { label: string; value: notation.BreakKind | null }[] = [
+        { label: 'Continua', value: null },
+        { label: 'Nuova riga', value: 'system' },
+        { label: 'Nuova pagina', value: 'page' }
+    ];
     /** Editor di scrittura: bozze, modalità di inserimento e battute sempre complete. */
     protected readonly writingMode: boolean;
 
@@ -225,8 +235,16 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected timeBeats = 4;
     protected timeBeatType = 4;
     protected tempo: number | null = null;
+    /** Testo dell'indicazione di tempo, per esempio «Allegro». */
+    protected tempoText = '';
     /** Battute da aggiungere, o durata della pausa di più battute. */
     protected measureCount = 1;
+    /** Testo di espressione da scrivere prima della nota selezionata. */
+    protected expressionText = '';
+    /** Lettera di prova della battuta, o quella proposta. */
+    protected rehearsalText = '';
+    /** Scrittura: battute per riga da proporre a tutta la parte. */
+    protected breaksEvery = 4;
 
     protected pageIndex = 0;
     protected zoom = 100;
@@ -450,6 +468,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         else if (key === 'Delete' || key === 'Backspace') this.remove();
         else if (!this.writingMode && (key === 'Insert' || key === 'i')) this.insert('after');
         else if (key === 't') this.tie();
+        else if (key === 's') this.slur();
+        else if (key === '<' || key === '>') this.wedge(key === '<' ? 'crescendo' : 'diminuendo');
         else if (key === ' ') void this.togglePlay();
         else if (key === 'Escape' && (this.rangeEnd !== null || this.rangeFocusId !== null)) this.clearRange();
         else handled = false;
@@ -599,6 +619,33 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.noteChange((score, id) => edits.toggleArticulation(score, id, value));
     }
 
+    /** Legatura di portamento sul passaggio selezionato o dalla nota alla seguente; se c'è già si toglie (S). */
+    protected slur(): void {
+        this.notationChange((score, target) => notation.toggleSlur(score, target));
+    }
+
+    /** Forcella sul passaggio selezionato o dalla nota all'elemento seguente (< e >). */
+    protected wedge(kind: notation.WedgeKind): void {
+        this.notationChange((score, target) => notation.toggleWedge(score, target, kind));
+    }
+
+    protected removeSpanners(): void {
+        this.notationChange((score, target) => notation.removeSpanners(score, target));
+    }
+
+    protected fermata(): void {
+        this.noteChange((score, id) => notation.toggleFermata(score, id));
+    }
+
+    /** Abbellimento prima della nota, da selezionare per cambiarne l'altezza; su un abbellimento ne cambia il tipo. */
+    protected grace(kind: notation.GraceKind): void {
+        this.noteChange((score, id) => notation.setGraceNote(score, id, kind));
+    }
+
+    protected applyExpression(value: string | null): void {
+        this.noteChange((score, id) => notation.setExpression(score, id, value));
+    }
+
     // Battuta e struttura
 
     protected applyTime(): void {
@@ -676,8 +723,32 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.measureChange((score, index) => edits.toggleMark(score, index, value));
     }
 
+    /** Indicazione di tempo della battuta, con il testo scritto; `null` la toglie. */
     protected applyTempo(value: number | null): void {
-        this.measureChange((score, index) => edits.setTempo(score, index, value));
+        const words = value === null ? null : this.tempoText;
+        this.measureChange((score, index) => edits.setTempo(score, index, value, words));
+    }
+
+    protected applyRehearsal(value: string | null): void {
+        this.measureChange((score, index) => notation.setRehearsal(score, index, value));
+    }
+
+    /** Lettera di prova con il numero della battuta, come numero di riferimento. */
+    protected rehearsalNumber(): void {
+        this.measureChange((score, index) => notation.setRehearsal(score, index, score.measure(index).getAttribute('number') || String(index + 1)));
+    }
+
+    protected applyBreak(kind: notation.BreakKind | null): void {
+        this.measureChange((score, index) => notation.setBreak(score, index, kind));
+    }
+
+    /** Interruzioni di riga ogni tante battute in tutta la parte; `null` le toglie. */
+    protected applyBreaksEvery(count: number | null): void {
+        const applied = this.apply((score) => notation.setBreaksEvery(score, count));
+        if (applied) {
+            this.info = count === null ? 'Interruzioni di riga tolte da tutta la parte' : `Una riga nuova ogni ${count} ${count === 1 ? 'battuta' : 'battute'}`;
+            this.changeDetector.markForCheck();
+        }
     }
 
     // Scrittura al cursore
@@ -1394,6 +1465,18 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
     }
 
+    /** Modifica di un segno sulla nota selezionata o, se c'è, sul passaggio, che resta selezionato. */
+    private notationChange(change: (score: ScoreDocument, target: notation.NotationTarget) => string | null | void): void {
+        if (!this.selectedId) {
+            this.message = 'Seleziona prima una nota o un passaggio sullo spartito';
+            this.changeDetector.markForCheck();
+            return;
+        }
+        const id = this.selectedId;
+        const passage = this.passage;
+        this.apply((score) => change(score, { noteId: id, passage: passage ? { notes: passages.passageNotes(score, passage), voice: String(passage.voice) } : null }));
+    }
+
     private measureChange(change: (score: ScoreDocument, index: number) => string | null | void): void {
         if (!this.measure) {
             this.message = 'Seleziona prima una battuta sullo spartito';
@@ -1433,6 +1516,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         let applied = false;
         try {
             const selected = change(this.score);
+            // Nella scrittura legature di portamento e forcelle hanno sempre inizio e fine: gli estremi rimasti soli si tolgono.
+            if (this.writingMode) notation.balanceSpanners(this.score);
             this.history.record(before);
             if (typeof selected === 'string') {
                 this.selectedId = selected;
@@ -1536,6 +1621,9 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.timeBeats = this.measure.beats;
         this.timeBeatType = this.measure.beatType;
         this.tempo = this.measure.tempo;
+        this.tempoText = this.measure.tempoText ?? '';
+        this.rehearsalText = this.measure.rehearsal ?? notation.nextRehearsal(this.score, this.measure.index);
+        this.expressionText = this.note?.expression ?? '';
         // Su una pausa di più battute il numero mostra la sua durata, da correggere; altrimenti resta l'ultimo scritto.
         if (this.measure.multiRest > 1) this.measureCount = this.measure.multiRest;
         this.updatePage();
@@ -1569,7 +1657,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.rendering = true;
         this.changeDetector.markForCheck();
         try {
-            const pages = await this.renderer.render(this.score.snapshot(), host.clientWidth || 900, EDITOR_SCALE);
+            // La scrittura mostra le interruzioni di riga e di pagina della parte; la correzione segue la larghezza.
+            const pages = await this.renderer.render(this.score.snapshot(), host.clientWidth || 900, EDITOR_SCALE, { encodedBreaks: this.writingMode });
             if (token !== this.renderToken) return;
             // L'SVG è generato da Verovio a partire dal MusicXML: i testi sono codificati e non contiene script.
             host.innerHTML = pages.join('');

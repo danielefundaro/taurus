@@ -405,6 +405,44 @@ describe('ScoreEditorDialogComponent', () => {
             expect(component.wrongMeasures).toEqual([]);
         });
 
+        it('writes slurs, hairpins, grace notes, text and line breaks, keeping slurs whole', async () => {
+            const component = await openWriting();
+            const content = (): string => keeperOptions!.content();
+            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true });
+
+            key(component, { key: 's' });
+            expect(content()).toContain('<slur type="start" number="1"/>');
+            expect(content()).toContain('<slur type="stop" number="1"/>');
+            expect(component.note?.slur).toBeTrue();
+
+            key(component, { key: 'ArrowRight', shiftKey: true });
+            key(component, { key: '<' });
+            expect(content()).toContain('<wedge type="crescendo" number="1"/>');
+            expect(component.selectionLabel).toBe('Selezione · battuta 1 · tutte le voci');
+            key(component, { key: 'Escape' });
+
+            component.grace('acciaccatura');
+            expect(component.selectionLabel).toBe('Battuta 1 · Do3 · acciaccatura di croma');
+            expect(content()).toContain('<grace slash="yes"/>');
+            key(component, { key: 'Delete' });
+            expect(content()).not.toContain('<grace');
+            expect(component.selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
+
+            component.applyExpression('dolce');
+            expect(content()).toContain('<words font-style="italic">dolce</words>');
+            component.selectMeasure(1);
+            component.applyBreak('system');
+            expect(content()).toContain('<print new-system="yes"/>');
+
+            // La nota dove finisce la legatura diventa una pausa: la legatura rimasta senza fine si toglie.
+            component.selectMeasure(0);
+            key(component, { key: 'ArrowRight' });
+            key(component, { key: 'Delete' });
+            expect(content()).not.toContain('<slur');
+            expect(content()).toContain('<wedge type="stop" number="1"/>');
+            expect(component.wrongMeasures).toEqual([]);
+        });
+
         it('turns the selected note into a rest instead of deleting it, so the measure stays complete', async () => {
             const component = await openWriting();
             key(component, { key: 'Delete' });
@@ -614,7 +652,7 @@ interface WritingEditor {
     cursor: { voice: number };
     canSave: boolean;
     dirty: boolean;
-    note: { rest: boolean } | null;
+    note: { rest: boolean; slur: boolean } | null;
     wrongMeasures: unknown[];
     choice: { kind: string; resumeLabel: string; warning: string | null } | null;
     selectionLabel: string;
@@ -625,6 +663,9 @@ interface WritingEditor {
     onKey(event: KeyboardEvent): void;
     selectMeasure(index: number): void;
     transpose(): void;
+    grace(kind: 'acciaccatura' | 'appoggiatura'): void;
+    applyExpression(value: string | null): void;
+    applyBreak(kind: 'system' | 'page' | null): void;
     move(steps: number): void;
     insert(where: 'before' | 'after'): void;
     save(approve: boolean): Promise<void>;

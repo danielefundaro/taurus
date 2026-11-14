@@ -3,6 +3,7 @@ import { child, children, element, insertOrdered, integer, NOTE_ORDER, removeChi
 import { diatonic, Fraction, fraction, fromDiatonic, inferType, middleLine, minus, NOTE_TYPES, noteQuarters, NoteType, Step, toNumber } from './notation-rules';
 import { EditError, isRest, NoteEvent, pitchOf, ScoreDocument, voiceOf } from './score-document';
 import { addTie, addTuplet, clearTies, figureOf, insertAtEnd, insertMeasure, refreshMeasure, removeTie, tieChain, toggleRest, TUPLETS, tupletOf, writeFigure, writePitch } from './score-edits';
+import { setGraceFigure } from './score-notation';
 
 /**
  * Operazioni della scrittura: inserimento al cursore come in MuseScore, con le battute sempre complete. Una nota più
@@ -240,7 +241,11 @@ export function writeTuplet(score: ScoreDocument, cursor: WritingCursor, figure:
  */
 export function setWrittenDuration(score: ScoreDocument, noteId: string, figure: WritingFigure): string {
     const note = score.note(noteId);
-    if (child(note, 'grace')) throw new EditError('Le note di abbellimento non hanno durata');
+    if (child(note, 'grace')) {
+        // Gli abbellimenti cambiano solo la figura scritta: non hanno durata nella battuta.
+        for (const member of score.eventOf(note).notes) setGraceFigure(member, figure.type, figure.dots);
+        return noteId;
+    }
     const event = score.eventOf(note);
     const cursor = cursorAt(score, event.notes[0].getAttribute('id')!);
     // La nota legata alla precedente resta legata.
@@ -262,6 +267,7 @@ export function cycleWrittenDots(score: ScoreDocument, noteId: string): string {
  */
 export function toggleWrittenTuplet(score: ScoreDocument, noteId: string, actual: number): string {
     const note = score.note(noteId);
+    if (child(note, 'grace')) throw new EditError('Gli abbellimenti non entrano nei gruppi irregolari');
     const event = score.eventOf(note);
     const measure = score.measureOf(note);
     const group = groupAt(score, measure, event.voice, event.start);
@@ -289,6 +295,14 @@ export function clearWrittenNote(score: ScoreDocument, noteId: string): string |
     const note = score.note(noteId);
     const measure = score.measureOf(note);
     const voice = voiceOf(note);
+    if (child(note, 'grace')) {
+        // Un abbellimento si toglie, e si seleziona la nota che lo seguiva.
+        let main = note.nextElementSibling;
+        while (main && main.tagName === 'note' && child(main, 'grace')) main = main.nextElementSibling;
+        for (const member of score.eventOf(note).notes) member.remove();
+        finish(score, [score.measureIndex(measure)]);
+        return main?.tagName === 'note' ? main.getAttribute('id') : (child(measure, 'note')?.getAttribute('id') ?? null);
+    }
     if (!isRest(note)) {
         toggleRest(score, noteId);
         return noteId;
@@ -534,14 +548,17 @@ function createPieces(score: ScoreDocument, templates: Element[], values: Piece[
     return pieces;
 }
 
-/** Copia di una nota da scrivere: senza legature, travature e figura; oltre il primo pezzo anche senza segni e accidenti. */
+/**
+ * Copia di una nota da scrivere: senza legature di valore, travature e figura; oltre il primo pezzo anche senza segni,
+ * legature di portamento e accidenti.
+ */
 function strippedCopy(score: ScoreDocument, template: Element, continuation: boolean): Element {
     const copy = template.cloneNode(true) as Element;
     for (const name of ['tie', 'beam', 'stem', 'dot', 'type', 'duration', 'time-modification', 'lyric']) removeChildren(copy, name);
     child(copy, 'rest')?.removeAttribute('measure');
     const notations = child(copy, 'notations');
     if (notations) {
-        for (const item of children(notations)) if (continuation || ['tied', 'tuplet', 'slur'].includes(item.tagName)) item.remove();
+        for (const item of children(notations)) if (continuation || ['tied', 'tuplet'].includes(item.tagName)) item.remove();
         removeIfEmpty(notations);
     }
     if (continuation) removeChildren(copy, 'accidental');
@@ -816,17 +833,21 @@ function restTemplate(score: ScoreDocument, voice: number): Element {
     return note;
 }
 
-/** Dinamiche e forcelle scritte prima di una nota: le appartengono e si copiano, si tolgono e si incollano con lei. */
-export const NOTE_DIRECTIONS: readonly string[] = ['dynamics', 'wedge'];
+/**
+ * Dinamiche, forcelle e testi di espressione scritti prima di una nota: le appartengono e si copiano, si tolgono e si
+ * incollano con lei. Un testo con un suono, come «D.C.» o «Fine», è un segno di struttura e resta nella battuta.
+ */
+export const NOTE_DIRECTIONS: readonly string[] = ['dynamics', 'wedge', 'words'];
 
-/** Le direzioni subito prima della nota e dei suoi abbellimenti fatte solo di dinamiche e forcelle, in ordine. */
+/** Le direzioni subito prima della nota e dei suoi abbellimenti fatte solo di dinamiche, forcelle e testi, in ordine. */
 export function noteDirections(note: Element): Element[] {
     const result: Element[] = [];
     let current = note.previousElementSibling;
     while (current && current.tagName === 'note' && child(current, 'grace')) current = current.previousElementSibling;
     while (current && current.tagName === 'direction') {
-        const types = children(current, 'direction-type');
-        if (types.length && types.every((type) => children(type).every((item) => NOTE_DIRECTIONS.includes(item.tagName)))) result.unshift(current);
+        const items = children(current, 'direction-type').flatMap((type) => children(type));
+        const owned = items.length > 0 && items.every((item) => NOTE_DIRECTIONS.includes(item.tagName));
+        if (owned && !(child(current, 'sound') && items.some((item) => item.tagName === 'words'))) result.unshift(current);
         current = current.previousElementSibling;
     }
     return result;

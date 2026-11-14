@@ -84,6 +84,9 @@
                 <p-tab value="measure">Battuta</p-tab>
                 <p-tab value="structure">Struttura</p-tab>
                 <p-tab value="expression">Espressione</p-tab>
+                @if (writingMode) {
+                    <p-tab value="layout">Impaginazione</p-tab>
+                }
                 <p-tab value="keys">Tastiera</p-tab>
             </p-tablist>
             <p-tabpanels>
@@ -366,9 +369,33 @@
                                 <p-button [label]="option.label" size="small" severity="secondary" [outlined]="!measure?.marks?.includes(option.value)" [disabled]="!measure" (onClick)="mark(option.value)" />
                             }
                         </div>
+                        <div class="score-editor__group" role="group" aria-label="Lettera di prova">
+                            <span class="score-editor__label">Lettera di prova</span>
+                            <input pInputText pSize="small" class="w-20" [(ngModel)]="rehearsalText" aria-label="Lettera di prova" maxlength="12" [disabled]="!measure" (keydown.enter)="applyRehearsal(rehearsalText)" />
+                            <p-button label="Applica" size="small" severity="secondary" pTooltip="Lettera o numero all'inizio della battuta, in un riquadro" [disabled]="!measure || !rehearsalText.trim()" (onClick)="applyRehearsal(rehearsalText)" />
+                            <p-button label="Numero di battuta" size="small" severity="secondary" outlined pTooltip="Il numero della battuta come riferimento per le prove" [disabled]="!measure" (onClick)="rehearsalNumber()" />
+                            <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.rehearsal" (onClick)="applyRehearsal(null)" />
+                        </div>
                         <div class="score-editor__group" role="group" aria-label="Tempo">
-                            <span class="score-editor__label">Tempo (semiminime al minuto)</span>
-                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Tempo" [disabled]="!measure" />
+                            <span class="score-editor__label">Tempo</span>
+                            <input
+                                pInputText
+                                pSize="small"
+                                class="w-32"
+                                [(ngModel)]="tempoText"
+                                list="score-editor-tempo-texts"
+                                placeholder="Testo, per esempio Allegro"
+                                aria-label="Testo del tempo"
+                                maxlength="40"
+                                [disabled]="!measure"
+                                (keydown.enter)="tempo && applyTempo(tempo)"
+                            />
+                            <datalist id="score-editor-tempo-texts">
+                                @for (value of tempoTexts; track value) {
+                                    <option [value]="value"></option>
+                                }
+                            </datalist>
+                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure || !tempo" (onClick)="applyTempo(tempo)" />
                             <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.tempo" (onClick)="applyTempo(null)" />
                         </div>
@@ -384,14 +411,117 @@
                             }
                             <p-button label="Nessuna" size="small" severity="secondary" text [disabled]="!note?.dynamic" (onClick)="dynamic(null)" />
                         </div>
+                        <div class="score-editor__group" role="group" aria-label="Forcelle e legature">
+                            <span class="score-editor__label">Forcelle e legature</span>
+                            @for (option of wedges; track option.value) {
+                                <p-button
+                                    [label]="option.label"
+                                    size="small"
+                                    severity="secondary"
+                                    [outlined]="note?.wedge !== option.value"
+                                    [pTooltip]="'Sul passaggio selezionato o fino all\'elemento seguente (' + option.key + ')'"
+                                    [disabled]="!note || !!note.graceKind"
+                                    (onClick)="wedge(option.value)"
+                                />
+                            }
+                            <p-button
+                                label="Legatura di portamento"
+                                size="small"
+                                severity="secondary"
+                                [outlined]="!note?.slur"
+                                pTooltip="Dalla prima all'ultima nota del passaggio, o fino alla nota seguente; sulla nota legata la toglie (S)"
+                                [disabled]="!note"
+                                (onClick)="slur()"
+                            />
+                            <p-button label="Togli" size="small" severity="secondary" text pTooltip="Toglie legature di portamento e forcelle della nota o del passaggio" [disabled]="!note" (onClick)="removeSpanners()" />
+                        </div>
                         <div class="score-editor__group" role="group" aria-label="Articolazioni">
                             <span class="score-editor__label">Articolazioni</span>
                             @for (option of articulations; track option.value) {
                                 <p-button [label]="option.label" size="small" severity="secondary" [outlined]="!note?.articulations?.includes(option.value)" [disabled]="!note || note.rest" (onClick)="articulation(option.value)" />
                             }
+                            <p-button label="Corona" size="small" severity="secondary" [outlined]="!note?.fermata" pTooltip="Sulla nota, sull'accordo o sulla pausa" [disabled]="!note || !!note.graceKind" (onClick)="fermata()" />
+                        </div>
+                        <div class="score-editor__group" role="group" aria-label="Abbellimenti">
+                            <span class="score-editor__label">Abbellimenti</span>
+                            @for (option of graceKinds; track option.value) {
+                                <p-button
+                                    [label]="option.label"
+                                    size="small"
+                                    severity="secondary"
+                                    [outlined]="note?.graceKind !== option.value"
+                                    [pTooltip]="note?.graceKind ? 'Cambia il tipo dell\'abbellimento selezionato' : option.hint + ': si aggiunge della stessa altezza, da spostare con ↑ ↓'"
+                                    [disabled]="!note || note.rest"
+                                    (onClick)="grace(option.value)"
+                                />
+                            }
+                        </div>
+                        <div class="score-editor__group" role="group" aria-label="Testo">
+                            <span class="score-editor__label">Testo</span>
+                            <input
+                                pInputText
+                                pSize="small"
+                                class="w-40"
+                                [(ngModel)]="expressionText"
+                                list="score-editor-expression-texts"
+                                placeholder="dolce, rit., a tempo…"
+                                aria-label="Testo di espressione"
+                                maxlength="60"
+                                [disabled]="!note"
+                                (keydown.enter)="applyExpression(expressionText)"
+                            />
+                            <datalist id="score-editor-expression-texts">
+                                @for (value of expressionTexts; track value) {
+                                    <option [value]="value"></option>
+                                }
+                            </datalist>
+                            <p-button
+                                label="Applica"
+                                size="small"
+                                severity="secondary"
+                                pTooltip="In corsivo prima della nota: sopra il rigo le indicazioni di tempo, sotto le altre"
+                                [disabled]="!note || !expressionText.trim()"
+                                (onClick)="applyExpression(expressionText)"
+                            />
+                            <p-button label="Togli" size="small" severity="secondary" text [disabled]="!note?.expression" (onClick)="applyExpression(null)" />
                         </div>
                     </div>
                 </p-tabpanel>
+
+                @if (writingMode) {
+                    <p-tabpanel value="layout">
+                        <div class="score-editor__group-row">
+                            <div class="score-editor__group" role="group" aria-label="Interruzione">
+                                <span class="score-editor__label">Battuta {{ measure?.number }}</span>
+                                <p-selectbutton
+                                    [options]="breakOptions"
+                                    [ngModel]="measure?.break ?? null"
+                                    (ngModelChange)="applyBreak($event)"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    [allowEmpty]="false"
+                                    size="small"
+                                    aria-label="Interruzione prima della battuta"
+                                    [disabled]="!measure || readOnly"
+                                />
+                                <span class="score-editor__hint">La battuta inizia una nuova riga o una nuova pagina; nell'editor la pagina nuova si vede come una riga nuova</span>
+                            </div>
+                            <div class="score-editor__group" role="group" aria-label="Battute per riga">
+                                <span class="score-editor__label">Battute per riga</span>
+                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
+                                <p-button
+                                    label="Applica a tutta la parte"
+                                    size="small"
+                                    severity="secondary"
+                                    pTooltip="Una riga nuova ogni tante battute, contate dall'inizio e da ogni pagina nuova, al posto delle interruzioni di riga che ci sono"
+                                    [disabled]="readOnly || !breaksEvery"
+                                    (onClick)="applyBreaksEvery(breaksEvery)"
+                                />
+                                <p-button label="Togli le interruzioni di riga" size="small" severity="secondary" text pTooltip="Le righe seguono la larghezza; le pagine nuove restano" [disabled]="readOnly" (onClick)="applyBreaksEvery(null)" />
+                            </div>
+                        </div>
+                    </p-tabpanel>
+                }
 
                 <p-tabpanel value="keys">
                     @if (writingMode) {
@@ -431,6 +561,7 @@
                         } @else {
                             <li><kbd>Spazio</kbd> ascolta la battuta o l'intervallo; <kbd>Maiusc</kbd>+clic sceglie l'ultima battuta, <kbd>Esc</kbd> la toglie</li>
                         }
+                        <li><kbd>S</kbd> legatura di portamento, <kbd>&lt;</kbd> <kbd>&gt;</kbd> crescendo e diminuendo, sulla nota o sul passaggio</li>
                         <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla, <kbd>Ctrl</kbd>+<kbd>Y</kbd> ripristina</li>
                     </ul>
                 </p-tabpanel>

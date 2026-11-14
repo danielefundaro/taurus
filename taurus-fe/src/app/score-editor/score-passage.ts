@@ -592,7 +592,8 @@ function pasteChord(score: ScoreDocument, start: PassagePoint, voice: number, ch
     written.forEach((note, index) => {
         const template = templates[index];
         if (!template) return;
-        const slurs = children(child(template, 'notations'), 'slur');
+        // Una nota legata alla precedente si scrive come continuazione, senza segni: le legature di portamento si rimettono.
+        const slurs = tieFrom ? children(child(template, 'notations'), 'slur') : [];
         if (slurs.length) {
             const notations = ensureChild(note, 'notations', NOTE_ORDER);
             for (const slur of slurs) notations.appendChild(slur.cloneNode(true));
