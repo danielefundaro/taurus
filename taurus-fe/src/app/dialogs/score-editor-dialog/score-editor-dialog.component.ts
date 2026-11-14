@@ -55,6 +55,20 @@ export interface ScoreEditorDialogData {
     resume?: boolean;
     /** Scrittura: contenuto iniziale di una parte senza versioni né bozza, preparato con le impostazioni della parte. */
     initialContent?: string;
+    /** Scrittura: il servizio musicale impagina le parti, e la barra superiore offre «Impagina». */
+    engravable?: boolean;
+}
+
+/** L'editor si è chiuso per impaginare la versione aperta, senza modifiche. */
+export interface ScoreEditorEngraveRequest {
+    engraveVersionId: number;
+}
+
+/** Esito dell'editor: la versione salvata, la richiesta di impaginare o niente. */
+export type ScoreEditorDialogResult = ScoreVersion | ScoreEditorEngraveRequest | undefined;
+
+export function isEngraveRequest(result: ScoreEditorDialogResult): result is ScoreEditorEngraveRequest {
+    return !!result && 'engraveVersionId' in result;
 }
 
 type EditorStatus = 'loading' | 'choosing' | 'ready' | 'error';
@@ -412,6 +426,24 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected get canSave(): boolean {
         if (!this.score || this.saving || this.readOnly) return false;
         return this.dirty || (this.writingMode && this.source !== 'version');
+    }
+
+    /** Si impagina la versione aperta, quando la scrittura parte da essa e non ha modifiche. */
+    protected get canEngrave(): boolean {
+        return this.writingMode && this.status === 'ready' && this.source === 'version' && !this.dirty && !this.saving && this.baseVersionId !== null;
+    }
+
+    protected get engraveHint(): string {
+        if (this.canEngrave) return 'Impagina la versione in pagine e PDF, per anteprima, presentazione e stampa';
+        return this.baseVersionId === null || this.source !== 'version' || this.dirty ? 'Salva la versione prima di impaginarla' : '';
+    }
+
+    /** Chiude l'editor per impaginare la versione aperta; la bozza, se è cambiata, si salva prima. */
+    protected async engrave(): Promise<void> {
+        const versionId = this.baseVersionId;
+        if (!this.canEngrave || versionId === null) return;
+        if (this.keeper?.dirty) await this.keeper.flush();
+        this.dialogRef.close({ engraveVersionId: versionId } satisfies ScoreEditorEngraveRequest);
     }
 
     /** Stato della bozza, sotto il titolo dell'editor di scrittura. */

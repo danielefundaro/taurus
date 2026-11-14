@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, ElementRef, EventEmitter, HostListe
 import { AutoCompleteCompleteEvent } from 'primeng/autocomplete';
 import { ImportsModule } from '../../../../imports';
 import { ChildrenEntities, Instruments, SheetsMusic } from '../../../../module';
+import { unengravedPart } from '../../../../score-editor/score-engraving';
 import { ConfirmService, UxTelemetryEvent } from '../../../../service';
 import { MediaThumbnailComponent } from '../media-thumbnail/media-thumbnail.component';
 import { cloneAndNormalizeScores, mergeScores, moveMedia, reorderMedia, reorderScore, splitScoreAfter, splitScoreByPage } from './score-workspace.operations';
@@ -39,6 +40,10 @@ export class ScoreWorkspaceComponent implements OnChanges {
     @Output() uxEvent = new EventEmitter<UxTelemetryEvent>();
     /** La zona Aggiungi chiede le pagine dove nascono: il caricamento di un PDF. */
     @Output() pdfRequested = new EventEmitter<void>();
+    /** Impaginazione delle parti scritte, per chi gestisce la traccia con la scrittura attiva. */
+    @Input() canEngrave = false;
+    /** Impagina la versione ascoltata di una parte senza pagine. */
+    @Output() engraveRequested = new EventEmitter<{ score: SheetsMusic; label: string }>();
     @ViewChildren('pageCard') private pageCards?: QueryList<ElementRef<HTMLElement>>;
     @ViewChildren('partRow') private partRows?: QueryList<ElementRef<HTMLElement>>;
     @ViewChild('workspaceGrid') private workspaceGrid?: ElementRef<HTMLElement>;
@@ -160,6 +165,16 @@ export class ScoreWorkspaceComponent implements OnChanges {
 
     protected scoreTitle(score: SheetsMusic): string {
         return score.description?.trim() || score.instruments?.[0]?.name || 'Parte senza nome';
+    }
+
+    /** Parte salvata con una versione MusicXML e senza pagine: non compare in anteprima né in stampa finché non si impagina. */
+    protected toEngrave(score: SheetsMusic): boolean {
+        return unengravedPart(score);
+    }
+
+    protected requestEngraving(score: SheetsMusic): void {
+        if (!this.canEngrave || this.trackDirty || !this.toEngrave(score)) return;
+        this.engraveRequested.emit({ score, label: this.scoreTitle(score) });
     }
 
     protected pageLabel(score: SheetsMusic, pageIndex: number, media: ChildrenEntities): string {

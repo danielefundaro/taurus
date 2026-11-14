@@ -314,6 +314,28 @@ describe('ScoreWorkspaceComponent', () => {
         expect(dirtyStates).toEqual([true]);
     });
 
+    it('labels the saved parts without pages and asks to engrave them on a clean track', () => {
+        const component = new ScoreWorkspaceComponent(null!);
+        const written: SheetsMusic = { id: 1, order: 1, description: 'Flicorno', media: [], instruments: [], currentScoreVersionId: 7 };
+        const requests: unknown[] = [];
+        component.engraveRequested.subscribe((request) => requests.push(request));
+
+        expect(component['toEngrave'](written)).toBeTrue();
+        expect(component['toEngrave']({ id: 2, media: [{ index: 3 }], currentScoreVersionId: 8 })).toBeFalse();
+        expect(component['toEngrave']({ media: [], currentScoreVersionId: 8 })).toBeFalse();
+
+        component['requestEngraving'](written);
+        component.canEngrave = true;
+        component.trackDirty = true;
+        component['requestEngraving'](written);
+        expect(requests).toEqual([]);
+
+        component.trackDirty = false;
+        component['requestEngraving'](written);
+        component['requestEngraving']({ id: 2, media: [{ index: 3 }], currentScoreVersionId: 8 });
+        expect(requests).toEqual([{ score: written, label: 'Flicorno' }]);
+    });
+
     it('asks for a PDF from the add zone', () => {
         const component = new ScoreWorkspaceComponent(null!);
         let asked = 0;

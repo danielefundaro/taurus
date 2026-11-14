@@ -1,0 +1,83 @@
+.engrave-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+
+    @media (min-width: 960px) {
+        grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+    }
+}
+
+.engrave-fieldset {
+    border: 1px solid var(--p-content-border-color);
+    border-radius: var(--p-content-border-radius);
+    padding: 0.75rem 1rem 1rem;
+    margin: 0;
+
+    legend {
+        font-weight: 600;
+        padding: 0 0.25rem;
+    }
+}
+
+.engrave-preview {
+    min-width: 0;
+}
+
+/* Le pagine si mostrano su sfondo chiaro anche con il tema scuro, come si stamperanno. */
+.engrave-pages {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 1rem;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 0.75rem;
+    border-radius: var(--p-content-border-radius);
+    background: var(--p-content-hover-background);
+    transition: opacity 0.2s;
+
+    &--loading {
+        opacity: 0.5;
+    }
+
+    &--march {
+        grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    }
+
+    ::ng-deep .engrave-page {
+        background: #fff;
+        color: #000;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+        line-height: 0;
+
+        svg {
+            display: block;
+            height: auto;
+        }
+    }
+}
+
+.engrave-thumbnails {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+    gap: 0.75rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+
+    li {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        aspect-ratio: 210 / 320;
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: #fff;
+        box-shadow: 0 1px 3px rgb(0 0 0 / 0.25);
+    }
+}

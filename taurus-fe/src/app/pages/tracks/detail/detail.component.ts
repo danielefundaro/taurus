@@ -13,6 +13,7 @@ import { ScorePlaybackPanelComponent } from './score-playback-panel/score-playba
 import { RoleEnums, StateEnums, StateLabel, StateLabelsMap } from '../../../constants';
 import { PdfManipulatorDialogComponent } from '../../../dialogs/pdf-manipulator-dialog/pdf-manipulator-dialog.component';
 import { ImageEditorDialogComponent } from '../../../dialogs/image-editor-dialog/image-editor-dialog.component';
+import { openEngraveDialog } from '../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { ImportsModule } from '../../../imports';
 import { DetailPageBase } from '../../_shared/detail-page.base';
 import { ChildrenEntities, Instruments, InstrumentsCriteria, SheetsMusic, TrackPageEditResult, TrackUploadJob, TrackUploadJobStatus, Tracks } from '../../../module';
@@ -141,6 +142,31 @@ export class DetailComponent extends DetailPageBase implements OnInit, OnDestroy
     /** Le impostazioni di ascolto aggiornano la versione della traccia: il salvataggio successivo deve usarla. */
     protected onTrackVersionChange(version: number): void {
         this.track = { ...this.track, version };
+    }
+
+    /** Impaginazione delle parti scritte dal Workspace Parti: per chi gestisce la traccia, con ascolto e scrittura attivi. */
+    protected get canEngrave(): boolean {
+        return this.canManagePdf && this.scorePlaybackEnabled && this.tenantFeatureService.scoreWritingEnabled();
+    }
+
+    /** Impagina la versione ascoltata di una parte senza pagine; senza servizio musicale l'errore lo spiega. */
+    protected engravePart({ score, label }: { score: SheetsMusic; label: string }): void {
+        if (this.track.id === undefined || score.id === undefined || !score.currentScoreVersionId || this.isDirty) return;
+        openEngraveDialog(this.dialogService, {
+            trackId: this.track.id,
+            scoreId: score.id,
+            versionId: score.currentScoreVersionId,
+            partLabel: label,
+            header: { title: this.track.name ?? '', composer: this.track.composer ?? '', arranger: this.track.arranger ?? '', partName: label },
+            hasPages: !!score.media?.length,
+            trackVersion: this.track.version ?? null
+        })
+            .pipe(first())
+            .subscribe((result) => {
+                if (!result) return;
+                this.onTrackVersionChange(result.trackVersion);
+                this.reloadTrack();
+            });
     }
 
     protected get canManagePdf(): boolean {

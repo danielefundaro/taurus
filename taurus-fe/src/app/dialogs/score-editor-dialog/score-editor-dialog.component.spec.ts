@@ -22,7 +22,7 @@ import {
     ScorePlaybackService,
     ScoreRendererService
 } from '../../service';
-import { ScoreEditorDialogComponent, ScoreEditorDialogData } from './score-editor-dialog.component';
+import { isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData } from './score-editor-dialog.component';
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Tuba</part-name></score-part></part-list><part id="P1">
 <measure number="1"><attributes><divisions>1</divisions><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>
@@ -666,6 +666,40 @@ describe('ScoreEditorDialogComponent', () => {
             expect(component.choice?.kind).toBe('draft');
         });
 
+        it('closes to engrave the version it opened, only without changes', async () => {
+            let component = await openWriting();
+            fixture.detectChanges();
+            expect(text('.score-editor__header')).not.toContain('Impagina');
+
+            component = await openWriting({ engravable: true });
+            fixture.detectChanges();
+            expect(text('.score-editor__header')).toContain('Impagina');
+            expect(component.canEngrave).toBeTrue();
+            expect(component.engraveHint).toContain('Impagina la versione');
+
+            component.move(1);
+            expect(component.dirty).toBeTrue();
+            expect(component.canEngrave).toBeFalse();
+            expect(component.engraveHint).toBe('Salva la versione prima di impaginarla');
+            await component.engrave();
+            expect(dialogRef.close).not.toHaveBeenCalled();
+
+            key(component, { key: 'z', ctrlKey: true });
+            expect(component.dirty).toBeFalse();
+            keeper.dirty = true;
+            await component.engrave();
+            expect(keeper.flush).toHaveBeenCalled();
+            expect(dialogRef.close).toHaveBeenCalledWith({ engraveVersionId: 7 });
+            expect(isEngraveRequest({ engraveVersionId: 7 })).toBeTrue();
+            expect(isEngraveRequest(undefined)).toBeFalse();
+        });
+
+        it('does not engrave a new written part before its first version', async () => {
+            const component = await openWriting({ versionId: null, initialContent: XML, engravable: true });
+            expect(component.canEngrave).toBeFalse();
+            expect(component.engraveHint).toBe('Salva la versione prima di impaginarla');
+        });
+
         it('opens a new written part from its initial content, without asking for a version', async () => {
             const component = await openWriting({ versionId: null, initialContent: XML });
 
@@ -804,6 +838,9 @@ interface WritingEditor {
     insert(where: 'before' | 'after'): void;
     save(approve: boolean): Promise<void>;
     close(): Promise<void>;
+    canEngrave: boolean;
+    engraveHint: string;
+    engrave(): Promise<void>;
     resumeChoice(): Promise<void>;
     discardChoice(): Promise<void>;
     discardCopy(): void;

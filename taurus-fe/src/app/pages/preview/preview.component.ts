@@ -5,7 +5,9 @@ import { Router } from '@angular/router';
 import { CheckboxChangeEvent } from 'primeng/checkbox';
 import { Subscription } from 'rxjs';
 import { ImportsModule } from '../../imports';
-import { MediaService, PrinterService, ToastService } from '../../service';
+import { SheetsMusic } from '../../module';
+import { unengravedLabel, unengravedPart } from '../../score-editor/score-engraving';
+import { MediaService, PrinterService, ScorePlaybackService, ToastService } from '../../service';
 
 type PrintSheetOrientation = 'portrait' | 'landscape';
 
@@ -72,7 +74,8 @@ export class PreviewComponent implements OnInit, OnDestroy {
         private readonly location: Location,
         private readonly sanitizer: DomSanitizer,
         private readonly changeDetector: ChangeDetectorRef,
-        private readonly toastService: ToastService
+        private readonly toastService: ToastService,
+        private readonly playbackService: ScorePlaybackService
     ) {
         this.mediaStreams = [];
         this.instruments = {};
@@ -141,6 +144,15 @@ export class PreviewComponent implements OnInit, OnDestroy {
 
     protected print(): void {
         window.print();
+    }
+
+    /** Parti selezionate scritte e non ancora impaginate: restano fuori da anteprima e stampa. */
+    protected get unengravedCount(): number {
+        return this.printerService.scores.filter((score) => unengravedPart(score) && this.isSelected(score)).length;
+    }
+
+    protected get unengravedSummary(): string {
+        return unengravedLabel(this.unengravedCount);
     }
 
     protected openGalleria(): void {
@@ -297,8 +309,18 @@ export class PreviewComponent implements OnInit, OnDestroy {
      * alla superficie da cui è arrivato, invece di trovarsi su una pagina vuota o alla home senza spiegazione.
      */
     private leaveWithoutPages(): void {
+        const unengraved = this.printerService.scores.filter((score) => unengravedPart(score)).length;
         if (this.printerService.scores.length === 0) {
             this.toastService.warn('Anteprima non disponibile', 'L’anteprima non conserva i dati dopo un ricaricamento: ripeti il comando dalla traccia o dall’album.');
+        } else if (unengraved) {
+            const title = unengraved === 1 ? 'Parte scritta non ancora impaginata' : 'Parti scritte non ancora impaginate';
+            const subject = unengraved === 1 ? 'La parte non ha' : 'Le parti non hanno';
+            this.toastService.warn(
+                title,
+                this.playbackService.canManage
+                    ? `${subject} ancora pagine: impaginale con «Impagina» nella scheda Ascolto o nel Workspace Parti della traccia per vederle in anteprima e stamparle.`
+                    : `${subject} ancora pagine: si leggono e si ascoltano nella scheda Ascolto della traccia, e si stampano quando l’archivio le impagina.`
+            );
         } else {
             this.toastService.warn('Nessuna pagina da mostrare', 'La sorgente selezionata non contiene pagine da consultare o stampare.');
         }
@@ -375,16 +397,16 @@ export class PreviewComponent implements OnInit, OnDestroy {
 
     private filterMedia(): string[] {
         return this.printerService.scores
-            .filter((score) => {
-                if (!score.instruments?.length) {
-                    return this.selectedInstruments['null'];
-                }
-
-                return score.instruments?.some((instrument) => this.selectedInstruments[instrument.index]);
-            })
+            .filter((score) => this.isSelected(score))
             .flatMap((score) => {
-                return score.media!.map((media) => this.mediaService.stream(media.index));
+                return (score.media ?? []).map((media) => this.mediaService.stream(media.index));
             });
+    }
+
+    /** La parte è tra quelle scelte nei filtri, per uno dei suoi strumenti o tra quelle senza strumento. */
+    private isSelected(score: SheetsMusic): boolean {
+        if (!score.instruments?.length) return !!this.selectedInstruments['null'];
+        return score.instruments.some((instrument) => this.selectedInstruments[instrument.index]);
     }
 
     private refreshMediaStreams(): void {

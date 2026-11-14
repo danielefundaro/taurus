@@ -98,6 +98,12 @@
                 }
             </div>
 
+            @if (toEngrave(score)) {
+            <app-inline-alert class="review-alert" severity="info" heading="Parte da impaginare"
+                [detail]="canEngrave && trackDirty ? 'La parte è scritta ma non ha pagine. Salva la traccia prima di impaginarla.' : 'La parte è scritta ma non ha pagine: si legge e si ascolta nella scheda Ascolto, ma non compare in anteprima, in presentazione né in stampa finché non si impagina.'"
+                [actionLabel]="canEngrave && !trackDirty ? 'Impagina' : undefined" (action)="requestEngraving(score)" />
+            }
+
             @if (score.needsReview) {
             <app-inline-alert class="review-alert" severity="warn" heading="Parte da verificare"
                 detail="Gli strumenti sono stati assegnati in automatico dal PDF. Controllali, correggili se servono e segna la parte come verificata."
@@ -285,6 +291,9 @@
         @if (item.score.needsReview) {
         <i class="pi pi-exclamation-circle review-icon" aria-label="Parte da verificare"
             pTooltip="Parte da verificare"></i>
+        }
+        @if (toEngrave(item.score)) {
+        <i class="pi pi-file-pdf engrave-icon" aria-label="Da impaginare" pTooltip="Da impaginare"></i>
         }
         @if (hasOpenSuggestions(item.score)) {
         <i class="pi pi-plus-circle suggestion-icon" aria-label="Strumento da aggiungere"

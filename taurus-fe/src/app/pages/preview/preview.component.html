@@ -12,6 +12,9 @@
                 <h1>Anteprima spartiti</h1>
                 <p>{{ previewTitle }} · {{ mediaStreams.length }} {{ mediaStreams.length === 1 ? 'pagina' : 'pagine' }}
                 </p>
+                @if (unengravedCount) {
+                <div class="mt-1 text-sm text-orange-600" role="status"><i class="pi pi-file-pdf" aria-hidden="true"></i> {{ unengravedSummary }}</div>
+                }
             </div>
         </div>
 

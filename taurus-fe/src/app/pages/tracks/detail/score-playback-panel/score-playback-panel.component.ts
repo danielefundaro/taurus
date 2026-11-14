@@ -1,8 +1,9 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { DialogService } from 'primeng/dynamicdialog';
 import { finalize, first, Subscription, timer } from 'rxjs';
+import { openEngraveDialog, EngraveDialogData } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent, NewPartDialogData, NewPartDialogResult } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
-import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData, ScoreEditorDialogResult } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { ScoreReportsDialogComponent, ScoreReportsDialogData, ScoreReportsDialogResult } from '../../../../dialogs/score-reports-dialog/score-reports-dialog.component';
 import { ScoreUploadDialogComponent, ScoreUploadDialogData } from '../../../../dialogs/score-upload-dialog/score-upload-dialog.component';
@@ -20,7 +21,7 @@ export const RECOGNITION_POLL_MILLIS = 5000;
 /**
  * Ascolto delle parti di una traccia: disponibilità per parte, apertura del lettore e, per archivisti e amministratori,
  * riconoscimento delle pagine, caricamento dei file MusicXML o MIDI, correzione, scrittura con le bozze, versioni,
- * segnalazioni d'errore, suono delle parti e impostazioni della partitura.
+ * segnalazioni d'errore, suono delle parti, impaginazione delle parti scritte e impostazioni della partitura.
  */
 @Component({
     selector: 'app-score-playback-panel',
@@ -34,6 +35,9 @@ export const RECOGNITION_POLL_MILLIS = 5000;
 export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     @Input({ required: true }) trackId!: number;
     @Input() trackDirty = false;
+    /** Compositore e arrangiatore della traccia, proposti nell'intestazione delle pagine impaginate. */
+    @Input() composer?: string | null;
+    @Input() arranger?: string | null;
     @Output() trackVersionChange = new EventEmitter<number>();
     /** Una parte scritta da zero è stata aggiunta alla traccia: la pagina ricarica le parti. */
     @Output() partsChange = new EventEmitter<void>();
@@ -70,6 +74,21 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     /** Scrittura delle parti: per chi gestisce la traccia, con la funzionalità attiva per l'associazione. */
     protected get canWrite(): boolean {
         return this.canManage && this.tenantFeatureService.scoreWritingEnabled();
+    }
+
+    /** Impaginazione delle parti: con la scrittura attiva e il servizio musicale configurato. */
+    protected get canEngrave(): boolean {
+        return this.canWrite && !!this.playback?.recognitionAvailable;
+    }
+
+    /** Parte con una versione e senza pagine: si legge e si ascolta, ma non compare in anteprima né in stampa. */
+    protected toEngrave(part: PartPlayback): boolean {
+        return !part.hasPages && !!part.version;
+    }
+
+    /** Le pagine sono impaginate da una versione precedente a quella ascoltata. */
+    protected engravingOutdated(part: PartPlayback): boolean {
+        return !!part.engravedFromVersionId && !!part.version && part.engravedFromVersionId !== part.version.id;
     }
 
     protected get anyAvailable(): boolean {
@@ -240,6 +259,29 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         this.openWriting(part, { resume });
     }
 
+    /** Impagina una versione della parte, di norma quella ascoltata, in pagine e PDF. */
+    protected engrave(part: PartPlayback, versionId = part.version?.id): void {
+        if (!this.playback || !versionId) return;
+        const data: EngraveDialogData = {
+            trackId: this.trackId,
+            scoreId: part.scoreId,
+            versionId,
+            versionNumber: part.version?.id === versionId ? part.version.versionNumber : null,
+            partLabel: partLabel(part),
+            header: { title: this.playback.trackName ?? '', composer: this.composer ?? '', arranger: this.arranger ?? '', partName: partLabel(part) },
+            hasPages: part.hasPages,
+            trackVersion: this.playback.version
+        };
+        openEngraveDialog(this.dialogService, data)
+            .pipe(first())
+            .subscribe((result) => {
+                if (!result) return;
+                this.trackVersionChange.emit(result.trackVersion);
+                this.partsChange.emit();
+                this.reload();
+            });
+    }
+
     /** Scarta la bozza di una parte che nessuno sta scrivendo. */
     protected discardDraft(part: PartPlayback): void {
         const draft = part.draft;
@@ -310,6 +352,7 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             partLabel: partLabel(part),
             sound: part.sound,
             mode: 'writing',
+            engravable: this.canEngrave,
             ...options
         };
         const ref = this.dialogService.open(ScoreEditorDialogComponent, {
@@ -324,7 +367,16 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             style: { 'max-height': '100vh', 'border-radius': '0' },
             contentStyle: { padding: '0', overflow: 'hidden', height: '100vh' }
         });
-        ref?.onClose.pipe(first()).subscribe((version: ScoreVersion | undefined) => {
+        ref?.onClose.pipe(first()).subscribe((result: ScoreEditorDialogResult) => {
+            if (isEngraveRequest(result)) {
+                // Le parti si rileggono prima: l'impaginazione propone la versione e le pagine attuali.
+                this.reload((playback) => {
+                    const current = playback.parts.find((candidate) => candidate.scoreId === part.scoreId);
+                    if (current) this.engrave(current, result.engraveVersionId);
+                });
+                return;
+            }
+            const version = result;
             if (version?.status === 'APPROVED') {
                 this.toastService.success('Versione approvata', `La versione ${version.versionNumber} scritta è approvata e ascoltata per la parte.`);
             } else if (version) {

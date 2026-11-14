@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { fakeAsync, tick } from '@angular/core/testing';
 import { SheetsMusic, TrackUploadJob, Tracks } from '../../../module';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { RoleEnums } from '../../../constants';
 import { UxTelemetryService } from '../../../service';
 import { DetailComponent } from './detail.component';
@@ -145,6 +145,38 @@ describe('Track DetailComponent', () => {
         expect(component['uploadSummary']({ ...job, partsWithInstruments: 3 })).toContain('3 parti con strumenti assegnati');
         expect(component['uploadSummary']({ ...job, status: 'IN_PROGRESS' })).toBeUndefined();
         expect(component['uploadSummary']({ id: 1, name: 'a.pdf', trackId: 8, status: 'DONE' })).toBeUndefined();
+    });
+
+    it('engraves the current version of a part of the workspace and reads the track again', () => {
+        const onClose = new Subject<unknown>();
+        const dialogService = jasmine.createSpyObj('DialogService', ['open']);
+        dialogService.open.and.returnValue({ onClose });
+        const features = { scorePlaybackEnabled: () => true, scoreWritingEnabled: () => true, loaded: () => true } as any;
+        const component = new DetailComponent(null!, null!, null!, { currentUserRole: RoleEnums.ARCHIVIST } as any, null!, null!, null!, null!, dialogService, features, telemetry());
+        component['track'] = { id: 8, version: 5, name: 'Marcia reale', composer: 'G. Gabetti', scores: [] } as Tracks;
+        const reload = spyOn<any>(component, 'reloadTrack');
+        const score: SheetsMusic = { id: 3, media: [], currentScoreVersionId: 70 };
+
+        expect(component['canEngrave']).toBeTrue();
+        component['engravePart']({ score, label: 'Tuba' });
+
+        expect(dialogService.open.calls.mostRecent().args[1].data).toEqual({
+            trackId: 8,
+            scoreId: 3,
+            versionId: 70,
+            partLabel: 'Tuba',
+            header: { title: 'Marcia reale', composer: 'G. Gabetti', arranger: '', partName: 'Tuba' },
+            hasPages: false,
+            trackVersion: 5
+        });
+        onClose.next({ scoreId: 3, trackVersion: 6, target: 'REPLACE' });
+        expect(component['track'].version).toBe(6);
+        expect(reload).toHaveBeenCalledTimes(1);
+
+        component['isDirty'] = true;
+        component['engravePart']({ score, label: 'Tuba' });
+        expect(dialogService.open).toHaveBeenCalledTimes(1);
+        expect(new DetailComponent(null!, null!, null!, { currentUserRole: RoleEnums.USER } as any, null!, null!, null!, null!, null!, features, telemetry())['canEngrave']).toBeFalse();
     });
 
     it('takes the track of the applied instruments as saved and reads the instruments again', () => {

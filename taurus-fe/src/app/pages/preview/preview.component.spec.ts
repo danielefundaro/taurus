@@ -5,12 +5,16 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { SheetsMusic } from '../../module';
-import { MediaService, PrinterService, ToastService } from '../../service';
+import { MediaService, PrinterService, ScorePlaybackService, ToastService } from '../../service';
 import { PreviewComponent } from './preview.component';
 
 const TRANSPARENT_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 
 const imageBlob = (): Blob => new Blob([Uint8Array.from(atob(TRANSPARENT_PIXEL), (character) => character.charCodeAt(0))], { type: 'image/png' });
+
+/** Chi legge le parti senza gestirle; `MANAGER` le gestisce e le può impaginare. */
+const MEMBER = { canManage: false } as unknown as ScorePlaybackService;
+const MANAGER = { canManage: true } as unknown as ScorePlaybackService;
 
 const scores: SheetsMusic[] = [
     { instruments: [{ index: 7, name: 'Flauto' }], media: [{ index: 11 }, { index: 12 }] },
@@ -28,7 +32,8 @@ describe('PreviewComponent', () => {
             { back: () => undefined } as Location,
             { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
             { markForCheck: () => undefined } as ChangeDetectorRef,
-            { warn: () => undefined } as unknown as ToastService
+            { warn: () => undefined } as unknown as ToastService,
+            MEMBER
         );
     });
 
@@ -52,7 +57,8 @@ describe('PreviewComponent', () => {
             { back: () => undefined } as Location,
             { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
             { markForCheck: () => undefined } as ChangeDetectorRef,
-            { warn: () => undefined } as unknown as ToastService
+            { warn: () => undefined } as unknown as ToastService,
+            MEMBER
         );
         ordered.ngOnInit();
 
@@ -72,7 +78,8 @@ describe('PreviewComponent', () => {
             { back } as unknown as Location,
             { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
             { markForCheck: () => undefined } as ChangeDetectorRef,
-            { warn } as unknown as ToastService
+            { warn } as unknown as ToastService,
+            MEMBER
         );
 
         orphan.ngOnInit();
@@ -99,7 +106,8 @@ describe('PreviewComponent', () => {
             { back } as unknown as Location,
             { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
             { markForCheck: () => undefined } as ChangeDetectorRef,
-            { warn } as unknown as ToastService
+            { warn } as unknown as ToastService,
+            MEMBER
         );
 
         withoutPages.ngOnInit();
@@ -108,6 +116,68 @@ describe('PreviewComponent', () => {
         expect(back).toHaveBeenCalled();
         expect(navigate).not.toHaveBeenCalled();
         withoutPages.ngOnDestroy();
+    });
+
+    it('tells the written parts not yet engraved apart when the source has no pages', () => {
+        const open = (playback: ScorePlaybackService, written: SheetsMusic[]) => {
+            const warn = jasmine.createSpy('warn');
+            const preview = new PreviewComponent(
+                { scores: written, previewTitle: 'Marcia', previewSource: 'Traccia', clear: () => undefined } as unknown as PrinterService,
+                { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
+                { navigate: () => Promise.resolve(true), currentNavigation: () => ({ previousNavigation: {} }), lastSuccessfulNavigation: () => null } as unknown as Router,
+                { back: () => undefined } as unknown as Location,
+                { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
+                { markForCheck: () => undefined } as ChangeDetectorRef,
+                { warn } as unknown as ToastService,
+                playback
+            );
+            preview.ngOnInit();
+            preview.ngOnDestroy();
+            return warn.calls.mostRecent().args as string[];
+        };
+        const written = (id: number): SheetsMusic => ({ id, instruments: [{ index: id, name: 'Tuba' }], media: [], currentScoreVersionId: id * 10 });
+
+        const [title, detail] = open(MANAGER, [written(1)]);
+        expect(title).toBe('Parte scritta non ancora impaginata');
+        expect(detail).toContain('«Impagina»');
+        const [plural, memberDetail] = open(MEMBER, [written(1), written(2)]);
+        expect(plural).toBe('Parti scritte non ancora impaginate');
+        expect(memberDetail).toContain('scheda Ascolto');
+        expect(open(MEMBER, [{ id: 3, instruments: [], media: [] }])[0]).toBe('Nessuna pagina da mostrare');
+    });
+
+    it('counts the selected written parts to engrave, which stay out of the print', () => {
+        const preview = new PreviewComponent(
+            {
+                scores: [
+                    { id: 1, instruments: [{ index: 7, name: 'Flauto' }], media: [{ index: 11 }] },
+                    { id: 2, instruments: [{ index: 8, name: 'Tuba' }], media: [], currentScoreVersionId: 20 },
+                    { id: 3, instruments: [], media: [], currentScoreVersionId: 30 }
+                ],
+                previewTitle: 'Marcia',
+                previewSource: 'Traccia',
+                clear: () => undefined
+            } as unknown as PrinterService,
+            { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
+            { navigate: () => Promise.resolve(true) } as unknown as Router,
+            { back: () => undefined } as Location,
+            { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
+            { markForCheck: () => undefined } as ChangeDetectorRef,
+            { warn: () => undefined } as unknown as ToastService,
+            MEMBER
+        );
+        preview.ngOnInit();
+        const state = preview as unknown as { mediaStreams: string[]; unengravedCount: number; unengravedSummary: string; selectedInstruments: Record<string, boolean>; selectedInstrumentChange(): void };
+
+        expect(state.mediaStreams).toEqual(['/media/11']);
+        expect(state.unengravedSummary).toBe('2 parti da impaginare non stampate');
+        state.selectedInstruments['8'] = false;
+        state.selectedInstrumentChange();
+        expect(state.unengravedSummary).toBe('1 parte da impaginare non stampata');
+        state.selectedInstruments['null'] = false;
+        state.selectedInstrumentChange();
+        expect(state.unengravedCount).toBe(0);
+        preview.ngOnDestroy();
     });
 
     it('groups consecutive pages into two-up print sheets', () => {
@@ -195,7 +265,8 @@ describe('PreviewComponent template', () => {
                 provideRouter([]),
                 { provide: Location, useValue: { back: () => undefined } },
                 { provide: PrinterService, useValue: { scores, previewTitle: 'Marcia sinfonica', previewSource: 'Traccia', clear: () => undefined } },
-                { provide: ToastService, useValue: { warn: () => undefined } }
+                { provide: ToastService, useValue: { warn: () => undefined } },
+                { provide: ScorePlaybackService, useValue: MEMBER }
             ]
         })
             .overrideComponent(PreviewComponent, {
