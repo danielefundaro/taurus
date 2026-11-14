@@ -128,6 +128,8 @@ public final class ScorePlaybackDtos {
      * @param openReports error reports of the part still open, counted for archivists and administrators only
      * @param editing     who is editing the part in an editor, returned to archivists and administrators only
      * @param draft       draft of the writing editor, returned to archivists and administrators only
+     * @param engravedFromVersionId version the pages were engraved from, while they still derive from it; returned to
+     *                              archivists and administrators only
      */
     public record PartPlaybackDTO(
         Long scoreId,
@@ -143,7 +145,8 @@ public final class ScorePlaybackDtos {
         RecognitionJobDTO recognition,
         int openReports,
         EditLockDTO editing,
-        DraftSummaryDTO draft
+        DraftSummaryDTO draft,
+        Long engravedFromVersionId
     ) {}
 
     /**

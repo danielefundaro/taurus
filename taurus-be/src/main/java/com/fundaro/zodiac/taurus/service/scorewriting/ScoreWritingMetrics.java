@@ -3,9 +3,10 @@ package com.fundaro.zodiac.taurus.service.scorewriting;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.util.Locale;
 
-/** Saves, drafts and edit locks of the music editors; tags never carry tenant data or contents. */
+/** Saves, drafts, edit locks and engravings of the music editors; tags never carry tenant data or contents. */
 @Component
 public class ScoreWritingMetrics {
 
@@ -30,5 +31,23 @@ public class ScoreWritingMetrics {
     /** An edit lock: outcome {@code acquired}, {@code takenOver}, {@code expired} (taken after the expiry) or {@code refused}. */
     public void lock(String outcome) {
         registry.counter(PREFIX + "locks", "outcome", outcome).increment();
+    }
+
+    /**
+     * A finished engraving job: outcome {@code done} or the error code of the job, a small fixed set such as
+     * {@code tooManyPages}, {@code engineTimeout} or {@code serviceUnavailable}.
+     */
+    public void engraving(String outcome) {
+        registry.counter("taurus.score.engravings", "outcome", outcome).increment();
+    }
+
+    /** Time the music service took for an engraving that produced pages. */
+    public void engravingDuration(Duration duration) {
+        registry.timer("taurus.score.engraving.duration").record(duration);
+    }
+
+    /** Engraved pages assigned to a part: target {@code replace} or {@code newPart}. */
+    public void engravingApplied(String target) {
+        registry.counter("taurus.score.engravings.applied", "target", target).increment();
     }
 }

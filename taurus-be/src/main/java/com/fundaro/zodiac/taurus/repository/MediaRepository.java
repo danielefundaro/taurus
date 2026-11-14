@@ -33,6 +33,10 @@ public interface MediaRepository extends CatalogRepository<Media> {
                 UNION ALL
                 SELECT 1 FROM score_version WHERE media_asset_id = :id AND deleted = FALSE
                 UNION ALL
+                SELECT 1 FROM score_engraving_job WHERE pdf_media_asset_id = :id AND deleted = FALSE
+                UNION ALL
+                SELECT 1 FROM score_engraving_page WHERE media_asset_id = :id
+                UNION ALL
                 SELECT 1 FROM signature_document
                  WHERE :id IN (frozen_media_asset_id, signed_media_asset_id, sealed_media_asset_id) AND deleted = FALSE
                 UNION ALL

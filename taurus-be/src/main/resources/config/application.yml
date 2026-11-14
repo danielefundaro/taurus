@@ -289,6 +289,13 @@ application:
     enabled: ${SCORE_WRITING_ENABLED:false}
     lock-timeout: PT2M
     draft-min-interval: PT2S
+    # Engraving jobs; the connection to the music service is application.omr.
+    engraving:
+      timeout: PT3M
+      concurrency: 1
+      stale-after: PT10M
+      max-attempts: 3
+      unapplied-retention: P7D
   # Internal OMR service, shared by score playback and the text reading of uploaded PDFs.
   omr:
     # Empty: recognition, MIDI upload and text reading are not offered.

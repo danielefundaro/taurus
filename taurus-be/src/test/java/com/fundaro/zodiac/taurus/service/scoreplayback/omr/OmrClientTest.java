@@ -2,6 +2,7 @@ package com.fundaro.zodiac.taurus.service.scoreplayback.omr;
 
 import tools.jackson.databind.ObjectMapper;
 import com.fundaro.zodiac.taurus.config.ApplicationProperties;
+import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.EngravingResponse;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.PageImage;
 import com.fundaro.zodiac.taurus.service.scoreplayback.FakeOmrServer;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.RecognitionResponse;
@@ -17,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -158,6 +160,59 @@ class OmrClientTest {
     void anOlderServiceWithoutTextReadingIsUnavailable() throws IOException {
         try (FakeOmrServer omr = new FakeOmrServer()) {
             assertThatThrownBy(() -> client(omr.url()).readText(List.of(new PageImage("page-1.png", "image/png", new byte[] { 1 }))))
+                .isInstanceOfSatisfying(OmrException.class, exception -> assertThat(exception.isUnavailable()).isTrue());
+        }
+    }
+
+    @Test
+    void sendsTheScoreAndTheOptionsAndDecodesTheEngraving() throws IOException {
+        try (FakeOmrServer omr = new FakeOmrServer()) {
+            String page = Base64.getEncoder().encodeToString(new byte[] { (byte) 0x89, 'P', 'N', 'G' });
+            String pdf = Base64.getEncoder().encodeToString("%PDF-1.4".getBytes(StandardCharsets.US_ASCII));
+            omr.answer("/v1/engravings", 200, "application/json", """
+                {"engine":"VEROVIO","version":"6.4.1","durationMillis":820,"pageCount":2,"pdf":"%s","pages":["%s","%s"],"unknown":"ignored"}
+                """.formatted(pdf, page, page));
+
+            EngravingResponse response = client(omr.url()).engrave(
+                "parte.mxl",
+                "application/vnd.recordare.musicxml",
+                new byte[] { 'P', 'K' },
+                "{\"format\":\"MARCH\"}"
+            );
+
+            assertThat(response.engine()).isEqualTo("VEROVIO");
+            assertThat(response.pageCount()).isEqualTo(2);
+            assertThat(response.pageBytes()).hasSize(2).first().satisfies(bytes -> assertThat(bytes[1]).isEqualTo((byte) 'P'));
+            assertThat(new String(response.pdfBytes(), StandardCharsets.US_ASCII)).startsWith("%PDF-");
+            assertThat(omr.received()).singleElement().satisfies(received -> {
+                assertThat(received.key()).isEqualTo("service-key-0123456789");
+                assertThat(Long.parseLong(received.contentLength())).isEqualTo(received.bodySize());
+                String body = new String(received.body(), StandardCharsets.ISO_8859_1);
+                assertThat(body).contains("name=\"score\"; filename=\"parte.mxl\"").contains("name=\"options\"").contains("{\"format\":\"MARCH\"}");
+            });
+        }
+    }
+
+    @Test
+    void keepsTheCodesThatExplainAFailedEngraving() throws IOException {
+        try (FakeOmrServer omr = new FakeOmrServer()) {
+            OmrClient client = client(omr.url());
+            for (String code : List.of("unreadableScore", "invalidOptions", "tooManyPages")) {
+                omr.answer("/v1/engravings", 422, "application/json", "{\"code\":\"" + code + "\"}");
+                assertThatThrownBy(() -> client.engrave("parte.musicxml", "application/xml", new byte[] { 1 }, "{}"))
+                    .isInstanceOfSatisfying(OmrException.class, exception -> assertThat(exception.getCode()).isEqualTo(code));
+            }
+            omr.answer("/v1/engravings", 500, "application/json", "{\"code\":\"engineTimeout\"}");
+            assertThatThrownBy(() -> client.engrave("parte.musicxml", "application/xml", new byte[] { 1 }, "{}"))
+                .isInstanceOfSatisfying(OmrException.class, exception -> assertThat(exception.getCode()).isEqualTo("engineTimeout"));
+
+            omr.answer("/v1/engravings", 503, "application/json", "{\"code\":\"busy\"}");
+            assertThatThrownBy(() -> client.engrave("parte.musicxml", "application/xml", new byte[] { 1 }, "{}"))
+                .isInstanceOfSatisfying(OmrException.class, exception -> assertThat(exception.isUnavailable()).isTrue());
+
+            // A server error of a recognition never carries the code to the caller.
+            omr.answer("/v1/midi-conversions", 500, "application/json", "{\"code\":\"engineFailed\"}");
+            assertThatThrownBy(() -> client.convertMidi("brano.mid", new byte[] { 1 }))
                 .isInstanceOfSatisfying(OmrException.class, exception -> assertThat(exception.isUnavailable()).isTrue());
         }
     }

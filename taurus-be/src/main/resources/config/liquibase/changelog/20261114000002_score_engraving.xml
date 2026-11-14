@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261114000002-1" author="taurus">
+    <comment>
+      Engraving of a version of a part into pages and a PDF by the music service. At most one job per part is queued or
+      running; the pages stay with the job until the archivist assigns them to the part or to a new part.
+    </comment>
+    <createTable tableName="score_engraving_job">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="sheet_music_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="track_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="score_version_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="options_json" type="text">
+        <constraints nullable="false"/>
+      </column>
+      <column name="status" type="varchar(16)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="attempts" type="integer" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="requested_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="started_at" type="timestamp with time zone"/>
+      <column name="finished_at" type="timestamp with time zone"/>
+      <column name="error_code" type="varchar(64)"/>
+      <column name="engine_version" type="varchar(64)"/>
+      <column name="duration_millis" type="bigint"/>
+      <column name="page_count" type="integer"/>
+      <column name="pdf_media_asset_id" type="bigint"/>
+      <column name="applied_at" type="timestamp with time zone"/>
+      <column name="applied_sheet_music_id" type="bigint"/>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="score_engraving_job" baseColumnNames="sheet_music_id"
+                             referencedTableName="sheet_music" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_job_sheet_music" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_job" baseColumnNames="track_id"
+                             referencedTableName="track" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_job_track" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_job" baseColumnNames="score_version_id"
+                             referencedTableName="score_version" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_job_score_version" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_job" baseColumnNames="pdf_media_asset_id"
+                             referencedTableName="media_asset" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_job_pdf" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_job" baseColumnNames="applied_sheet_music_id"
+                             referencedTableName="sheet_music" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_job_applied_sheet_music" onDelete="RESTRICT"/>
+    <sql><![CDATA[
+      ALTER TABLE score_engraving_job
+        ADD CONSTRAINT ck_score_engraving_job_status CHECK (status IN ('QUEUED', 'RUNNING', 'DONE', 'FAILED')),
+        ADD CONSTRAINT ck_score_engraving_job_attempts CHECK (attempts >= 0),
+        ADD CONSTRAINT ck_score_engraving_job_failure CHECK ((status = 'FAILED') = (error_code IS NOT NULL)),
+        ADD CONSTRAINT ck_score_engraving_job_applied CHECK ((applied_at IS NULL) = (applied_sheet_music_id IS NULL)),
+        ADD CONSTRAINT ck_score_engraving_job_applied_done CHECK (applied_at IS NULL OR status = 'DONE');
+      CREATE UNIQUE INDEX uq_score_engraving_job_active ON score_engraving_job (sheet_music_id)
+        WHERE deleted = FALSE AND status IN ('QUEUED', 'RUNNING');
+      CREATE INDEX idx_score_engraving_job_version ON score_engraving_job (score_version_id, deleted);
+      CREATE INDEX idx_score_engraving_job_part ON score_engraving_job (sheet_music_id, deleted);
+      CREATE INDEX idx_score_engraving_job_applied ON score_engraving_job (applied_sheet_music_id)
+        WHERE applied_sheet_music_id IS NOT NULL;
+      CREATE INDEX idx_score_engraving_job_status ON score_engraving_job (status, edit_date) WHERE deleted = FALSE;
+      CREATE INDEX idx_score_engraving_job_pdf ON score_engraving_job (pdf_media_asset_id)
+        WHERE pdf_media_asset_id IS NOT NULL;
+      ]]></sql>
+  </changeSet>
+
+  <changeSet id="20261114000002-2" author="taurus">
+    <comment>
+      The pages of a finished engraving not yet assigned to a part, in order. The rows go once the pages are assigned or
+      released: from then on the part, or nothing, refers to them.
+    </comment>
+    <createTable tableName="score_engraving_page">
+      <column name="job_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="page_index" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="media_asset_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <addPrimaryKey tableName="score_engraving_page" columnNames="job_id, page_index" constraintName="pk_score_engraving_page"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_page" baseColumnNames="job_id"
+                             referencedTableName="score_engraving_job" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_page_job" onDelete="CASCADE"/>
+    <addForeignKeyConstraint baseTableName="score_engraving_page" baseColumnNames="media_asset_id"
+                             referencedTableName="media_asset" referencedColumnNames="id"
+                             constraintName="fk_score_engraving_page_media_asset" onDelete="RESTRICT"/>
+    <sql><![CDATA[
+      ALTER TABLE score_engraving_page ADD CONSTRAINT ck_score_engraving_page_index CHECK (page_index >= 0);
+      CREATE INDEX idx_score_engraving_page_media_asset ON score_engraving_page (media_asset_id);
+      ]]></sql>
+  </changeSet>
+
+  <changeSet id="20261114000002-3" author="taurus">
+    <comment>
+      The version the pages of a part were engraved from, with the fingerprint of those pages: once the pages change in
+      another way, they no longer derive from the version.
+    </comment>
+    <addColumn tableName="sheet_music">
+      <column name="engraved_from_version_id" type="bigint"/>
+      <column name="engraved_pages_fingerprint" type="varchar(64)"/>
+    </addColumn>
+    <addForeignKeyConstraint baseTableName="sheet_music" baseColumnNames="engraved_from_version_id"
+                             referencedTableName="score_version" referencedColumnNames="id"
+                             constraintName="fk_sheet_music_engraved_from_version" onDelete="SET NULL"/>
+    <sql><![CDATA[
+      ALTER TABLE sheet_music
+        ADD CONSTRAINT ck_sheet_music_engraved
+          CHECK ((engraved_from_version_id IS NULL) = (engraved_pages_fingerprint IS NULL));
+      CREATE INDEX idx_sheet_music_engraved_from_version ON sheet_music (engraved_from_version_id)
+        WHERE engraved_from_version_id IS NOT NULL;
+      ]]></sql>
+  </changeSet>
+</databaseChangeLog>

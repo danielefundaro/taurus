@@ -1,9 +1,12 @@
 package com.fundaro.zodiac.taurus.service.dto.scorewriting;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fundaro.zodiac.taurus.domain.scorewriting.ScoreEngravingJobStatus;
+
 import java.time.ZonedDateTime;
 import java.util.List;
 
-/** Data exchanged by the edit lock and draft endpoints of the music writing editor. */
+/** Data exchanged by the edit lock, draft and engraving endpoints of the music writing editor. */
 public final class ScoreWritingDtos {
 
     private ScoreWritingDtos() {}
@@ -79,4 +82,88 @@ public final class ScoreWritingDtos {
      * @param outdated another version became the current one of the part after the writing started
      */
     public record DraftSummaryDTO(String savedBy, ZonedDateTime savedAt, boolean outdated) {}
+
+    /** Page format of an engraving: A4 portrait or landscape, or the march card of 18 x 13 cm in landscape. */
+    public enum EngravingFormat {
+        A4_PORTRAIT,
+        A4_LANDSCAPE,
+        MARCH,
+    }
+
+    /** Measure numbers of an engraving: at the start of every system, above every measure for study parts, or none. */
+    public enum MeasureNumbers {
+        SYSTEM,
+        EVERY,
+        NONE,
+    }
+
+    /** Where the engraved pages go: in place of the pages of the part, or in a new part at the end of the track. */
+    public enum EngravingTarget {
+        REPLACE,
+        NEW_PART,
+    }
+
+    /** Texts of the header of the first page; an empty or missing text is left out. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record EngravingHeaderDTO(String title, String composer, String arranger, String partName) {}
+
+    /**
+     * Options of an engraving; a missing value takes the default of the music service.
+     *
+     * @param staffSize height of the staff in millimetres, from 4 to 9.6
+     * @param margin    margins in millimetres, from 3 to 30
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record EngravingOptionsDTO(
+        EngravingFormat format,
+        Double staffSize,
+        Double margin,
+        EngravingHeaderDTO header,
+        Boolean pageNumbers,
+        MeasureNumbers measureNumbers
+    ) {}
+
+    /**
+     * An engraving of a version of a part.
+     *
+     * @param errorCode      why the job failed: a code of the music service such as {@code tooManyPages} or
+     *                       {@code engineTimeout}, or {@code serviceUnavailable}, {@code versionNotFound},
+     *                       {@code interrupted}, {@code unexpected}
+     * @param pages          media ids of the engraved pages waiting to be assigned, in order; empty once assigned or
+     *                       released
+     * @param pdf            the PDF of the engraving can be downloaded
+     * @param appliedScoreId part that received the pages
+     */
+    public record EngravingJobDTO(
+        Long id,
+        Long scoreId,
+        Long versionId,
+        ScoreEngravingJobStatus status,
+        String errorCode,
+        int attempts,
+        EngravingOptionsDTO options,
+        Integer pageCount,
+        List<Long> pages,
+        boolean pdf,
+        ZonedDateTime requestedAt,
+        ZonedDateTime startedAt,
+        ZonedDateTime finishedAt,
+        ZonedDateTime appliedAt,
+        Long appliedScoreId
+    ) {}
+
+    /**
+     * Assignment of the engraved pages.
+     *
+     * @param trackVersion version of the track shown to the archivist, {@code null} to skip the check
+     */
+    public record ApplyEngravingDTO(EngravingTarget target, Long trackVersion) {}
+
+    /**
+     * Engraved pages assigned to a part.
+     *
+     * @param scoreId      part that received the pages: the engraved one or the new part
+     * @param trackVersion version of the track after the assignment
+     */
+    public record EngravingAppliedDTO(Long scoreId, Long trackVersion) {}
 }

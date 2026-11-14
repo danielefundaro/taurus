@@ -4,6 +4,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.fundaro.zodiac.taurus.config.ApplicationProperties;
 import com.fundaro.zodiac.taurus.config.ApplicationProperties.OmrProperties;
+import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.EngravingResponse;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.PageImage;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.RecognitionResponse;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.TextRecognitionResponse;
@@ -28,12 +29,14 @@ import java.io.IOException;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
- * Client of the internal optical music recognition service, used by score playback and by the text reading of uploaded
- * PDFs. The body is buffered, so every request carries its length as the service requires. Recognitions and text
- * readings have their own response timeout: a recognition can last minutes, a text reading a few seconds.
+ * Client of the internal optical music recognition service, used by score playback, by the text reading of uploaded
+ * PDFs and by the engraving of the written parts. The body is buffered, so every request carries its length as the
+ * service requires. Recognitions, text readings and engravings have their own response timeout: a recognition can last
+ * minutes, a text reading a few seconds.
  */
 @Component
 public class OmrClient {
@@ -46,6 +49,7 @@ public class OmrClient {
     private final ObjectMapper objectMapper;
     private final RestClient client;
     private final RestClient textClient;
+    private final RestClient engravingClient;
 
     public OmrClient(ApplicationProperties applicationProperties, ObjectMapper objectMapper) {
         this.properties = applicationProperties.getOmr();
@@ -58,8 +62,9 @@ public class OmrClient {
             .build();
         this.client = client(httpClient, applicationProperties.getScorePlayback().getOmr().getTimeout());
         this.textClient = client(httpClient, applicationProperties.getPdfProcessing().getOcr().getTimeout());
+        this.engravingClient = client(httpClient, applicationProperties.getScoreWriting().getEngraving().getTimeout());
         if (!isConfigured()) {
-            log.info("OMR service not configured (application.omr.url): recognition, MIDI upload and text reading are not offered");
+            log.info("OMR service not configured (application.omr.url): recognition, MIDI upload, text reading and engraving are not offered");
         }
     }
 
@@ -128,6 +133,31 @@ public class OmrClient {
             .body(byte[].class));
     }
 
+    /**
+     * Engraves a part into pages and a PDF.
+     *
+     * @param score   MusicXML of the part, plain or compressed
+     * @param options engraving options as the service reads them, in JSON
+     * @throws OmrException {@code serviceUnavailable}, or the service code that explains the failure: {@code tooLarge},
+     *                      {@code tooManyPages}, {@code unreadableScore}, {@code invalidOptions}, {@code engineFailed},
+     *                      {@code engineTimeout}
+     */
+    public EngravingResponse engrave(String fileName, String mimeType, byte[] score, String options) {
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("score", part(fileName, mimeType, score));
+        body.add("options", options);
+        return call(() -> engravingClient.post()
+            .uri(endpoint("/v1/engravings"))
+            .header(API_KEY_HEADER, properties.getApiKey())
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .body(body)
+            .retrieve()
+            .onStatus(HttpStatusCode::isError, (request, response) -> {
+                throw rejected(response, OmrException.ENGRAVING_CODES, true);
+            })
+            .body(EngravingResponse.class));
+    }
+
     private <T> T call(Supplier<T> request) {
         if (!isConfigured()) throw OmrException.unavailable("the service is not configured");
         try {
@@ -152,6 +182,14 @@ public class OmrClient {
 
     /** A refused request: the service code is kept when it describes the input, anything else means unavailable. */
     private OmrException rejected(ClientHttpResponse response) throws IOException {
+        return rejected(response, OmrException.INPUT_CODES, false);
+    }
+
+    /**
+     * A refused request: the service code is kept when it is one of {@code codes}, from a client error or, with
+     * {@code serverCodes}, from a server error too; anything else means unavailable.
+     */
+    private OmrException rejected(ClientHttpResponse response, Set<String> codes, boolean serverCodes) throws IOException {
         int status = response.getStatusCode().value();
         String code = null;
         try {
@@ -164,7 +202,8 @@ public class OmrClient {
             log.error("OMR service refused the key: check application.omr.api-key");
             return OmrException.unavailable("key refused");
         }
-        if (status >= 400 && status < 500 && code != null && OmrException.INPUT_CODES.contains(code)) {
+        boolean described = status >= 400 && (status < 500 || (serverCodes && status == 500));
+        if (described && code != null && codes.contains(code)) {
             return OmrException.rejected(code);
         }
         log.warn("OMR service answered {} {}", status, code);

@@ -82,6 +82,27 @@ class ScorePlaybackSupportTest {
         assertThat(ScorePlaybackSupport.pagesFingerprint(first)).isNotEqualTo(ScorePlaybackSupport.pagesFingerprint(swapped)).hasSize(64);
     }
 
+    @Test
+    void theEngravedVersionHoldsWhileThePartKeepsTheEngravedPages() {
+        SheetsMusic part = part();
+        part.getMedia().add(page(1L, "a".repeat(64)));
+
+        assertThat(ScorePlaybackSupport.engravedFromVersionId(part)).isNull();
+
+        part.setEngravedFromVersionId(7L);
+        part.setEngravedPagesFingerprint(ScorePlaybackSupport.pagesFingerprint(part));
+
+        assertThat(ScorePlaybackSupport.engravedFromVersionId(part)).isEqualTo(7L);
+
+        part.getMedia().add(page(2L, "b".repeat(64)));
+
+        assertThat(ScorePlaybackSupport.engravedFromVersionId(part)).isNull();
+
+        part.setEngravedPagesFingerprint(null);
+
+        assertThat(ScorePlaybackSupport.engravedFromVersionId(part)).isNull();
+    }
+
     private static SheetsMusic part(Instruments... instruments) {
         SheetsMusic part = new SheetsMusic();
         part.getInstruments().addAll(List.of(instruments));
