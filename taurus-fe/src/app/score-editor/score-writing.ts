@@ -165,13 +165,27 @@ export function writeTied(score: ScoreDocument, cursor: WritingCursor, figure: W
 export function addChordPitch(score: ScoreDocument, noteId: string, step: Step): string {
     const note = score.note(noteId);
     if (isRest(note)) throw new EditError('Le pause non formano accordi: scrivi prima una nota');
-    const chain = tiedEvents(score, score.eventOf(note));
-    const top = chain[0].notes.map((member) => pitchOf(member)).reduce((highest, pitch) => (pitch ? Math.max(highest, diatonic(pitch.step, pitch.octave)) : highest), Number.NEGATIVE_INFINITY);
+    const top = score
+        .eventOf(note)
+        .notes.map((member) => pitchOf(member))
+        .reduce((highest, pitch) => (pitch ? Math.max(highest, diatonic(pitch.step, pitch.octave)) : highest), Number.NEGATIVE_INFINITY);
     if (!Number.isFinite(top)) throw new EditError('Nota senza altezza');
     let value = diatonic(step, 0);
     while (value <= top) value += 7;
     const pitch = fromDiatonic(value);
-    if (pitch.octave > 9) throw new EditError('Altezza fuori estensione');
+    return addChordPitchAt(score, noteId, pitch.step, pitch.octave);
+}
+
+/**
+ * Aggiunge all'accordo della nota la nota con nome e ottava indicati, anche sulle note legate che la seguono, per
+ * esempio quella suonata su una tastiera MIDI. Restituisce l'`id` della nota aggiunta.
+ */
+export function addChordPitchAt(score: ScoreDocument, noteId: string, step: Step, octave: number): string {
+    const note = score.note(noteId);
+    if (isRest(note)) throw new EditError('Le pause non formano accordi: scrivi prima una nota');
+    if (octave < 0 || octave > 9) throw new EditError('Altezza fuori estensione');
+    const pitch = { step, octave };
+    const chain = tiedEvents(score, score.eventOf(note));
     let previous: Element | null = null;
     let added: string | null = null;
     for (const event of chain) {

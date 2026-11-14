@@ -96,21 +96,22 @@ describe('buildPlayback', () => {
         ]);
     });
 
-    it('maps percussion voices to the drum sounds of the part', () => {
+    it('maps each percussion voice to the drum sound of the instrument with its number', () => {
         const drums: ScorePart = {
             id: 'P2',
             name: 'Batteria',
             clefSign: 'percussion',
-            measures: [measure(0, { notes: [note(0, 1, 72, { voice: '1' }), note(0, 1, 64, { voice: '2' }), note(1, 1, 72, { voice: '3' })] })]
+            measures: [measure(0, { notes: [note(0, 1, 64, { voice: '2' }), note(0, 1, 72, { voice: '1' }), note(1, 1, 72, { voice: '3' })] })]
         };
         const withKeys = buildPlayback([input('drums', drums, sound({ percussionKeys: [38, 36] }))], drums, { withRepeats: false, tempoBpm: null, countIn: false });
         const unconfigured = buildPlayback([input('drums', drums)], drums, { withRepeats: false, tempoBpm: null, countIn: false });
 
         expect(withKeys.channels).toEqual([{ key: 'drums', port: 0, channel: 9 }]);
         expect(withKeys.metronome).toEqual({ key: METRONOME_KEY, port: 1, channel: 9 });
+        // La voce 2 compare per prima ma suona il secondo strumento; la voce 3 suona l'ultimo.
         expect(noteOns(readMidi(withKeys.midi).tracks[1])).toEqual([
-            [0, 38],
             [0, 36],
+            [0, 38],
             [1, 36]
         ]);
         expect(unconfigured.channels).toEqual([{ key: 'drums', port: 0, channel: 9 }]);

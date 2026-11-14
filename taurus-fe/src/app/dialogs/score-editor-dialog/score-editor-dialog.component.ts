@@ -1,7 +1,9 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { HttpErrorResponse } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
+import { Popover } from 'primeng/popover';
+import { DrumPad, PianoKeyboardComponent } from '../../components/piano-keyboard/piano-keyboard.component';
 import { ImportsModule } from '../../imports';
 import { ErrorReport, MeasureBox, PlaybackSound, ScoreCorrection, ScoreDraft, ScoreEditorData, ScoreVersion } from '../../module';
 import { EditHistory } from '../../score-editor/edit-history';
@@ -9,6 +11,7 @@ import { excerpt } from '../../score-editor/excerpt';
 import { Alteration, ALTERATIONS, CLEF_OPTIONS, fraction, KEY_OPTIONS, NOTE_TYPES, NoteType, Step, STEP_NAMES, STEPS, toNumber } from '../../score-editor/notation-rules';
 import { EditError, ScoreDocument, ScoreDocumentChecks } from '../../score-editor/score-document';
 import * as edits from '../../score-editor/score-edits';
+import * as input from '../../score-editor/score-input';
 import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
 import * as writing from '../../score-editor/score-writing';
@@ -21,8 +24,12 @@ import {
     ConfirmService,
     DraftState,
     LocalDraftCopy,
+    MAX_CHORD_THRESHOLD,
     MediaService,
+    MidiInputService,
+    MIN_CHORD_THRESHOLD,
     PartDraftKeeper,
+    PlayedNote,
     PartEditLock,
     ScoreAudioService,
     ScoreClipboardService,
@@ -83,6 +90,20 @@ interface PageHighlight {
 /** Dimensione dello spartito nell'editor, più grande che nel lettore per selezionare comodamente le note. */
 const EDITOR_SCALE = 50;
 
+/** Durata della nota suonata sulla tastiera MIDI o sul pianoforte a schermo, in secondi. */
+const AUDITION_SECONDS = 0.6;
+
+/**
+ * Ultime note suonate: la prima del gruppo, a cui si aggiungono le note dell'accordo, e quelle di cui `+`, `-` e `=`
+ * correggono la grafia. Nelle percussioni, posizione e voci già scritte dal gruppo.
+ */
+interface PlayedGroup {
+    anchorId: string;
+    ids: string[];
+    voices: number[];
+    drumAt: writing.WritingCursor | null;
+}
+
 const OUTDATED = 'scoreWriting.draftOutdated';
 
 function timeOf(value: string): string {
@@ -130,6 +151,10 @@ function localChoice(local: LocalDraftCopy, draft: ScoreDraft | null, version: S
     };
 }
 
+function capitalized(value: string): string {
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 /** Nome di file dal nome della parte, senza caratteri non ammessi. */
 function fileName(label: string): string {
     return (
@@ -149,7 +174,7 @@ function fileName(label: string): string {
 @Component({
     selector: 'app-score-editor-dialog',
     standalone: true,
-    imports: [ImportsModule],
+    imports: [ImportsModule, PianoKeyboardComponent],
     templateUrl: './score-editor-dialog.component.html',
     styleUrl: './score-editor-dialog.component.scss',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -184,7 +209,14 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         { label: '200%', value: 200 }
     ];
     protected readonly originLabel = originLabel;
-    protected readonly voices = writing.VOICES.map((voice) => ({ label: String(voice), value: voice }));
+    /** Voci del cursore; nelle percussioni con strumenti ciascuna porta il nome del suo strumento. */
+    protected readonly voices: { label: string; value: number }[];
+    /** Suoni di batteria degli strumenti della parte, in ordine di voce; vuoto per le parti intonate. */
+    protected readonly drumKeys: number[];
+    /** Pulsanti del pianoforte a schermo per le percussioni con strumenti, uno per strumento. */
+    protected readonly drumPads: DrumPad[];
+    protected readonly minThreshold = MIN_CHORD_THRESHOLD;
+    protected readonly maxThreshold = MAX_CHORD_THRESHOLD;
     protected readonly intervals = [...passages.INTERVALS];
     protected readonly directions: { label: string; value: 1 | -1 }[] = [
         { label: 'Su', value: 1 },
@@ -255,6 +287,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected playing = false;
     protected preparingAudio = false;
 
+    /** Scrittura: pianoforte a schermo, mostrato da solo sui tablet. */
+    protected showPiano = false;
+    /** Ultime note suonate sulla tastiera MIDI o sul pianoforte a schermo. */
+    private played: PlayedGroup | null = null;
+    private midiSubscription?: Subscription;
+
     /** Scrittura: modalità di inserimento, con il cursore al posto della selezione. */
     protected inserting = false;
     protected cursor: writing.WritingCursor = writing.startCursor();
@@ -294,11 +332,17 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         lockService: ScoreEditLockService,
         private readonly draftService: ScoreDraftService,
         private readonly apiErrors: ApiErrorService,
-        protected readonly clipboard: ScoreClipboardService
+        protected readonly clipboard: ScoreClipboardService,
+        protected readonly midi: MidiInputService
     ) {
         this.data = config.data!;
         this.writingMode = this.data.mode === 'writing';
         this.lock = lockService.forPart(this.data.trackId, this.data.scoreId);
+        const keys = this.data.sound?.percussionKeys ?? [];
+        this.drumKeys = [...keys];
+        this.voices = writing.VOICES.map((voice) => ({ label: keys.length ? `${voice} · ${input.drumSound(input.voiceDrum(keys, voice)!).name}` : String(voice), value: voice }));
+        this.drumPads = keys.slice(0, writing.VOICES.length).map((key, index) => ({ key, label: capitalized(input.drumSound(key).name), hint: `Voce ${index + 1}` }));
+        this.showPiano = this.writingMode && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     }
 
     async ngOnInit(): Promise<void> {
@@ -312,6 +356,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             ]);
             this.editor = editor;
             this.reports = reports.filter((report) => report.scoreId === scoreId && report.status === 'OPEN');
+            if (this.writingMode) this.midiSubscription = this.midi.played.subscribe((note) => this.onMidiNote(note));
             if (this.writingMode) await this.prepareWriting();
             else if (editor) await this.open(editor.musicXml);
             else throw new EditError('Scegli una versione da correggere');
@@ -336,6 +381,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             lock.release();
         }
         this.stop();
+        this.midiSubscription?.unsubscribe();
         if (this.renderFrame !== undefined) cancelAnimationFrame(this.renderFrame);
         for (const url of this.pageUrls.values()) URL.revokeObjectURL(url);
     }
@@ -396,10 +442,26 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         return "Dopo l'inizio della scrittura è stata salvata un'altra versione della parte: salvando, la bozza la sostituirà.";
     }
 
-    /** Stato della modalità di inserimento: posizione del cursore e figura. */
+    /** Stato della modalità di inserimento: posizione del cursore, strumento della voce nelle percussioni e figura. */
     protected get insertionLabel(): string {
         if (!this.score) return '';
-        return `Inserimento · ${writing.cursorLabel(this.score, this.cursor)} · ${writing.figureLabel(this.figure)}`;
+        const drum = input.voiceDrum(this.drumKeys, this.cursor.voice);
+        const instrument = drum === null ? '' : ` · ${input.drumSound(drum).name}`;
+        return `Inserimento · ${writing.cursorLabel(this.score, this.cursor)}${instrument} · ${writing.figureLabel(this.figure)}`;
+    }
+
+    /** Tasti della tastiera MIDI che scrivono in una parte di percussione con più strumenti. */
+    protected get midiDrumHint(): string | null {
+        if (this.drumKeys.length < 2 || this.midi.status() !== 'ready' || !this.midi.deviceId()) return null;
+        return `Tasti MIDI: ${input.drumKeysLabel(this.drumKeys)}`;
+    }
+
+    /** Prima ottava del pianoforte a schermo, dalla chiave: Do4 in chiave di violino, Do2 in chiave di basso. */
+    protected get pianoOctave(): number {
+        if (!this.score) return 4;
+        const index = this.inserting ? this.cursor.measureIndex : (this.measure?.index ?? 0);
+        const sign = this.score.stateAt(Math.min(index, this.score.measures().length - 1)).clef.sign;
+        return sign === 'F' ? 2 : sign === 'C' ? 3 : 4;
     }
 
     /** Avviso della bozza rifiutata o cambiata altrove, con le azioni possibili. */
@@ -554,7 +616,13 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         else this.noteChange((score, id) => edits.toggleRest(score, id));
     }
 
+    /** Diesis, bemolle e bequadro; sulle ultime note suonate correggono la grafia, senza cambiarne il suono. */
     protected alteration(value: Alteration): void {
+        const spelling: input.Spelling | null = value === 'sharp' || value === 'flat' || value === 'natural' ? value : null;
+        if (spelling && this.played && this.selectedId && this.played.ids.includes(this.selectedId) && !this.played.drumAt) {
+            this.noteChange((score, id) => input.respellNote(score, id, spelling), true);
+            return;
+        }
         this.noteChange((score, id) => edits.setAlteration(score, id, value));
     }
 
@@ -799,8 +867,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
     }
 
+    /** Nota al cursore; nelle percussioni con strumenti il suono dello strumento della voce, nella sua posizione. */
     protected writeStep(step: Step): void {
-        this.write((score) => writing.writeNote(score, this.cursor, this.figure, step));
+        const drum = input.voiceDrum(this.drumKeys, this.cursor.voice);
+        if (drum !== null) this.write((score) => input.writeDrum(score, this.cursor, this.figure, drum));
+        else this.write((score) => writing.writeNote(score, this.cursor, this.figure, step));
     }
 
     protected writeRest(): void {
@@ -824,6 +895,145 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     /** Aggiunge alla nota selezionata, e alle note legate a lei, la nota indicata sopra. */
     protected chordPitch(step: Step): void {
         this.noteChange((score, id) => writing.addChordPitch(score, id, step));
+    }
+
+    // Tastiera MIDI e pianoforte a schermo
+
+    /** Pannello della tastiera MIDI: la prima volta chiede al browser il permesso di usare i dispositivi MIDI. */
+    protected toggleMidi(event: Event, panel: Popover): void {
+        panel.toggle(event);
+        if (this.midi.status() === 'idle') void this.midi.connect();
+        void this.prepareAudio();
+    }
+
+    protected togglePiano(): void {
+        this.showPiano = !this.showPiano;
+        if (this.showPiano) void this.prepareAudio();
+        this.changeDetector.markForCheck();
+    }
+
+    /**
+     * Nota suonata sulla tastiera MIDI o sul pianoforte a schermo: si sente subito e si scrive al cursore con la figura
+     * corrente; fuori dall'inserimento sostituisce l'altezza della nota selezionata. Le note dell'accordo si aggiungono a
+     * quella del gruppo, in un solo passo di «Annulla».
+     */
+    protected playKey(key: number, chord = false): void {
+        if (!this.score || this.status !== 'ready' || this.saving) return;
+        if (this.isDrumPart()) {
+            this.playDrum(key, chord);
+            this.changeDetector.markForCheck();
+            return;
+        }
+        void this.audition(key);
+        const group = chord ? this.played : null;
+        if (group) {
+            this.apply(
+                (score) => {
+                    const id = input.addChordKey(score, group.anchorId, key);
+                    if (!group.ids.includes(id)) group.ids.push(id);
+                    return id;
+                },
+                { merge: true }
+            );
+            return;
+        }
+        let written: string | null = null;
+        if (this.inserting) {
+            this.apply((score) => {
+                const result = input.writeKey(score, this.cursor, this.figure, key);
+                this.cursor = result.cursor;
+                this.rangeFocusId = null;
+                written = result.noteId;
+                return written;
+            });
+        } else if (this.selectedId) {
+            const id = this.selectedId;
+            this.rangeFocusId = null;
+            if (this.apply((score) => input.setNoteKey(score, id, key))) written = id;
+        } else {
+            this.message = 'Seleziona prima una nota sullo spartito, o entra nella modalità di inserimento (N)';
+            this.changeDetector.markForCheck();
+        }
+        const done = written as string | null;
+        this.played = done ? { anchorId: done, ids: [done], voices: [], drumAt: null } : null;
+    }
+
+    protected setMidiThreshold(value: number | null): void {
+        if (value !== null) this.midi.setThreshold(value);
+    }
+
+    private onMidiNote(note: PlayedNote): void {
+        this.playKey(note.key, note.chord);
+        this.changeDetector.markForCheck();
+    }
+
+    /** Parte di percussione: con strumenti, o in chiave di percussione dove scrive il cursore o la selezione. */
+    private isDrumPart(): boolean {
+        if (this.drumKeys.length) return true;
+        const score = this.score;
+        if (!score) return false;
+        const index = this.inserting ? this.cursor.measureIndex : (this.measure?.index ?? 0);
+        return score.stateAt(Math.min(index, score.measures().length - 1)).clef.sign === 'percussion';
+    }
+
+    /**
+     * Percussioni: con un solo strumento qualsiasi tasto scrive il suo suono, con più strumenti il tasto di uno di loro
+     * scrive nella sua voce e gli altri tasti sono ignorati. Fuori dall'inserimento il suono si ascolta soltanto.
+     */
+    private playDrum(key: number, chord: boolean): void {
+        const voice = input.drumVoice(this.drumKeys, key, this.cursor.voice);
+        if (voice === null) {
+            this.message = `Tasto senza strumento nella parte. ${this.midiDrumHint ?? `Tasti degli strumenti: ${input.drumKeysLabel(this.drumKeys)}`}`;
+            return;
+        }
+        const sound = input.voiceDrum(this.drumKeys, voice) ?? key;
+        void this.audition(sound, true);
+        if (!this.inserting) return;
+        const group = chord ? this.played : null;
+        if (group) {
+            // Colpi insieme di strumenti diversi: ciascuno nella sua voce, alla posizione della prima nota del gruppo.
+            const at = group.drumAt;
+            if (!at || group.voices.includes(voice)) return;
+            group.voices.push(voice);
+            this.apply((score) => input.writeDrum(score, { ...at, voice }, this.figure, sound).noteId, { merge: true });
+            return;
+        }
+        let written: { id: string; at: writing.WritingCursor } | null = null;
+        this.apply((score) => {
+            const result = input.writeDrum(score, { ...this.cursor, voice }, this.figure, sound);
+            written = { id: result.noteId, at: writing.cursorAt(score, result.noteId) };
+            this.cursor = result.cursor;
+            this.rangeFocusId = null;
+            return result.noteId;
+        });
+        const done = written as { id: string; at: writing.WritingCursor } | null;
+        this.played = done ? { anchorId: done.id, ids: [done.id], voices: [voice], drumAt: done.at } : null;
+    }
+
+    /** Suona la nota con il suono della parte, trasposto come nel lettore. */
+    private async audition(key: number, drum = false): Promise<void> {
+        try {
+            if (drum) {
+                await this.audio.preview([{ key, at: 0, duration: AUDITION_SECONDS }], null, 0, true);
+                return;
+            }
+            const index = this.inserting ? this.cursor.measureIndex : (this.measure?.index ?? 0);
+            const clef = this.score?.stateAt(Math.min(index, this.score.measures().length - 1)).clef.sign ?? 'G';
+            const sound = partSound(this.data.sound, clef);
+            const sounding = Math.min(127, Math.max(0, key + sound.transposition));
+            await this.audio.preview([{ key: sounding, at: 0, duration: AUDITION_SECONDS }], sound.program, sound.bank, false);
+        } catch {
+            // Senza sintetizzatore la nota si scrive lo stesso.
+        }
+    }
+
+    /** Carica il sintetizzatore prima della prima nota suonata, che altrimenti arriverebbe in ritardo. */
+    private async prepareAudio(): Promise<void> {
+        try {
+            await this.audio.ready();
+        } catch {
+            // L'ascolto resta non disponibile; la scrittura continua.
+        }
     }
 
     // Passaggio
@@ -1398,7 +1608,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.changeDetector.markForCheck();
     }
 
-    private noteChange(change: (score: ScoreDocument, id: string) => string | null | void): void {
+    private noteChange(change: (score: ScoreDocument, id: string) => string | null | void, keepPlayed = false): void {
         if (!this.selectedId) {
             this.message = this.measure?.empty ? 'La battuta è vuota: aggiungi una pausa per inserire le note' : 'Seleziona prima una nota sullo spartito';
             this.changeDetector.markForCheck();
@@ -1407,7 +1617,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const id = this.selectedId;
         // Le modifiche di una nota valgono per la nota selezionata: il passaggio si toglie.
         this.rangeFocusId = null;
-        this.apply((score) => change(score, id));
+        this.apply((score) => change(score, id), { keepPlayed });
     }
 
     /** Il passaggio selezionato o, senza passaggio, la nota selezionata. */
@@ -1503,7 +1713,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     }
 
     /** Esegue una modifica; se non riesce ripristina il documento e ne mostra il motivo. Restituisce se è riuscita. */
-    private apply(change: (score: ScoreDocument) => string | null | void): boolean {
+    /**
+     * Applica la modifica, che diventa un passo della cronologia. `merge` la unisce al passo precedente, come le note di un
+     * accordo suonato; `keepPlayed` conserva le ultime note suonate, per correggerne ancora la grafia.
+     */
+    private apply(change: (score: ScoreDocument) => string | null | void, options: { merge?: boolean; keepPlayed?: boolean } = {}): boolean {
+        if (!options.merge && !options.keepPlayed) this.played = null;
         if (!this.score || this.saving) return false;
         if (this.readOnly) {
             this.message = "L'editor è in sola lettura: prendi il controllo per modificare la parte";
@@ -1518,7 +1733,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             const selected = change(this.score);
             // Nella scrittura legature di portamento e forcelle hanno sempre inizio e fine: gli estremi rimasti soli si tolgono.
             if (this.writingMode) notation.balanceSpanners(this.score);
-            this.history.record(before);
+            if (!options.merge || !this.history.canUndo) this.history.record(before);
             if (typeof selected === 'string') {
                 this.selectedId = selected;
                 this.emptyMeasureId = null;
@@ -1537,6 +1752,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     private restore(snapshot: string): void {
         if (!this.score || this.readOnly) return;
+        this.played = null;
         this.stop();
         this.score = ScoreDocument.restore(snapshot, this.score.prefix);
         this.message = null;

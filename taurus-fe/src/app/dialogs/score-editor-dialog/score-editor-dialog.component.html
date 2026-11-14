@@ -26,6 +26,61 @@
                 pTooltip="Spazio. Maiusc+clic su un'altra battuta sceglie un intervallo"
                 (onClick)="togglePlay()"
             />
+            @if (writingMode && midi.supported && status === 'ready') {
+                <p-button
+                    label="Tastiera MIDI"
+                    icon="pi pi-sliders-v"
+                    severity="secondary"
+                    [outlined]="!midi.deviceId()"
+                    pTooltip="Scrivi le note suonate su una tastiera MIDI collegata al computer"
+                    tooltipPosition="bottom"
+                    (onClick)="toggleMidi($event, midiPanel)"
+                />
+                <p-popover #midiPanel>
+                    <div class="score-editor__midi">
+                        <h3 class="score-editor__panel-title m-0">Tastiera MIDI</h3>
+                        @switch (midi.status()) {
+                            @case ('connecting') {
+                                <span class="text-sm"><i class="pi pi-spin pi-spinner mr-1" aria-hidden="true"></i>Richiesta del permesso al browser…</span>
+                            }
+                            @case ('denied') {
+                                <p class="text-sm m-0">Il browser non ha concesso l'uso dei dispositivi MIDI: consentilo nelle impostazioni del sito e riprova.</p>
+                                <p-button label="Riprova" size="small" severity="secondary" (onClick)="midi.connect()" />
+                            }
+                            @case ('failed') {
+                                <p class="text-sm m-0">I dispositivi MIDI non rispondono: ricollega la tastiera e riprova.</p>
+                                <p-button label="Riprova" size="small" severity="secondary" (onClick)="midi.connect()" />
+                            }
+                            @case ('ready') {
+                                @if (midi.devices().length) {
+                                    <p-select [options]="midi.devices()" [ngModel]="midi.deviceId()" (ngModelChange)="midi.select($event)" optionLabel="name" optionValue="id" size="small" ariaLabel="Tastiera in uso" appendTo="body" />
+                                } @else {
+                                    <p class="text-sm m-0">Nessuna tastiera collegata: collegala al computer e comparirà qui.</p>
+                                }
+                                <div class="score-editor__midi-threshold">
+                                    <span class="score-editor__label">Soglia dell'accordo</span>
+                                    <p-inputnumber
+                                        [ngModel]="midi.threshold()"
+                                        (ngModelChange)="setMidiThreshold($event)"
+                                        [min]="minThreshold"
+                                        [max]="maxThreshold"
+                                        [step]="10"
+                                        [showButtons]="true"
+                                        suffix=" ms"
+                                        inputStyleClass="w-20"
+                                        size="small"
+                                        ariaLabel="Soglia dell'accordo in millisecondi"
+                                    />
+                                </div>
+                                <span class="score-editor__hint">Le note premute entro la soglia dalla prima, mentre la prima è ancora premuta, formano un accordo.</span>
+                            }
+                        }
+                        <span class="score-editor__hint"
+                            >Durante l'inserimento ogni nota suonata si scrive al cursore con la figura corrente; fuori dall'inserimento cambia la nota selezionata. <kbd>+</kbd> <kbd>-</kbd> <kbd>=</kbd> ne correggono la grafia.</span
+                        >
+                    </div>
+                </p-popover>
+            }
             <p-button label="Salva" icon="pi pi-save" severity="secondary" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione non verificata" (onClick)="save(false)" />
             <p-button label="Salva e approva" icon="pi pi-check" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione approvata" (onClick)="save(true)" />
         </div>
@@ -126,6 +181,17 @@
                                     <p-button icon="pi pi-chevron-left" size="small" severity="secondary" text ariaLabel="Cursore indietro" pTooltip="Cursore indietro (←)" (onClick)="moveCursor(-1)" />
                                     <p-button icon="pi pi-chevron-right" size="small" severity="secondary" text ariaLabel="Cursore avanti" pTooltip="Cursore avanti (→)" (onClick)="moveCursor(1)" />
                                 }
+                                <p-togglebutton
+                                    [ngModel]="showPiano"
+                                    (ngModelChange)="togglePiano()"
+                                    [onLabel]="drumPads.length ? 'Strumenti' : 'Pianoforte'"
+                                    [offLabel]="drumPads.length ? 'Strumenti' : 'Pianoforte'"
+                                    onIcon="pi pi-th-large"
+                                    offIcon="pi pi-th-large"
+                                    size="small"
+                                    [ariaLabel]="drumPads.length ? 'Pulsanti degli strumenti a schermo' : 'Pianoforte a schermo'"
+                                    [pTooltip]="drumPads.length ? 'Un pulsante per strumento: un tocco scrive il suo suono alla figura corrente' : 'Un tocco scrive la nota alla figura corrente'"
+                                />
                             </div>
                         }
                         <div class="score-editor__group" role="group" aria-label="Figura">
@@ -535,6 +601,7 @@
                             <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>4</kbd> voce del cursore</li>
                             <li><kbd>Alt</kbd>+<kbd>3</kbd>, <kbd>5</kbd>, <kbd>6</kbd> terzina, quintina e sestina al cursore</li>
                             <li><kbd>Canc</kbd> la nota scritta diventa una pausa</li>
+                            <li>Tastiera MIDI e pianoforte: la nota suonata si scrive al cursore, quelle premute insieme formano un accordo; <kbd>+</kbd> <kbd>-</kbd> <kbd>=</kbd> ne correggono la grafia</li>
                         </ul>
                         <h3 class="score-editor__panel-title mb-2">Passaggio</h3>
                         <ul class="score-editor__shortcuts mb-3">
@@ -571,6 +638,9 @@
         <div class="score-editor__status" role="status">
             @if (inserting) {
                 <span class="font-medium score-editor__insertion"><i class="pi pi-pencil mr-1" aria-hidden="true"></i>{{ insertionLabel }}</span>
+                @if (midiDrumHint; as hint) {
+                    <span class="text-sm text-muted-color">{{ hint }}</span>
+                }
             }
             <span [class.font-medium]="!inserting">{{ selectionLabel }}</span>
             @if (measure?.empty) {
@@ -582,6 +652,10 @@
                 <span class="score-editor__info"><i class="pi pi-check mr-1" aria-hidden="true"></i>{{ info }}</span>
             }
         </div>
+
+        @if (writingMode && showPiano) {
+            <app-piano-keyboard class="score-editor__piano" [startOctave]="pianoOctave" [pads]="drumPads" [disabled]="readOnly" (play)="playKey($event)" />
+        }
 
         <div class="score-editor__body">
             <section class="score-editor__notation-pane" aria-label="Spartito">

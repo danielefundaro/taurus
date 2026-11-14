@@ -3,7 +3,7 @@ import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ConfirmationService } from 'primeng/api';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { firstValueFrom, of, throwError } from 'rxjs';
+import { firstValueFrom, of, Subject, throwError } from 'rxjs';
 import { ScoreDraft, ScoreEditorData } from '../../module';
 import {
     ConfirmService,
@@ -12,6 +12,9 @@ import {
     EditLockState,
     LocalDraftCopy,
     MediaService,
+    MidiInputService,
+    MidiStatus,
+    PlayedNote,
     ScoreAudioService,
     ScoreClipboardService,
     ScoreDraftService,
@@ -28,6 +31,12 @@ const XML = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"
 <measure number="2"><note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note></measure>
 </part></score-partwise>`;
 
+/** Parte di percussioni nuova: chiave di percussione, 2/4, due battute di pausa. */
+const DRUMS = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Percussioni</part-name></score-part></part-list><part id="P1">
+<measure number="1"><attributes><divisions>1</divisions><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>percussion</sign></clef></attributes><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure>
+<measure number="2"><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure>
+</part></score-partwise>`;
+
 describe('ScoreEditorDialogComponent', () => {
     let fixture: ComponentFixture<ScoreEditorDialogComponent>;
     let renderer: jasmine.SpyObj<ScoreRendererService>;
@@ -40,6 +49,8 @@ describe('ScoreEditorDialogComponent', () => {
     let keeperState: WritableSignal<DraftState>;
     let keeper: FakeKeeper;
     let keeperOptions: DraftKeeperOptions | undefined;
+    let audio: jasmine.SpyObj<ScoreAudioService>;
+    let midi: FakeMidi;
 
     beforeEach(async () => {
         lockState = signal<EditLockState>({ status: 'acquiring', message: null });
@@ -96,6 +107,21 @@ describe('ScoreEditorDialogComponent', () => {
         playbackService.errorReports.and.returnValue(of([]));
         playbackService.correct.and.returnValue(of({ ...editor.version, id: 8, versionNumber: 3, origin: 'CORRECTION' }));
         dialogRef = jasmine.createSpyObj('DynamicDialogRef', ['close']);
+        audio = jasmine.createSpyObj('ScoreAudioService', ['ready', 'load', 'play', 'pause', 'setChannel', 'preview']);
+        audio.ready.and.resolveTo(null as never);
+        audio.preview.and.resolveTo();
+        const midiStatus = signal<MidiStatus>('idle');
+        midi = {
+            supported: true,
+            status: midiStatus,
+            devices: signal([]),
+            deviceId: signal<string | null>(null),
+            threshold: signal(80),
+            played: new Subject<PlayedNote>(),
+            connect: jasmine.createSpy('connect').and.callFake(async () => midiStatus.set('ready')),
+            select: jasmine.createSpy('select'),
+            setThreshold: jasmine.createSpy('setThreshold')
+        };
 
         await TestBed.configureTestingModule({
             imports: [ScoreEditorDialogComponent],
@@ -106,7 +132,8 @@ describe('ScoreEditorDialogComponent', () => {
                 { provide: ScorePlaybackService, useValue: playbackService },
                 { provide: ScoreRendererService, useValue: renderer },
                 { provide: MediaService, useValue: jasmine.createSpyObj('MediaService', ['streamImage']) },
-                { provide: ScoreAudioService, useValue: jasmine.createSpyObj('ScoreAudioService', ['ready', 'load', 'play', 'pause', 'setChannel']) },
+                { provide: ScoreAudioService, useValue: audio },
+                { provide: MidiInputService, useValue: midi },
                 { provide: ConfirmService, useValue: jasmine.createSpyObj('ConfirmService', ['confirmDiscard', 'confirmReversible', 'confirmDestructive']) },
                 { provide: ScoreEditLockService, useValue: { forPart: () => lock } },
                 { provide: ScoreDraftService, useValue: drafts }
@@ -443,6 +470,97 @@ describe('ScoreEditorDialogComponent', () => {
             expect(component.wrongMeasures).toEqual([]);
         });
 
+        it('writes the notes played on a MIDI keyboard, with each chord in one undo step, and corrects their spelling', async () => {
+            const component = await openWriting();
+            const content = (): string => keeperOptions!.content();
+            expect(fixture.nativeElement.querySelector('button[aria-label="Tastiera MIDI"], p-button[label="Tastiera MIDI"]')).not.toBeNull();
+
+            // Fuori dall'inserimento la nota suonata sostituisce l'altezza della nota selezionata, e si sente subito.
+            midi.played.next({ key: 51, chord: false });
+            expect(component.selectionLabel).toBe('Battuta 1 · Mi♭3 · semiminima');
+            expect(audio.preview).toHaveBeenCalledWith([{ key: 51, at: 0, duration: 0.6 }], 0, 0, false);
+            key(component, { key: '+' });
+            expect(component.selectionLabel).toBe('Battuta 1 · Re♯3 · semiminima');
+
+            key(component, { key: 'n' });
+            midi.played.next({ key: 48, chord: false });
+            midi.played.next({ key: 52, chord: true });
+            midi.played.next({ key: 55, chord: true });
+            expect(content().match(/<chord\/>/g)?.length).toBe(2);
+            expect(component.insertionLabel).toContain('Battuta 1 · tempo 2');
+            expect(component.wrongMeasures).toEqual([]);
+
+            // Le note dell'accordo si annullano insieme alla prima.
+            key(component, { key: 'z', ctrlKey: true });
+            expect(content()).not.toContain('<chord/>');
+            expect(content()).toContain('<accidental>sharp</accidental>');
+            // Con le note scritte da tastiera, + torna a essere il diesis.
+            midi.played.next({ key: 53, chord: false });
+            key(component, { key: 'g' });
+            key(component, { key: '+' });
+            expect(component.selectionLabel).toBe('Battuta 2 · Sol♯3 · semiminima');
+        });
+
+        it('shows the on-screen piano and writes the touched key', async () => {
+            const component = await openWriting();
+            expect(fixture.nativeElement.querySelector('app-piano-keyboard')).toBeNull();
+
+            component.togglePiano();
+            fixture.detectChanges();
+            expect(audio.ready).toHaveBeenCalled();
+            key(component, { key: 'n' });
+            fixture.detectChanges();
+            // In chiave di basso il pianoforte parte dal Do2.
+            (fixture.nativeElement.querySelector('app-piano-keyboard button[aria-label="Sol2"]') as HTMLButtonElement).click();
+            expect(component.selectionLabel).toBe('Battuta 1 · Sol2 · semiminima');
+            expect(component.insertionLabel).toContain('Battuta 1 · tempo 2');
+        });
+
+        it('writes the drum sounds of the instruments in their own voices and positions, ignoring the other keys', async () => {
+            const component = await openWriting({ versionId: null, initialContent: DRUMS, sound: { percussionKeys: [36, 38, 49], configured: true, conflicting: false } });
+            const content = (): string => keeperOptions!.content();
+            midi.status.set('ready');
+            midi.deviceId.set('pads');
+
+            key(component, { key: 'n' });
+            expect(component.insertionLabel).toBe('Inserimento · Battuta 1 · tempo 1 · voce 1 · gran cassa · semiminima');
+            expect(component.midiDrumHint).toBe('Tasti MIDI: Do2 gran cassa, Re2 tamburo, Do♯3 piatti');
+
+            // Gran cassa e piatti insieme, poi il tamburo: ogni strumento nella sua voce.
+            midi.played.next({ key: 36, chord: false });
+            midi.played.next({ key: 49, chord: true });
+            midi.played.next({ key: 38, chord: false });
+            expect(audio.preview).toHaveBeenCalledWith([{ key: 49, at: 0, duration: 0.6 }], null, 0, true);
+            midi.played.next({ key: 40, chord: false });
+            expect(component.message).toBe('Tasto senza strumento nella parte. Tasti MIDI: Do2 gran cassa, Re2 tamburo, Do♯3 piatti');
+
+            const xml = content();
+            expect(xml).toContain('<display-step>F</display-step><display-octave>4</display-octave></unpitched><duration>1</duration><voice>1</voice>');
+            expect(xml).toContain('<display-step>A</display-step><display-octave>5</display-octave></unpitched><duration>1</duration><voice>3</voice>');
+            expect(xml).toContain('<notehead>x</notehead>');
+            expect(xml).toContain('<display-step>C</display-step><display-octave>5</display-octave></unpitched><duration>1</duration><voice>2</voice>');
+            expect(component.wrongMeasures).toEqual([]);
+
+            // I tasti del computer scrivono lo strumento della voce del cursore.
+            expect(component.cursor.voice).toBe(2);
+            key(component, { key: 'e' });
+            expect(component.selectionLabel).toBe('Battuta 2 · Do5 · semiminima');
+        });
+
+        it('connects the MIDI keyboard from its panel and keeps the threshold', async () => {
+            const component = await openWriting();
+            const button = fixture.nativeElement.querySelector('.score-editor__header p-button[label="Tastiera MIDI"] button') as HTMLButtonElement;
+            button.click();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            expect(midi.connect).toHaveBeenCalled();
+            expect(midi.status()).toBe('ready');
+
+            component.setMidiThreshold(120);
+            component.setMidiThreshold(null);
+            expect(midi.setThreshold).toHaveBeenCalledOnceWith(120);
+        });
+
         it('turns the selected note into a rest instead of deleting it, so the measure stays complete', async () => {
             const component = await openWriting();
             key(component, { key: 'Delete' });
@@ -645,6 +763,18 @@ interface FakeKeeper {
     content: () => string;
 }
 
+interface FakeMidi {
+    supported: boolean;
+    status: WritableSignal<MidiStatus>;
+    devices: WritableSignal<{ id: string; name: string }[]>;
+    deviceId: WritableSignal<string | null>;
+    threshold: WritableSignal<number>;
+    played: Subject<PlayedNote>;
+    connect: jasmine.Spy;
+    select: jasmine.Spy;
+    setThreshold: jasmine.Spy;
+}
+
 interface WritingEditor {
     status: string;
     inserting: boolean;
@@ -666,6 +796,10 @@ interface WritingEditor {
     grace(kind: 'acciaccatura' | 'appoggiatura'): void;
     applyExpression(value: string | null): void;
     applyBreak(kind: 'system' | 'page' | null): void;
+    togglePiano(): void;
+    setMidiThreshold(value: number | null): void;
+    message: string | null;
+    midiDrumHint: string | null;
     move(steps: number): void;
     insert(where: 'before' | 'after'): void;
     save(approve: boolean): Promise<void>;

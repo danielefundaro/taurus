@@ -135,7 +135,6 @@ function isPercussion(input: PlaybackPartInput): boolean {
 function partNotes(input: PlaybackPartInput, segments: TimelineSegment[], countIn: number): MidiNoteEvent[] {
     const notes: MidiNoteEvent[] = [];
     const open = new Map<string, MidiNoteEvent>();
-    const voices: string[] = [];
     const percussion = isPercussion(input);
     const drumKeys = input.sound.percussionKeys;
     for (const segment of segments) {
@@ -147,8 +146,9 @@ function partNotes(input: PlaybackPartInput, segments: TimelineSegment[], countI
             const duration = Math.min(note.duration, segment.length - note.start);
             let key: number;
             if (percussion && drumKeys.length > 0) {
-                if (!voices.includes(note.voice)) voices.push(note.voice);
-                key = drumKeys[Math.min(voices.indexOf(note.voice), drumKeys.length - 1)];
+                // Voce 1 il primo strumento, voce 2 il secondo: le voci oltre gli strumenti suonano l'ultimo.
+                const voice = Number.parseInt(note.voice, 10);
+                key = drumKeys[Math.min(Number.isInteger(voice) && voice > 0 ? voice : 1, drumKeys.length) - 1];
             } else if (percussion) {
                 key = NEUTRAL_DRUM;
             } else {

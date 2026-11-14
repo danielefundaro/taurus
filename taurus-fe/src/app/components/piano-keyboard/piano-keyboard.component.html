@@ -1,0 +1,30 @@
+@if (pads.length) {
+    <div class="piano piano--pads" role="group" aria-label="Strumenti della parte">
+        @for (pad of pads; track pad.key) {
+            <button type="button" class="piano__pad" [attr.aria-label]="pad.label + ', ' + pad.hint" [disabled]="disabled" (click)="press(pad.key)">
+                <span class="piano__pad-name">{{ pad.label }}</span>
+                <span class="piano__pad-hint">{{ pad.hint }}</span>
+            </button>
+        }
+    </div>
+} @else {
+    <div class="piano" role="group" aria-label="Pianoforte a schermo">
+        <div class="piano__bar">
+            <p-button icon="pi pi-chevron-left" size="small" severity="secondary" text ariaLabel="Un'ottava più in basso" [disabled]="octave <= minOctave" (onClick)="shift(-1)" />
+            <span class="piano__range">{{ rangeLabel }}</span>
+            <p-button icon="pi pi-chevron-right" size="small" severity="secondary" text ariaLabel="Un'ottava più in alto" [disabled]="octave >= maxOctave" (onClick)="shift(1)" />
+        </div>
+        <div class="piano__keys">
+            @for (item of whiteKeys; track item.key) {
+                <button type="button" class="piano__white" [attr.aria-label]="item.label" [disabled]="disabled" (click)="press(item.key)">
+                    @if (item.key % 12 === 0) {
+                        <span class="piano__name" aria-hidden="true">{{ item.label }}</span>
+                    }
+                </button>
+            }
+            @for (item of blackKeys; track item.key) {
+                <button type="button" class="piano__black" [style.left]="'calc(var(--piano-white) * ' + item.slot + ' - var(--piano-black) / 2)'" [attr.aria-label]="item.label" [disabled]="disabled" (click)="press(item.key)"></button>
+            }
+        </div>
+    </div>
+}

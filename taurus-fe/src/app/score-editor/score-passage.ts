@@ -1,4 +1,4 @@
-import { makeAccidentalsExplicit, setAccidental, setAlter } from './accidentals';
+import { currentAlters, keepAlters, setAccidental } from './accidentals';
 import { child, children, DIRECTION_ORDER, ensureChild, integer, NOTE_ORDER, removeChildren, removeIfEmpty, setChildText } from './musicxml-dom';
 import { diatonic, Fraction, fraction, fromDiatonic, inferType, keyAlter, minus, noteQuarters, plus, Step, toNumber } from './notation-rules';
 import { EditError, isRest, NoteEvent, pitchOf, ScoreDocument, voiceOf } from './score-document';
@@ -624,22 +624,6 @@ function imported(score: ScoreDocument, xml: string, voice: number): Element {
     if (node.tagName === 'note') setChildText(node, 'voice', voice, NOTE_ORDER);
     else if (child(node, 'voice')) setChildText(node, 'voice', voice, DIRECTION_ORDER);
     return node;
-}
-
-/** Alterazione di ogni nota intonata, prima di una modifica: le note non toccate la conservano. */
-function currentAlters(score: ScoreDocument): Map<Element, number> {
-    const result = new Map<Element, number>();
-    for (const note of score.notes()) {
-        const pitch = pitchOf(note);
-        if (pitch && !pitch.unpitched && !isRest(note)) result.set(note, pitch.alter);
-    }
-    return result;
-}
-
-/** Riporta le note all'altezza prevista e scrive gli accidenti che servono nelle battute indicate. */
-function keepAlters(score: ScoreDocument, intended: Map<Element, number>, measureIndexes: Iterable<number>): void {
-    for (const [note, alter] of intended) if (score.part.contains(note)) setAlter(note, alter);
-    makeAccidentalsExplicit(score, measureIndexes);
 }
 
 function pitchedNotes(score: ScoreDocument, passage: Passage | null): Element[] {

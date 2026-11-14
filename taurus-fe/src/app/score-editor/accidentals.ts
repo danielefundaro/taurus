@@ -1,7 +1,7 @@
 import { child, element, insertOrdered, NOTE_ORDER, PITCH_ORDER, setChildText, text } from './musicxml-dom';
 import { accidentalAlter, accidentalFor, keyAlter } from './notation-rules';
 import type { ScoreDocument } from './score-document';
-import { pitchOf } from './score-document';
+import { isRest, pitchOf } from './score-document';
 
 /**
  * Nell'editor l'accidente scritto (`accidental`) è ciò che si vede e l'alterazione (`alter`) è ciò che suona. Dopo ogni
@@ -60,6 +60,22 @@ export function makeAccidentalsExplicit(score: ScoreDocument, measureIndexes?: I
             }
         }
     });
+}
+
+/** Alterazione di ogni nota intonata, prima di una modifica: le note non toccate la conservano. */
+export function currentAlters(score: ScoreDocument): Map<Element, number> {
+    const result = new Map<Element, number>();
+    for (const note of score.notes()) {
+        const pitch = pitchOf(note);
+        if (pitch && !pitch.unpitched && !isRest(note)) result.set(note, pitch.alter);
+    }
+    return result;
+}
+
+/** Riporta le note all'altezza prevista e scrive gli accidenti che servono nelle battute indicate. */
+export function keepAlters(score: ScoreDocument, intended: Map<Element, number>, measureIndexes: Iterable<number>): void {
+    for (const [note, alter] of intended) if (score.part.contains(note)) setAlter(note, alter);
+    makeAccidentalsExplicit(score, measureIndexes);
 }
 
 export function setAlter(note: Element, alter: number): void {

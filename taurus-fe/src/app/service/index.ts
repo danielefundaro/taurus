@@ -20,6 +20,7 @@ export * from './list-layout.service';
 export * from './loading.service';
 export * from './local-storage.service';
 export * from './media.service';
+export * from './midi-input.service';
 export * from './notices.service';
 export * from './notification-center.service';
 export * from './notification-delivery-admin.service';
