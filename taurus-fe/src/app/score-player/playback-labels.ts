@@ -64,6 +64,7 @@ export function originLabel(origin: ScoreVersionOrigin): string {
         OMR_HOMR: 'Riconoscimento (homr)',
         UPLOAD_MUSICXML: 'File MusicXML',
         UPLOAD_MIDI: 'File MIDI',
-        CORRECTION: 'Correzione'
+        CORRECTION: 'Correzione',
+        WRITING: 'Scrittura'
     }[origin];
 }

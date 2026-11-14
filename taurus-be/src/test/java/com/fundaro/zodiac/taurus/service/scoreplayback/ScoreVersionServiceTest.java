@@ -4,12 +4,16 @@ import tools.jackson.databind.ObjectMapper;
 import com.fundaro.zodiac.taurus.config.ApplicationProperties;
 import com.fundaro.zodiac.taurus.domain.SheetsMusic;
 import com.fundaro.zodiac.taurus.domain.Tracks;
+import com.fundaro.zodiac.taurus.domain.enumeration.TenantFeature;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersion;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionOrigin;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionStatus;
 import com.fundaro.zodiac.taurus.repository.TracksRepository;
+import com.fundaro.zodiac.taurus.repository.UsersRepository;
 import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
+import com.fundaro.zodiac.taurus.repository.scorewriting.ScoreDraftRepository;
 import com.fundaro.zodiac.taurus.service.MediaService;
+import com.fundaro.zodiac.taurus.service.TenantFeatureService;
 import com.fundaro.zodiac.taurus.service.dto.MediaDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.CorrectionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.MeasureBoxDTO;
@@ -17,6 +21,9 @@ import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Mus
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScorePlaybackSupport.Viewer;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrClient;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrException;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreWritingMetrics;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,10 +45,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,7 +61,12 @@ class ScoreVersionServiceTest {
     private final ScoreVersionRepository versionRepository = mock(ScoreVersionRepository.class);
     private final MediaService mediaService = mock(MediaService.class);
     private final OmrClient omrClient = mock(OmrClient.class);
+    private static final String SESSION = "3f2c9a7e-5b1d-4c8e-9a6f-1d2e3f4a5b6c";
+
     private final ScoreErrorReportService reportService = mock(ScoreErrorReportService.class);
+    private final ScoreEditLockService lockService = mock(ScoreEditLockService.class);
+    private final ScoreDraftRepository draftRepository = mock(ScoreDraftRepository.class);
+    private final TenantFeatureService tenantFeatureService = mock(TenantFeatureService.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final SheetsMusic part = new SheetsMusic();
     private ScoreVersionService service;
@@ -66,16 +81,22 @@ class ScoreVersionServiceTest {
         when(support.requirePart(track, 9L)).thenReturn(part);
         when(mediaService.store(any(), anyString(), anyString(), eq(ScoreVersionService.MEDIA_CATEGORY), any(JwtAuthenticationToken.class))).thenReturn(media);
         when(versionRepository.findMaxVersionNumber(9L)).thenReturn(1);
+        ApplicationProperties properties = new ApplicationProperties();
+        ScoreWritingMetrics writingMetrics = new ScoreWritingMetrics(registry);
         service = new ScoreVersionService(
             support,
             versionRepository,
             mock(TracksRepository.class),
             mediaService,
-            new ApplicationProperties(),
+            properties,
             new ScoreVersionWriter(support, versionRepository, new ObjectMapper()),
             omrClient,
             new ScorePlaybackMetrics(registry),
-            reportService
+            reportService,
+            lockService,
+            new ScoreDraftService(support, draftRepository, versionRepository, mock(UsersRepository.class), lockService, properties, writingMetrics),
+            tenantFeatureService,
+            writingMetrics
         );
     }
 
@@ -128,7 +149,7 @@ class ScoreVersionServiceTest {
         ScoreVersion parent = parent(3);
         when(versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(7L, 9L)).thenReturn(Optional.of(parent));
 
-        service.correct(4L, 9L, new CorrectionDTO(7L, tuba(), true, null), archivist());
+        service.correct(4L, 9L, correction(7L, tuba(), true, null), archivist());
 
         ArgumentCaptor<ScoreVersion> saved = ArgumentCaptor.forClass(ScoreVersion.class);
         verify(versionRepository).saveAndFlush(saved.capture());
@@ -142,7 +163,86 @@ class ScoreVersionServiceTest {
             assertThat(version.getLayoutJson()).contains("\"measure\":3");
         });
         verify(reportService).closeForApproval(eq(part), any(), eq("archivist"));
+        verify(lockService).requireHeld(eq(9L), eq(SESSION), any());
         assertThat(registry.counter("taurus.score.upload", "format", "correction", "outcome", "stored").count()).isEqualTo(1);
+        assertThat(registry.counter("taurus.score.writing.saves", "origin", "correction").count()).isEqualTo(1);
+    }
+
+    @Test
+    void refusesACorrectionFromAnEditorThatDoesNotHoldTheLock() {
+        ScoreVersion parent = parent(3);
+        when(versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(7L, 9L)).thenReturn(Optional.of(parent));
+        doThrow(new RequestAlertException(HttpStatus.CONFLICT, "Locked", "ScoreEditLock", "scoreWriting.locked"))
+            .when(lockService).requireHeld(eq(9L), eq(SESSION), any());
+
+        assertThatThrownBy(() -> service.correct(4L, 9L, correction(7L, tuba(), false, null), archivist()))
+            .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getErrorKey()).isEqualTo("scoreWriting.locked"));
+        verify(versionRepository, never()).saveAndFlush(any(ScoreVersion.class));
+    }
+
+    @Test
+    void refusesAnOriginTheEditorsDoNotProduce() {
+        CorrectionDTO upload = new CorrectionDTO(7L, tuba(), false, null, ScoreVersionOrigin.UPLOAD_MUSICXML, SESSION, false);
+
+        assertThatThrownBy(() -> service.correct(4L, 9L, upload, archivist()))
+            .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getArgs().values()).containsEntry("reason", "origin"));
+    }
+
+    @Test
+    void storesAWrittenVersionWithoutPagesAndRemovesTheDraft() {
+        service.correct(4L, 9L, writing(null, tuba(), true, false), archivist());
+
+        ArgumentCaptor<ScoreVersion> saved = ArgumentCaptor.forClass(ScoreVersion.class);
+        verify(versionRepository).saveAndFlush(saved.capture());
+        assertThat(saved.getValue()).satisfies(version -> {
+            assertThat(version.getOrigin()).isEqualTo(ScoreVersionOrigin.WRITING);
+            assertThat(version.getParentVersionId()).isNull();
+            assertThat(version.getPagesFingerprint()).isNull();
+            assertThat(version.getLayoutJson()).isNull();
+            assertThat(version.getSourcePartName()).isEqualTo("Tuba");
+            assertThat(version.getStatus()).isEqualTo(ScoreVersionStatus.APPROVED);
+        });
+        verify(tenantFeatureService).requireEnabled(TenantFeature.SCORE_WRITING);
+        verify(lockService).requireHeld(eq(9L), eq(SESSION), any());
+        verify(draftRepository).deleteAllByTargets(any(), eq(List.of(9L)));
+        verify(reportService).closeForApproval(eq(part), any(), eq("archivist"));
+        assertThat(registry.counter("taurus.score.writing.saves", "origin", "writing").count()).isEqualTo(1);
+    }
+
+    @Test
+    void asksToConfirmAWrittenVersionThatReplacesOneSavedMeanwhile() {
+        part.setCurrentScoreVersionId(7L);
+        ScoreVersion current = parent(3);
+        when(versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(7L, 9L)).thenReturn(Optional.of(current));
+
+        assertThatThrownBy(() -> service.correct(4L, 9L, writing(null, tuba(), false, false), archivist()))
+            .isInstanceOfSatisfying(RequestAlertException.class, exception -> {
+                assertThat(exception.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                assertThat(exception.getErrorKey()).isEqualTo("scoreWriting.draftOutdated");
+            });
+        verify(versionRepository, never()).saveAndFlush(any(ScoreVersion.class));
+
+        service.correct(4L, 9L, writing(null, tuba(), false, true), archivist());
+        part.setCurrentScoreVersionId(7L);
+        service.correct(4L, 9L, writing(7L, tuba(), false, false), archivist());
+
+        verify(draftRepository, times(2)).deleteAllByTargets(any(), eq(List.of(9L)));
+    }
+
+    @Test
+    void refusesWrittenVersionsWhenWritingIsOffOrTheContentIsNotOnePart() {
+        assertThatThrownBy(() -> service.correct(4L, 9L, writing(null, MusicXmlDocumentsTest.TWO_PARTS, false, false), archivist()))
+            .isInstanceOfSatisfying(RequestAlertException.class, exception -> {
+                assertThat(exception.getErrorKey()).isEqualTo("scoreWriting.contentInvalid");
+                assertThat(exception.getArgs().values()).containsEntry("reason", "severalParts");
+            });
+
+        doThrow(new RequestAlertException(HttpStatus.FORBIDDEN, "Disabled", "TenantFeature", "tenantFeature.scoreWriting.disabled"))
+            .when(tenantFeatureService).requireEnabled(TenantFeature.SCORE_WRITING);
+        assertThatThrownBy(() -> service.correct(4L, 9L, writing(null, tuba(), false, false), archivist()))
+            .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getErrorKey()).isEqualTo("tenantFeature.scoreWriting.disabled"));
+        verify(lockService, times(1)).requireHeld(anyLong(), anyString(), any());
+        verify(versionRepository, never()).saveAndFlush(any(ScoreVersion.class));
     }
 
     @Test
@@ -150,14 +250,14 @@ class ScoreVersionServiceTest {
         ScoreVersion parent = parent(3);
         when(versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(7L, 9L)).thenReturn(Optional.of(parent));
 
-        assertThatThrownBy(() -> service.correct(4L, 9L, new CorrectionDTO(7L, MusicXmlDocumentsTest.TWO_PARTS, false, null), archivist()))
+        assertThatThrownBy(() -> service.correct(4L, 9L, correction(7L, MusicXmlDocumentsTest.TWO_PARTS, false, null), archivist()))
             .isInstanceOfSatisfying(RequestAlertException.class, exception -> {
                 assertThat(exception.getErrorKey()).isEqualTo("scorePlayback.correction.invalid");
                 assertThat(exception.getArgs().values()).containsEntry("reason", "severalParts");
             });
-        assertThatThrownBy(() -> service.correct(4L, 9L, new CorrectionDTO(7L, tuba(), false, Arrays.asList(0, 1, 3)), archivist()))
+        assertThatThrownBy(() -> service.correct(4L, 9L, correction(7L, tuba(), false, Arrays.asList(0, 1, 3)), archivist()))
             .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getArgs().values()).containsEntry("reason", "measureSources"));
-        assertThatThrownBy(() -> service.correct(4L, 9L, new CorrectionDTO(8L, tuba(), false, null), archivist()))
+        assertThatThrownBy(() -> service.correct(4L, 9L, correction(8L, tuba(), false, null), archivist()))
             .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getErrorKey()).isEqualTo("scorePlayback.version.notFound"));
         verify(reportService, never()).closeForApproval(any(), any(), anyString());
         assertThat(registry.counter("taurus.score.upload", "format", "correction", "outcome", "rejected").count()).isEqualTo(2);
@@ -173,6 +273,14 @@ class ScoreVersionServiceTest {
         assertThat(ScoreVersionService.correctionLayout(parentLayout, 3, 3, null)).isEqualTo(parentLayout);
         assertThat(ScoreVersionService.correctionLayout(parentLayout, 3, 4, null)).isNull();
         assertThat(ScoreVersionService.correctionLayout(null, 3, 2, List.of(0, 2))).isNull();
+    }
+
+    private static CorrectionDTO correction(Long parentVersionId, String content, boolean approve, List<Integer> measureSources) {
+        return new CorrectionDTO(parentVersionId, content, approve, measureSources, null, SESSION, false);
+    }
+
+    private static CorrectionDTO writing(Long parentVersionId, String content, boolean approve, boolean confirmOutdated) {
+        return new CorrectionDTO(parentVersionId, content, approve, null, ScoreVersionOrigin.WRITING, SESSION, confirmOutdated);
     }
 
     private ScoreVersion parent(int measures) {

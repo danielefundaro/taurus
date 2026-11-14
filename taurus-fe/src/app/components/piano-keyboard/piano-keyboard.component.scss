@@ -1,0 +1,143 @@
+:host {
+    display: block;
+}
+
+.piano {
+    --piano-white: 2.25rem;
+    --piano-black: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    overflow-x: auto;
+}
+
+.piano__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.piano__range {
+    min-width: 6rem;
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--p-text-muted-color);
+}
+
+.piano__keys {
+    position: relative;
+    display: flex;
+    flex: none;
+    height: 6.5rem;
+}
+
+.piano__white,
+.piano__black {
+    padding: 0;
+    border: 1px solid var(--p-surface-400);
+    cursor: pointer;
+    touch-action: manipulation;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--p-primary-color);
+        outline-offset: -3px;
+    }
+}
+
+.piano__white {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    width: var(--piano-white);
+    height: 100%;
+    margin-left: -1px;
+    border-radius: 0 0 0.375rem 0.375rem;
+    background: var(--p-surface-0);
+    color: var(--p-surface-700);
+
+    &:first-child {
+        margin-left: 0;
+    }
+
+    &:not(:disabled):active {
+        background: var(--p-primary-100);
+    }
+}
+
+.piano__black {
+    position: absolute;
+    top: 0;
+    z-index: 1;
+    width: var(--piano-black);
+    height: 60%;
+    border-color: var(--p-surface-900);
+    border-radius: 0 0 0.25rem 0.25rem;
+    background: var(--p-surface-900);
+
+    &:not(:disabled):active {
+        background: var(--p-primary-700);
+    }
+}
+
+.piano__name {
+    padding-bottom: 0.25rem;
+    font-size: 0.7rem;
+}
+
+.piano--pads {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.piano__pad {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.125rem;
+    min-width: 7rem;
+    min-height: 4rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--p-content-border-color);
+    border-radius: var(--p-content-border-radius);
+    background: var(--p-content-background);
+    color: var(--p-text-color);
+    cursor: pointer;
+    touch-action: manipulation;
+
+    &:not(:disabled):hover {
+        background: var(--p-content-hover-background);
+    }
+
+    &:not(:disabled):active {
+        background: var(--p-highlight-background);
+    }
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--p-primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.piano__pad-name {
+    font-weight: 600;
+}
+
+.piano__pad-hint {
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+}

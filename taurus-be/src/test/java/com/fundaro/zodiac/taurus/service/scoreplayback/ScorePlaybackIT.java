@@ -72,6 +72,8 @@ import static org.assertj.core.api.Assertions.within;
 )
 class ScorePlaybackIT {
 
+    private static final String EDIT_SESSION = "score-playback-it-editor";
+
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
 
@@ -275,7 +277,7 @@ class ScorePlaybackIT {
         });
         String corrected = editor.musicXml().replace("<step>D</step><octave>3</octave>", "<step>E</step><octave>3</octave>");
         ScoreVersionDTO correction = transactionExecutor.execute(tenantCode, () -> versionService.correct(
-            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(uploaded.id(), corrected, false, null), archivist()
+            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(uploaded.id(), corrected, false, null, null, EDIT_SESSION, false), archivist()
         ));
 
         assertThat(correction.versionNumber()).isEqualTo(2);
@@ -336,7 +338,7 @@ class ScorePlaybackIT {
 
         String content = transactionExecutor.execute(tenantCode, () -> versionService.editor(catalog.completeTrack(), catalog.ownPart(), uploaded.id(), archivist())).musicXml();
         transactionExecutor.execute(tenantCode, () -> versionService.correct(
-            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(uploaded.id(), content, true, List.of(0, 1, 2)), archivist()
+            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(uploaded.id(), content, true, List.of(0, 1, 2), null, EDIT_SESSION, false), archivist()
         ));
 
         assertThat(transactionExecutor.execute(tenantCode, () -> reportService.list(catalog.completeTrack()))).singleElement().satisfies(report -> {

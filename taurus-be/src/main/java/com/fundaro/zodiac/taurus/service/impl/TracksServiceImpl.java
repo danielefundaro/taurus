@@ -20,6 +20,7 @@ import com.fundaro.zodiac.taurus.service.dto.QueueUploadFilesDTO;
 import com.fundaro.zodiac.taurus.service.dto.SheetsMusicDTO;
 import com.fundaro.zodiac.taurus.service.dto.TracksDTO;
 import com.fundaro.zodiac.taurus.service.instrumentsuggestion.InstrumentSuggestionDraft;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreWritingCleanup;
 import com.fundaro.zodiac.taurus.service.mapper.TracksMapper;
 import com.fundaro.zodiac.taurus.utils.Converter;
 import com.fundaro.zodiac.taurus.utils.pdf.PdfAnnotations;
@@ -63,6 +64,7 @@ public class TracksServiceImpl extends CommonOpenSearchServiceImpl<Tracks, Track
     private final ImageTransformationService imageTransformationService;
     private final UploadJobMetrics uploadJobMetrics;
     private final SheetMusicInstrumentSuggestionRepository suggestionRepository;
+    private final ScoreWritingCleanup scoreWritingCleanup;
     private final ObjectMapper annotationsMapper = JsonMapper.builderWithJackson2Defaults().disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
 
     public TracksServiceImpl(
@@ -74,7 +76,8 @@ public class TracksServiceImpl extends CommonOpenSearchServiceImpl<Tracks, Track
         Sender sender,
         ImageTransformationService imageTransformationService,
         UploadJobMetrics uploadJobMetrics,
-        SheetMusicInstrumentSuggestionRepository suggestionRepository
+        SheetMusicInstrumentSuggestionRepository suggestionRepository,
+        ScoreWritingCleanup scoreWritingCleanup
     ) {
         super(repository, mapper, TracksService.class, Tracks.class);
         this.queueUploadFilesService = queueUploadFilesService;
@@ -84,6 +87,7 @@ public class TracksServiceImpl extends CommonOpenSearchServiceImpl<Tracks, Track
         this.imageTransformationService = imageTransformationService;
         this.uploadJobMetrics = uploadJobMetrics;
         this.suggestionRepository = suggestionRepository;
+        this.scoreWritingCleanup = scoreWritingCleanup;
     }
 
     @Override
@@ -351,6 +355,8 @@ public class TracksServiceImpl extends CommonOpenSearchServiceImpl<Tracks, Track
         List<Long> removed = existing.stream().map(SheetsMusic::getId).filter(id -> id != null && !keptIds.contains(id)).toList();
         if (removed.isEmpty()) return;
         suggestionRepository.deleteBySheetMusicIds(removed, SecurityUtils.getUserIdFromAuthentication(token), ZonedDateTime.now());
+        // Drafts and edit locks have no foreign key: they go with their part.
+        scoreWritingCleanup.forgetParts(removed);
     }
 
     private Long orderOf(ChildrenEntitiesDTO ref) {

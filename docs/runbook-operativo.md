@@ -161,6 +161,7 @@ Spring Boot accetta override tramite variabili d'ambiente con relaxed binding. L
 | Timeout etichette QR | `INVENTORY_QR_LABEL_TIMEOUT_SECONDS` | Facoltativo, predefinito 30, da 1 a 300; oltre il limite la stampa risponde `503 inventory.labels.timeout` |
 | Kill switch feed | `CALENDAR_FEED_ENABLED` | Come sopra |
 | Ascolto delle parti | `SCORE_PLAYBACK_ENABLED` | Capacità di installazione; il tenant la attiva con il proprio flag |
+| Scrittura delle parti | `SCORE_WRITING_ENABLED` | Facoltativo, predefinito `false`: capacità di installazione dell'editor di scrittura, effettiva solo con l'ascolto; il tenant la attiva con il proprio flag |
 | URL servizio OMR | `TAURUS_OMR_URL` | Indirizzo interno di `taurus-omr`; vuoto nasconde riconoscimento e caricamento MIDI e spegne la lettura del testo dei PDF scansionati |
 | Chiave servizio OMR | `TAURUS_OMR_API_KEY` | Segreto condiviso: lo stesso nome e lo stesso valore per servizio e backend, almeno 16 caratteri |
 | Lettura del testo dei PDF | `APPLICATION_PDFPROCESSING_OCR_ENABLED` | Facoltativo, predefinito `true`: suggerisce gli strumenti delle parti scansionate con il servizio OMR |

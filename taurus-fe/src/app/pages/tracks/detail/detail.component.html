@@ -103,7 +103,7 @@
                         description="Ascolta le singole parti o la partitura intera. Le impostazioni dell'ascolto si salvano subito, separatamente dalla traccia.">
                         @if (activeTab === 'playback' && track.id) {
                         <app-score-playback-panel [trackId]="track.id" [trackDirty]="isDirty"
-                            (trackVersionChange)="onTrackVersionChange($event)" />
+                            (trackVersionChange)="onTrackVersionChange($event)" (partsChange)="reloadTrack()" />
                         }
                     </app-detail-section>
                 </p-tabpanel>

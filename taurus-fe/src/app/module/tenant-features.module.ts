@@ -11,7 +11,8 @@ export enum TenantFeature {
     INVENTORY_LOAN_SHEET = 'INVENTORY_LOAN_SHEET',
     INVENTORY_SIGNATURE = 'INVENTORY_SIGNATURE',
     CALENDAR = 'CALENDAR',
-    EVENT_PAYOUTS = 'EVENT_PAYOUTS'
+    EVENT_PAYOUTS = 'EVENT_PAYOUTS',
+    SCORE_WRITING = 'SCORE_WRITING'
 }
 
 export interface TenantFeatures {
@@ -31,6 +32,7 @@ export interface TenantFeatures {
     inventorySignatureEnabled: boolean;
     calendarEnabled: boolean;
     eventPayoutsEnabled: boolean;
+    scoreWritingEnabled: boolean;
 }
 
 export interface TenantFeatureCapability {

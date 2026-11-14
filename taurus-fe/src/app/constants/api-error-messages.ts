@@ -117,7 +117,38 @@ const CORRECTION_PROBLEMS: Readonly<Record<string, string>> = {
     severalParts: 'La correzione deve contenere una sola parte',
     noParts: 'La correzione non contiene la parte',
     measureSources: "Le battute della correzione non corrispondono alla versione di partenza: riaprire l'editor",
-    empty: 'La correzione è vuota'
+    empty: 'La correzione è vuota',
+    origin: "Origine della versione non valida: riaprire l'editor"
+};
+
+/** Texts of the `reason` of `scoreWriting.contentInvalid`. */
+const WRITING_PROBLEMS: Readonly<Record<string, string>> = {
+    severalParts: 'La parte scritta deve contenere una sola parte',
+    noParts: 'La parte scritta è vuota',
+    empty: 'La parte scritta è vuota'
+};
+
+/** Time of day of an ISO instant, as HH:mm in the time zone of the browser; empty when unreadable. */
+const timeOfDay = (value: ApiErrorArgValue): string => {
+    const date = typeof value === 'string' ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+};
+
+/**
+ * Who holds the edit lock of a part, for the error `scoreWriting.locked` and for the editors and the part list:
+ * «In modifica da Mario Rossi dalle 10:32», or «aperta in un'altra finestra» for the same user.
+ */
+export const editLockMessage = (ownerName: string | null | undefined, since: string | null | undefined, sameUser: boolean): string => {
+    const time = timeOfDay(since ?? null);
+    const from = time ? ` dalle ${time}` : '';
+    if (sameUser) return `La parte è aperta in un'altra finestra${from}`;
+    return `In modifica da ${ownerName?.trim() || 'un altro utente'}${from}`;
+};
+
+const lockedMessage = (args: ApiErrorArgs): string => {
+    const since = args['since'];
+    return editLockMessage(formatApiErrorValue(args['ownerName']), typeof since === 'string' ? since : null, args['sameUser'] === true);
 };
 
 const LOAN_SETTINGS_PROBLEMS: Readonly<Record<string, string>> = {
@@ -173,6 +204,7 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'tenantFeature.inventorySignature.disabled': 'La funzionalità Firma elettronica non è disponibile per questo tenant',
     'tenantFeature.calendar.disabled': 'La funzionalità Calendario non è disponibile per questo tenant',
     'tenantFeature.eventPayouts.disabled': 'La funzionalità Compensi ai presenti non è disponibile per questo tenant',
+    'tenantFeature.scoreWriting.disabled': 'La funzionalità Scrittura musicale non è disponibile per questo tenant',
 
     // Users and tenants
     'user.limit.exceeded': 'Raggiunto il numero massimo di utenti del tenant ({maximum})',
@@ -600,6 +632,14 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'scorePlayback.report.invalid': "Descrivere l'errore in al massimo 1000 caratteri",
     'scorePlayback.report.limitReached': 'Hai già {maxOpen} segnalazioni aperte su questa parte: attendi che vengano esaminate',
     'scorePlayback.report.notFound': 'Segnalazione non trovata',
+
+    // Scrittura musicale e blocco degli editor
+    'scoreWriting.locked': lockedMessage,
+    'scoreWriting.sessionInvalid': "Sessione dell'editor non valida: ricaricare la pagina",
+    'scoreWriting.contentInvalid': (args) => WRITING_PROBLEMS[formatApiErrorValue(args['reason'])] ?? "La parte scritta non è un MusicXML valido: annullare l'ultima modifica e riprovare",
+    'scoreWriting.draftConflict': "La bozza è stata modificata altrove: riaprire l'editor",
+    'scoreWriting.draftOutdated': "Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla",
+    'scoreWriting.instrumentNotFound': 'Uno degli strumenti scelti non esiste più: ricaricare la pagina',
 
     // Onboarding
     'onboarding.disabled': 'La configurazione iniziale non è disponibile',

@@ -116,6 +116,17 @@ class TenantsServiceImplTest {
         assertThat(service().dependentChanges(before, withoutCalendar)).containsEntry("eventPayouts", false);
     }
 
+    @Test
+    void listsTheWritingEditorAmongTheFeaturesLostWithTheScorePlayback() {
+        Map<String, Boolean> before = new java.util.HashMap<>(flags(true, true, true));
+        before.put("scorePlayback", true);
+        before.put("scoreWriting", true);
+        Map<String, Boolean> withoutPlayback = new java.util.HashMap<>(before);
+        withoutPlayback.put("scorePlayback", false);
+
+        assertThat(service().dependentChanges(before, withoutPlayback)).containsOnly(entry("scoreWriting", false));
+    }
+
     private static Map<String, Boolean> flags(boolean inventory, boolean loanSheet, boolean signature) {
         return Map.ofEntries(
             Map.entry("finance", false),
@@ -130,7 +141,8 @@ class TenantsServiceImplTest {
             Map.entry("inventoryLoanSheet", loanSheet),
             Map.entry("inventorySignature", signature),
             Map.entry("calendar", true),
-            Map.entry("eventPayouts", false)
+            Map.entry("eventPayouts", false),
+            Map.entry("scoreWriting", false)
         );
     }
 

@@ -32,6 +32,8 @@ export class TenantFeatureService {
     readonly inventorySignatureEnabled = computed(() => this.features()?.inventorySignatureEnabled === true);
     /** Compensi ai presenti: effettiva soltanto con Economia e Calendario, come calcola il backend. */
     readonly eventPayoutsEnabled = computed(() => this.features()?.eventPayoutsEnabled === true);
+    /** Editor di scrittura delle parti: effettivo soltanto con l'Ascolto delle parti, come calcola il backend. */
+    readonly scoreWritingEnabled = computed(() => this.features()?.scoreWritingEnabled === true);
     readonly current = this.features.asReadonly();
     readonly capabilities = this.capabilityState.asReadonly();
 
@@ -95,6 +97,8 @@ export class TenantFeatureService {
                 return this.calendarEnabled();
             case TenantFeature.EVENT_PAYOUTS:
                 return this.eventPayoutsEnabled();
+            case TenantFeature.SCORE_WRITING:
+                return this.scoreWritingEnabled();
         }
     }
 
@@ -115,7 +119,8 @@ export class TenantFeatureService {
             inventoryLoanSheetEnabled: false,
             inventorySignatureEnabled: false,
             calendarEnabled: false,
-            eventPayoutsEnabled: false
+            eventPayoutsEnabled: false,
+            scoreWritingEnabled: false
         };
     }
 

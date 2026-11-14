@@ -179,6 +179,43 @@ class TenantFeatureServiceTest {
     }
 
     @Test
+    void offersTheWritingEditorOnlyWithTheScorePlaybackAndItsInstallation() {
+        Tenants tenant = tenant("A", false, false);
+        tenant.setScorePlaybackEnabled(true);
+        tenant.setScoreWritingEnabled(true);
+        when(repository.findByCodeAndDeletedFalse("A")).thenReturn(Optional.of(tenant));
+
+        TenantContext.run("A", () -> {
+            assertThat(service.current().scoreWritingEnabled()).isFalse();
+            assertThatThrownBy(() -> service.requireEnabled(TenantFeature.SCORE_WRITING))
+                .extracting(error -> ((RequestAlertException) error).getErrorKey())
+                .isEqualTo("tenantFeature.scoreWriting.disabled");
+        });
+        assertThat(service.capabilities().get(TenantFeature.SCORE_WRITING))
+            .returns(false, capability -> capability.available())
+            .returns("tenantFeature.capability.scoreWriting.unavailable", capability -> capability.reasonCode());
+
+        properties.getScoreWriting().setEnabled(true);
+        TenantContext.run("A", () -> assertThat(service.current().scoreWritingEnabled()).isFalse());
+
+        properties.getScorePlayback().setEnabled(true);
+        TenantContext.run("A", () -> {
+            assertThat(service.current().scoreWritingEnabled()).isTrue();
+
+            tenant.setScorePlaybackEnabled(false);
+            assertThat(service.isEnabled(TenantFeature.SCORE_WRITING)).isFalse();
+
+            tenant.setScorePlaybackEnabled(true);
+            tenant.setScoreWritingEnabled(false);
+            assertThat(service.isEnabled(TenantFeature.SCORE_WRITING)).isFalse();
+            assertThat(service.isEnabled(TenantFeature.SCORE_PLAYBACK)).isTrue();
+        });
+        assertThat(service.capabilities().get(TenantFeature.SCORE_WRITING).available()).isTrue();
+        assertThat(service.capabilities().get(TenantFeature.SCORE_WRITING).dependencies())
+            .containsExactly(TenantFeature.SCORE_PLAYBACK);
+    }
+
+    @Test
     void chainsTheElectronicSignatureToTheLoanSheetAndTheLoanSheetToTheInventory() {
         Tenants tenant = tenant("A", false, true);
         tenant.setInventoryLoanSheetEnabled(true);
@@ -227,6 +264,7 @@ class TenantFeatureServiceTest {
         assertThat(tenant.getInventorySignatureEnabled()).isFalse();
         assertThat(tenant.getCalendarEnabled()).isFalse();
         assertThat(tenant.getEventPayoutsEnabled()).isFalse();
+        assertThat(tenant.getScoreWritingEnabled()).isFalse();
     }
 
     private static Tenants tenant(String code, boolean finance, boolean inventory) {

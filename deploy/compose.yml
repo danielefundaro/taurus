@@ -192,6 +192,7 @@ services:
       # Ascolto delle parti e lettura del testo dei PDF scansionati: il servizio OMR risponde solo
       # sulla rete interna, con la stessa chiave configurata sopra per il servizio.
       SCORE_PLAYBACK_ENABLED: ${TAURUS_SCORE_PLAYBACK_ENABLED:-true}
+      SCORE_WRITING_ENABLED: ${TAURUS_SCORE_WRITING_ENABLED:-false}
       TAURUS_OMR_URL: http://omr:8090
       TAURUS_OMR_API_KEY: ${TAURUS_OMR_API_KEY}
       INVENTORY_QR_ENABLED: ${TAURUS_INVENTORY_QR_ENABLED:-true}

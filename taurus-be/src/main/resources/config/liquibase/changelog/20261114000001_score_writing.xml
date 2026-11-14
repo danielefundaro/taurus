@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261114000001-1" author="taurus">
+    <comment>Versions written in the music writing editor.</comment>
+    <sql><![CDATA[
+      ALTER TABLE score_version DROP CONSTRAINT ck_score_version_origin;
+      ALTER TABLE score_version
+        ADD CONSTRAINT ck_score_version_origin
+          CHECK (origin IN ('OMR_AUDIVERIS', 'OMR_HOMR', 'UPLOAD_MUSICXML', 'UPLOAD_MIDI', 'CORRECTION', 'WRITING'));
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        ALTER TABLE score_version DROP CONSTRAINT ck_score_version_origin;
+        ALTER TABLE score_version
+          ADD CONSTRAINT ck_score_version_origin
+            CHECK (origin IN ('OMR_AUDIVERIS', 'OMR_HOMR', 'UPLOAD_MUSICXML', 'UPLOAD_MIDI', 'CORRECTION'));
+        ]]></sql>
+    </rollback>
+  </changeSet>
+
+  <changeSet id="20261114000001-2" author="taurus">
+    <comment>
+      One author at a time for each part, in the writing and in the correction editor. The holder is an editor session
+      of a user, so that two windows of the same user exclude each other too.
+    </comment>
+    <createTable tableName="score_edit_lock">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="target_type" type="varchar(16)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="target_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="owner" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="owner_session" type="varchar(64)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="owner_name" type="varchar(255)"/>
+      <column name="acquired_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="heartbeat_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="expires_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <sql><![CDATA[
+      ALTER TABLE score_edit_lock
+        ADD CONSTRAINT ck_score_edit_lock_target_type CHECK (target_type IN ('PART')),
+        ADD CONSTRAINT ck_score_edit_lock_expiry CHECK (expires_at > heartbeat_at);
+      CREATE UNIQUE INDEX uq_score_edit_lock_target ON score_edit_lock (target_type, target_id);
+      CREATE INDEX idx_score_edit_lock_expires ON score_edit_lock (expires_at);
+      ]]></sql>
+  </changeSet>
+
+  <changeSet id="20261114000001-3" author="taurus">
+    <comment>
+      The draft saved automatically by the writing editor: one for each part, compressed MusicXML. It is not a version
+      and nobody listens to it; saving a version removes it.
+    </comment>
+    <createTable tableName="score_draft">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="target_type" type="varchar(16)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="target_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="base_version_id" type="bigint"/>
+      <column name="content" type="bytea">
+        <constraints nullable="false"/>
+      </column>
+      <column name="measure_count" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="saved_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="saved_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <sql><![CDATA[
+      ALTER TABLE score_draft
+        ADD CONSTRAINT ck_score_draft_target_type CHECK (target_type IN ('PART'));
+      CREATE UNIQUE INDEX uq_score_draft_target ON score_draft (target_type, target_id);
+      ]]></sql>
+  </changeSet>
+</databaseChangeLog>

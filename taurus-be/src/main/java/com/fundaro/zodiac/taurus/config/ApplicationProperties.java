@@ -6,6 +6,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
@@ -57,6 +58,9 @@ public class ApplicationProperties {
 
     @Valid
     private ScorePlaybackProperties scorePlayback = new ScorePlaybackProperties();
+
+    @Valid
+    private ScoreWritingProperties scoreWriting = new ScoreWritingProperties();
 
     @Valid
     private OmrProperties omr = new OmrProperties();
@@ -185,6 +189,14 @@ public class ApplicationProperties {
 
     public void setScorePlayback(ScorePlaybackProperties value) {
         scorePlayback = value;
+    }
+
+    public ScoreWritingProperties getScoreWriting() {
+        return scoreWriting;
+    }
+
+    public void setScoreWriting(ScoreWritingProperties value) {
+        scoreWriting = value;
     }
 
     public OmrProperties getOmr() {
@@ -1089,6 +1101,51 @@ public class ApplicationProperties {
 
         public void setOmr(RecognitionJobProperties value) {
             omr = value;
+        }
+    }
+
+    /**
+     * The music writing editor. The edit lock and its timing apply to the correction editor of the score playback too,
+     * also when writing is off.
+     */
+    public static class ScoreWritingProperties {
+        private boolean enabled;
+
+        /** Time after the last renewal when an edit lock expires; the editors renew it every 30 seconds. */
+        @NotNull
+        private Duration lockTimeout = Duration.ofMinutes(2);
+
+        /** Shortest time between two saves of the same draft. */
+        @NotNull
+        private Duration draftMinInterval = Duration.ofSeconds(2);
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean value) {
+            enabled = value;
+        }
+
+        public Duration getLockTimeout() {
+            return lockTimeout;
+        }
+
+        public void setLockTimeout(Duration value) {
+            lockTimeout = value;
+        }
+
+        public Duration getDraftMinInterval() {
+            return draftMinInterval;
+        }
+
+        public void setDraftMinInterval(Duration value) {
+            draftMinInterval = value;
+        }
+
+        @AssertTrue(message = "lock-timeout must be longer than one minute")
+        public boolean isLockTimeoutValid() {
+            return lockTimeout != null && lockTimeout.compareTo(Duration.ofMinutes(1)) > 0;
         }
     }
 

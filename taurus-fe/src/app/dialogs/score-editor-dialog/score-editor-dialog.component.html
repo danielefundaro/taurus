@@ -4,8 +4,12 @@
     <header class="score-editor__header">
         <p-button icon="pi pi-arrow-left" ariaLabel="Torna alla traccia" pTooltip="Torna alla traccia" tooltipPosition="bottom" severity="secondary" text [rounded]="true" [disabled]="saving" (onClick)="close()" />
         <div class="score-editor__title">
-            <h2 class="m-0 text-lg font-semibold">Correzione · {{ data.partLabel }}</h2>
-            @if (editor) {
+            <h2 class="m-0 text-lg font-semibold">{{ writingMode ? 'Scrittura' : 'Correzione' }} · {{ data.partLabel }}</h2>
+            @if (writingMode) {
+                @if (status === 'ready') {
+                    <span class="text-sm text-muted-color score-editor__draft-state" [class.score-editor__draft-state--warn]="keeper?.state()?.status === 'offline' || keeper?.state()?.status === 'failed'">{{ draftLabel }}</span>
+                }
+            } @else if (editor) {
                 <span class="text-sm text-muted-color">Dalla versione {{ editor.version.versionNumber }} ({{ originLabel(editor.version.origin) }}) · le modifiche diventano una nuova versione</span>
             }
         </div>
@@ -22,38 +26,213 @@
                 pTooltip="Spazio. Maiusc+clic su un'altra battuta sceglie un intervallo"
                 (onClick)="togglePlay()"
             />
-            <p-button label="Salva" icon="pi pi-save" severity="secondary" [disabled]="!dirty || saving" [loading]="saving" pTooltip="Salva come nuova versione non verificata" (onClick)="save(false)" />
-            <p-button label="Salva e approva" icon="pi pi-check" [disabled]="!dirty || saving" [loading]="saving" pTooltip="Salva come nuova versione approvata" (onClick)="save(true)" />
+            @if (writingMode && midi.supported && status === 'ready') {
+                <p-button
+                    label="Tastiera MIDI"
+                    icon="pi pi-sliders-v"
+                    severity="secondary"
+                    [outlined]="!midi.deviceId()"
+                    pTooltip="Scrivi le note suonate su una tastiera MIDI collegata al computer"
+                    tooltipPosition="bottom"
+                    (onClick)="toggleMidi($event, midiPanel)"
+                />
+                <p-popover #midiPanel>
+                    <div class="score-editor__midi">
+                        <h3 class="score-editor__panel-title m-0">Tastiera MIDI</h3>
+                        @switch (midi.status()) {
+                            @case ('connecting') {
+                                <span class="text-sm"><i class="pi pi-spin pi-spinner mr-1" aria-hidden="true"></i>Richiesta del permesso al browser…</span>
+                            }
+                            @case ('denied') {
+                                <p class="text-sm m-0">Il browser non ha concesso l'uso dei dispositivi MIDI: consentilo nelle impostazioni del sito e riprova.</p>
+                                <p-button label="Riprova" size="small" severity="secondary" (onClick)="midi.connect()" />
+                            }
+                            @case ('failed') {
+                                <p class="text-sm m-0">I dispositivi MIDI non rispondono: ricollega la tastiera e riprova.</p>
+                                <p-button label="Riprova" size="small" severity="secondary" (onClick)="midi.connect()" />
+                            }
+                            @case ('ready') {
+                                @if (midi.devices().length) {
+                                    <p-select [options]="midi.devices()" [ngModel]="midi.deviceId()" (ngModelChange)="midi.select($event)" optionLabel="name" optionValue="id" size="small" ariaLabel="Tastiera in uso" appendTo="body" />
+                                } @else {
+                                    <p class="text-sm m-0">Nessuna tastiera collegata: collegala al computer e comparirà qui.</p>
+                                }
+                                <div class="score-editor__midi-threshold">
+                                    <span class="score-editor__label">Soglia dell'accordo</span>
+                                    <p-inputnumber
+                                        [ngModel]="midi.threshold()"
+                                        (ngModelChange)="setMidiThreshold($event)"
+                                        [min]="minThreshold"
+                                        [max]="maxThreshold"
+                                        [step]="10"
+                                        [showButtons]="true"
+                                        suffix=" ms"
+                                        inputStyleClass="w-20"
+                                        size="small"
+                                        ariaLabel="Soglia dell'accordo in millisecondi"
+                                    />
+                                </div>
+                                <span class="score-editor__hint">Le note premute entro la soglia dalla prima, mentre la prima è ancora premuta, formano un accordo.</span>
+                            }
+                        }
+                        <span class="score-editor__hint"
+                            >Durante l'inserimento ogni nota suonata si scrive al cursore con la figura corrente; fuori dall'inserimento cambia la nota selezionata. <kbd>+</kbd> <kbd>-</kbd> <kbd>=</kbd> ne correggono la grafia.</span
+                        >
+                    </div>
+                </p-popover>
+            }
+            <p-button label="Salva" icon="pi pi-save" severity="secondary" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione non verificata" (onClick)="save(false)" />
+            <p-button label="Salva e approva" icon="pi pi-check" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione approvata" (onClick)="save(true)" />
         </div>
     </header>
 
+    @if (status !== 'error' && lockNotice; as notice) {
+        <app-inline-alert class="score-editor__lock block mx-4 mt-2" severity="warn" [heading]="notice.heading" [detail]="notice.detail" [actionLabel]="notice.action" (action)="resolveLock()" />
+    }
+
+    @if (draftNotice; as notice) {
+        <p-message class="score-editor__draft-notice block mx-4 mt-2" severity="warn" [closable]="false">
+            <div class="score-editor__notice">
+                <div>
+                    <strong>{{ notice.status === 'rejected' ? 'Modifiche non salvate sul server' : "Bozza cambiata in un'altra finestra" }}</strong>
+                    <span>{{ notice.message }}</span>
+                </div>
+                <div class="score-editor__notice-actions">
+                    @if (notice.status === 'rejected') {
+                        <p-button label="Scarica MusicXML" icon="pi pi-download" size="small" severity="secondary" outlined pTooltip="File MusicXML da caricare come nuova versione della parte" (onClick)="downloadCopy()" />
+                        <p-button label="Tienila per dopo" size="small" severity="secondary" outlined pTooltip="Chiude l'editor: le modifiche restano in questo browser e saranno proposte alla prossima apertura" (onClick)="keepCopy()" />
+                        <p-button label="Scarta" size="small" severity="danger" text (onClick)="discardCopy()" />
+                    } @else {
+                        <p-button label="Tieni le mie modifiche" size="small" severity="secondary" outlined pTooltip="Le modifiche di questa finestra sostituiscono la bozza salvata altrove" (onClick)="keepMine()" />
+                        <p-button label="Carica l'altra bozza" size="small" severity="secondary" text pTooltip="Le modifiche di questa finestra restano solo se scarichi prima una copia" (onClick)="loadOther()" />
+                    }
+                </div>
+            </div>
+        </p-message>
+    }
+
+    @if (outdatedWarning; as warning) {
+        <app-inline-alert class="block mx-4 mt-2" severity="warn" heading="Versione cambiata" [detail]="warning" />
+    }
+
     @if (status === 'error') {
         <app-inline-alert class="block m-4" severity="warn" heading="Editor non disponibile" [detail]="errorMessage" />
+    } @else if (status === 'choosing' && choice) {
+        <section class="score-editor__choice" aria-labelledby="score-editor-choice">
+            <h3 id="score-editor-choice" class="m-0 text-lg font-semibold">{{ choice.heading }}</h3>
+            <p class="m-0">{{ choice.detail }}</p>
+            @if (choice.warning) {
+                <app-inline-alert severity="warn" heading="Attenzione" [detail]="choice.warning" />
+            }
+            <div class="flex flex-wrap gap-2">
+                <p-button [label]="choice.resumeLabel" icon="pi pi-pencil" (onClick)="resumeChoice()" />
+                <p-button [label]="choice.discardLabel" icon="pi pi-trash" severity="danger" outlined (onClick)="discardChoice()" />
+            </div>
+        </section>
     } @else {
         <p-tabs class="score-editor__tools" [(value)]="activeTool">
             <p-tablist>
                 <p-tab value="note">Nota</p-tab>
+                @if (writingMode) {
+                    <p-tab value="passage">Passaggio</p-tab>
+                }
                 <p-tab value="measure">Battuta</p-tab>
                 <p-tab value="structure">Struttura</p-tab>
                 <p-tab value="expression">Espressione</p-tab>
+                @if (writingMode) {
+                    <p-tab value="layout">Impaginazione</p-tab>
+                }
                 <p-tab value="keys">Tastiera</p-tab>
             </p-tablist>
             <p-tabpanels>
                 <p-tabpanel value="note">
                     <div class="score-editor__group-row">
+                        @if (writingMode) {
+                            <div class="score-editor__group" role="group" aria-label="Scrittura">
+                                <span class="score-editor__label">Scrittura</span>
+                                <p-togglebutton
+                                    [ngModel]="inserting"
+                                    (ngModelChange)="toggleInsertion()"
+                                    onLabel="Inserimento"
+                                    offLabel="Inserimento"
+                                    onIcon="pi pi-pencil"
+                                    offIcon="pi pi-pencil"
+                                    size="small"
+                                    [disabled]="readOnly"
+                                    ariaLabel="Modalità di inserimento"
+                                    pTooltip="Le note si scrivono al cursore, una dopo l'altra (N)"
+                                />
+                                <p-select
+                                    [options]="voices"
+                                    [ngModel]="cursor.voice"
+                                    (ngModelChange)="setVoice($event)"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    size="small"
+                                    ariaLabel="Voce"
+                                    appendTo="body"
+                                    [disabled]="!inserting"
+                                    pTooltip="Voce del cursore (Ctrl+Alt+1–4)"
+                                >
+                                    <ng-template #selectedItem let-option>Voce {{ option.label }}</ng-template>
+                                    <ng-template #item let-option>Voce {{ option.label }}</ng-template>
+                                </p-select>
+                                @if (inserting) {
+                                    <p-button icon="pi pi-chevron-left" size="small" severity="secondary" text ariaLabel="Cursore indietro" pTooltip="Cursore indietro (←)" (onClick)="moveCursor(-1)" />
+                                    <p-button icon="pi pi-chevron-right" size="small" severity="secondary" text ariaLabel="Cursore avanti" pTooltip="Cursore avanti (→)" (onClick)="moveCursor(1)" />
+                                }
+                                <p-togglebutton
+                                    [ngModel]="showPiano"
+                                    (ngModelChange)="togglePiano()"
+                                    [onLabel]="drumPads.length ? 'Strumenti' : 'Pianoforte'"
+                                    [offLabel]="drumPads.length ? 'Strumenti' : 'Pianoforte'"
+                                    onIcon="pi pi-th-large"
+                                    offIcon="pi pi-th-large"
+                                    size="small"
+                                    [ariaLabel]="drumPads.length ? 'Pulsanti degli strumenti a schermo' : 'Pianoforte a schermo'"
+                                    [pTooltip]="drumPads.length ? 'Un pulsante per strumento: un tocco scrive il suo suono alla figura corrente' : 'Un tocco scrive la nota alla figura corrente'"
+                                />
+                            </div>
+                        }
                         <div class="score-editor__group" role="group" aria-label="Figura">
                             <span class="score-editor__label">Figura</span>
-                            <p-selectbutton [options]="noteTypes" [ngModel]="note?.type" (ngModelChange)="setType($event)" optionLabel="label" optionValue="type" [allowEmpty]="false" size="small" [disabled]="!note" aria-label="Figura">
+                            <p-selectbutton
+                                [options]="noteTypes"
+                                [ngModel]="inserting ? figure.type : note?.type"
+                                (ngModelChange)="setType($event)"
+                                optionLabel="label"
+                                optionValue="type"
+                                [allowEmpty]="false"
+                                size="small"
+                                [disabled]="!inserting && !note"
+                                aria-label="Figura"
+                            >
                                 <ng-template #item let-option>
                                     <span [pTooltip]="option.label + ' (' + option.key + ')'">{{ option.label }}</span>
                                 </ng-template>
                             </p-selectbutton>
-                            <p-button label="Punto" size="small" severity="secondary" [outlined]="!note?.dots" [disabled]="!note" pTooltip="Aggiunge un punto di valore, fino a due (.)" (onClick)="toggleDots()" />
+                            <p-button
+                                [label]="(inserting ? figure.dots : note?.dots) === 2 ? 'Due punti' : 'Punto'"
+                                size="small"
+                                severity="secondary"
+                                [outlined]="!(inserting ? figure.dots : note?.dots)"
+                                [disabled]="!inserting && !note"
+                                pTooltip="Aggiunge un punto di valore, fino a due (.)"
+                                (onClick)="toggleDots()"
+                            />
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Altezza">
                             <span class="score-editor__label">Altezza</span>
                             @for (item of steps; track item.step) {
-                                <p-button [label]="item.label" size="small" severity="secondary" [outlined]="note?.step !== item.step" [disabled]="!note || note.unpitched" [pTooltip]="'Tasto ' + item.step" (onClick)="letter(item.step)" />
+                                <p-button
+                                    [label]="item.label"
+                                    size="small"
+                                    severity="secondary"
+                                    [outlined]="inserting || note?.step !== item.step"
+                                    [disabled]="inserting ? readOnly : !note || note.unpitched"
+                                    [pTooltip]="inserting ? 'Scrive la nota al cursore (' + item.step + '); con Maiusc la aggiunge all\'accordo' : 'Tasto ' + item.step"
+                                    (onClick)="letter(item.step)"
+                                />
                             }
                             <p-button icon="pi pi-arrow-up" size="small" severity="secondary" outlined ariaLabel="Su di un grado" pTooltip="Su di un grado (↑)" [disabled]="!note || note.rest" (onClick)="move(1)" />
                             <p-button icon="pi pi-arrow-down" size="small" severity="secondary" outlined ariaLabel="Giù di un grado" pTooltip="Giù di un grado (↓)" [disabled]="!note || note.rest" (onClick)="move(-1)" />
@@ -77,16 +256,47 @@
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Note e pause">
                             <span class="score-editor__label">Note</span>
-                            <p-button [label]="note?.rest ? 'In nota' : 'In pausa'" size="small" severity="secondary" outlined pTooltip="Trasforma la nota in pausa o la pausa in nota (0)" [disabled]="!note" (onClick)="toggleRest()" />
-                            <p-button label="Inserisci prima" size="small" severity="secondary" outlined [disabled]="!note" (onClick)="insert('before')" />
-                            <p-button label="Inserisci dopo" size="small" severity="secondary" outlined pTooltip="Copia della nota dopo di lei (I)" [disabled]="!note" (onClick)="insert('after')" />
+                            @if (inserting) {
+                                <p-button label="Pausa" size="small" severity="secondary" outlined pTooltip="Scrive una pausa al cursore (0)" [disabled]="readOnly" (onClick)="toggleRest()" />
+                            } @else {
+                                <p-button [label]="note?.rest ? 'In nota' : 'In pausa'" size="small" severity="secondary" outlined pTooltip="Trasforma la nota in pausa o la pausa in nota (0)" [disabled]="!note" (onClick)="toggleRest()" />
+                            }
+                            @if (!writingMode) {
+                                <p-button label="Inserisci prima" size="small" severity="secondary" outlined [disabled]="!note" (onClick)="insert('before')" />
+                                <p-button label="Inserisci dopo" size="small" severity="secondary" outlined pTooltip="Copia della nota dopo di lei (I)" [disabled]="!note" (onClick)="insert('after')" />
+                            }
                             <p-button label="Aggiungi all'accordo" size="small" severity="secondary" outlined [disabled]="!note || note.rest" (onClick)="addToChord()" />
-                            <p-button label="Elimina" icon="pi pi-trash" size="small" severity="danger" outlined pTooltip="Canc" [disabled]="!note" (onClick)="remove()" />
+                            <p-button
+                                [label]="writingMode ? 'Cancella' : 'Elimina'"
+                                icon="pi pi-trash"
+                                size="small"
+                                severity="danger"
+                                outlined
+                                [pTooltip]="writingMode ? 'La nota diventa una pausa (Canc)' : 'Canc'"
+                                [disabled]="!note"
+                                (onClick)="remove()"
+                            />
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Legature e gruppi">
                             <span class="score-editor__label">Legature e gruppi</span>
-                            <p-button label="Legatura di valore" size="small" severity="secondary" [outlined]="!note?.tieStart" pTooltip="Lega alla nota seguente della stessa altezza (T)" [disabled]="!note || note.rest" (onClick)="tie()" />
-                            @if (note?.tuplet) {
+                            @if (inserting) {
+                                <p-button label="Nota legata" size="small" severity="secondary" outlined pTooltip="Scrive al cursore la nota precedente, legata a lei (T)" [disabled]="readOnly" (onClick)="tie()" />
+                            } @else {
+                                <p-button label="Legatura di valore" size="small" severity="secondary" [outlined]="!note?.tieStart" pTooltip="Lega alla nota seguente della stessa altezza (T)" [disabled]="!note || note.rest" (onClick)="tie()" />
+                            }
+                            @if (inserting) {
+                                @for (option of tuplets; track option.actual) {
+                                    <p-button
+                                        [label]="option.label"
+                                        size="small"
+                                        severity="secondary"
+                                        outlined
+                                        [pTooltip]="'Gruppo di ' + option.actual + ' al cursore, lungo quanto la figura (Alt+' + option.actual + ')'"
+                                        [disabled]="readOnly"
+                                        (onClick)="tuplet(option.actual)"
+                                    />
+                                }
+                            } @else if (note?.tuplet) {
                                 <p-button [label]="'Togli gruppo di ' + note!.tuplet" size="small" severity="secondary" (onClick)="tuplet(note!.tuplet!)" />
                             } @else {
                                 @for (option of tuplets; track option.actual) {
@@ -104,6 +314,50 @@
                         </div>
                     </div>
                 </p-tabpanel>
+
+                @if (writingMode) {
+                    <p-tabpanel value="passage">
+                        <div class="score-editor__group-row">
+                            <div class="score-editor__group" role="group" aria-label="Selezione">
+                                <span class="score-editor__label">Selezione</span>
+                                <span class="score-editor__hint">{{ passage ? 'Passaggio selezionato' : 'Maiusc+clic o Maiusc+← → dalla nota selezionata' }}</span>
+                                <p-button label="Tutta la parte" size="small" severity="secondary" outlined pTooltip="Seleziona tutte le battute, con tutte le voci (Ctrl+A)" (onClick)="selectWholePart()" />
+                                <p-button label="Togli la selezione" size="small" severity="secondary" text [disabled]="!passage" pTooltip="Resta selezionata la prima nota (Esc)" (onClick)="clearRange()" />
+                            </div>
+                            <div class="score-editor__group" role="group" aria-label="Appunti">
+                                <span class="score-editor__label">Appunti</span>
+                                <span class="score-editor__hint">{{ clipboard.clip() ? 'Negli appunti: ' + clipboard.clip()!.label : 'Appunti vuoti' }}</span>
+                                <p-button label="Copia" icon="pi pi-copy" size="small" severity="secondary" outlined pTooltip="Copia il passaggio o la nota selezionata (Ctrl+C)" [disabled]="!note" (onClick)="copy()" />
+                                <p-button label="Taglia" size="small" severity="secondary" outlined pTooltip="Copia e trasforma in pause (Ctrl+X)" [disabled]="!note || readOnly" (onClick)="cut()" />
+                                <p-button
+                                    label="Incolla"
+                                    icon="pi pi-clipboard"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    [pTooltip]="inserting ? 'Incolla al cursore (Ctrl+V)' : 'Incolla dall\'inizio della selezione, al posto di ciò che c\'è (Ctrl+V)'"
+                                    [disabled]="!clipboard.clip() || readOnly || (!note && !measure)"
+                                    (onClick)="paste()"
+                                />
+                                <p-button label="Ripeti" icon="pi pi-clone" size="small" severity="secondary" outlined pTooltip="Ripete il passaggio o la nota subito dopo di lei (R)" [disabled]="!note || readOnly" (onClick)="repeatSelection()" />
+                            </div>
+                            <div class="score-editor__group" role="group" aria-label="Trasposizione">
+                                <span class="score-editor__label">Trasposizione</span>
+                                <p-select [options]="intervals" [(ngModel)]="transposeInterval" optionLabel="label" optionValue="value" size="small" ariaLabel="Intervallo" appendTo="body" [disabled]="readOnly" />
+                                <p-selectbutton [options]="directions" [(ngModel)]="transposeDirection" optionLabel="label" optionValue="value" [allowEmpty]="false" size="small" aria-label="Direzione" [disabled]="readOnly" />
+                                <p-selectbutton [options]="transposeScopes" [(ngModel)]="transposeScope" optionLabel="label" optionValue="value" [allowEmpty]="false" size="small" aria-label="Note da trasporre" [disabled]="readOnly" />
+                                <p-button
+                                    label="Trasponi"
+                                    size="small"
+                                    severity="secondary"
+                                    [pTooltip]="transposeScope === 'part' ? 'Traspone tutte le note e le armature della parte' : 'Traspone il passaggio o la nota selezionata; ↑ ↓ spostano di un grado, con Ctrl di un\'ottava'"
+                                    [disabled]="readOnly || (transposeScope === 'passage' && !note)"
+                                    (onClick)="transpose()"
+                                />
+                            </div>
+                        </div>
+                    </p-tabpanel>
+                }
 
                 <p-tabpanel value="measure">
                     <div class="score-editor__group-row">
@@ -142,8 +396,24 @@
                         <div class="score-editor__group" role="group" aria-label="Numero di battute">
                             <span class="score-editor__label">Numero di battute</span>
                             <p-inputnumber [(ngModel)]="measureCount" [min]="1" [max]="200" [showButtons]="true" inputStyleClass="w-14" size="small" ariaLabel="Numero di battute" [disabled]="!measure" />
-                            <p-button label="Aggiungi dopo" size="small" severity="secondary" outlined pTooltip="Battute separate dopo quella selezionata, ognuna con una pausa di battuta da trasformare in note" [disabled]="!measure" (onClick)="addMeasures()" />
-                            <p-button label="Pausa di più battute da qui" size="small" severity="secondary" outlined pTooltip="La battuta selezionata diventa una pausa che dura il numero di battute indicato" [disabled]="!measure" (onClick)="applyMultiRest()" />
+                            <p-button
+                                label="Aggiungi dopo"
+                                size="small"
+                                severity="secondary"
+                                outlined
+                                pTooltip="Battute separate dopo quella selezionata, ognuna con una pausa di battuta da trasformare in note"
+                                [disabled]="!measure"
+                                (onClick)="addMeasures()"
+                            />
+                            <p-button
+                                label="Pausa di più battute da qui"
+                                size="small"
+                                severity="secondary"
+                                outlined
+                                pTooltip="La battuta selezionata diventa una pausa che dura il numero di battute indicato"
+                                [disabled]="!measure"
+                                (onClick)="applyMultiRest()"
+                            />
                         </div>
                     </div>
                 </p-tabpanel>
@@ -165,9 +435,33 @@
                                 <p-button [label]="option.label" size="small" severity="secondary" [outlined]="!measure?.marks?.includes(option.value)" [disabled]="!measure" (onClick)="mark(option.value)" />
                             }
                         </div>
+                        <div class="score-editor__group" role="group" aria-label="Lettera di prova">
+                            <span class="score-editor__label">Lettera di prova</span>
+                            <input pInputText pSize="small" class="w-20" [(ngModel)]="rehearsalText" aria-label="Lettera di prova" maxlength="12" [disabled]="!measure" (keydown.enter)="applyRehearsal(rehearsalText)" />
+                            <p-button label="Applica" size="small" severity="secondary" pTooltip="Lettera o numero all'inizio della battuta, in un riquadro" [disabled]="!measure || !rehearsalText.trim()" (onClick)="applyRehearsal(rehearsalText)" />
+                            <p-button label="Numero di battuta" size="small" severity="secondary" outlined pTooltip="Il numero della battuta come riferimento per le prove" [disabled]="!measure" (onClick)="rehearsalNumber()" />
+                            <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.rehearsal" (onClick)="applyRehearsal(null)" />
+                        </div>
                         <div class="score-editor__group" role="group" aria-label="Tempo">
-                            <span class="score-editor__label">Tempo (semiminime al minuto)</span>
-                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Tempo" [disabled]="!measure" />
+                            <span class="score-editor__label">Tempo</span>
+                            <input
+                                pInputText
+                                pSize="small"
+                                class="w-32"
+                                [(ngModel)]="tempoText"
+                                list="score-editor-tempo-texts"
+                                placeholder="Testo, per esempio Allegro"
+                                aria-label="Testo del tempo"
+                                maxlength="40"
+                                [disabled]="!measure"
+                                (keydown.enter)="tempo && applyTempo(tempo)"
+                            />
+                            <datalist id="score-editor-tempo-texts">
+                                @for (value of tempoTexts; track value) {
+                                    <option [value]="value"></option>
+                                }
+                            </datalist>
+                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure || !tempo" (onClick)="applyTempo(tempo)" />
                             <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.tempo" (onClick)="applyTempo(null)" />
                         </div>
@@ -183,24 +477,158 @@
                             }
                             <p-button label="Nessuna" size="small" severity="secondary" text [disabled]="!note?.dynamic" (onClick)="dynamic(null)" />
                         </div>
+                        <div class="score-editor__group" role="group" aria-label="Forcelle e legature">
+                            <span class="score-editor__label">Forcelle e legature</span>
+                            @for (option of wedges; track option.value) {
+                                <p-button
+                                    [label]="option.label"
+                                    size="small"
+                                    severity="secondary"
+                                    [outlined]="note?.wedge !== option.value"
+                                    [pTooltip]="'Sul passaggio selezionato o fino all\'elemento seguente (' + option.key + ')'"
+                                    [disabled]="!note || !!note.graceKind"
+                                    (onClick)="wedge(option.value)"
+                                />
+                            }
+                            <p-button
+                                label="Legatura di portamento"
+                                size="small"
+                                severity="secondary"
+                                [outlined]="!note?.slur"
+                                pTooltip="Dalla prima all'ultima nota del passaggio, o fino alla nota seguente; sulla nota legata la toglie (S)"
+                                [disabled]="!note"
+                                (onClick)="slur()"
+                            />
+                            <p-button label="Togli" size="small" severity="secondary" text pTooltip="Toglie legature di portamento e forcelle della nota o del passaggio" [disabled]="!note" (onClick)="removeSpanners()" />
+                        </div>
                         <div class="score-editor__group" role="group" aria-label="Articolazioni">
                             <span class="score-editor__label">Articolazioni</span>
                             @for (option of articulations; track option.value) {
                                 <p-button [label]="option.label" size="small" severity="secondary" [outlined]="!note?.articulations?.includes(option.value)" [disabled]="!note || note.rest" (onClick)="articulation(option.value)" />
                             }
+                            <p-button label="Corona" size="small" severity="secondary" [outlined]="!note?.fermata" pTooltip="Sulla nota, sull'accordo o sulla pausa" [disabled]="!note || !!note.graceKind" (onClick)="fermata()" />
+                        </div>
+                        <div class="score-editor__group" role="group" aria-label="Abbellimenti">
+                            <span class="score-editor__label">Abbellimenti</span>
+                            @for (option of graceKinds; track option.value) {
+                                <p-button
+                                    [label]="option.label"
+                                    size="small"
+                                    severity="secondary"
+                                    [outlined]="note?.graceKind !== option.value"
+                                    [pTooltip]="note?.graceKind ? 'Cambia il tipo dell\'abbellimento selezionato' : option.hint + ': si aggiunge della stessa altezza, da spostare con ↑ ↓'"
+                                    [disabled]="!note || note.rest"
+                                    (onClick)="grace(option.value)"
+                                />
+                            }
+                        </div>
+                        <div class="score-editor__group" role="group" aria-label="Testo">
+                            <span class="score-editor__label">Testo</span>
+                            <input
+                                pInputText
+                                pSize="small"
+                                class="w-40"
+                                [(ngModel)]="expressionText"
+                                list="score-editor-expression-texts"
+                                placeholder="dolce, rit., a tempo…"
+                                aria-label="Testo di espressione"
+                                maxlength="60"
+                                [disabled]="!note"
+                                (keydown.enter)="applyExpression(expressionText)"
+                            />
+                            <datalist id="score-editor-expression-texts">
+                                @for (value of expressionTexts; track value) {
+                                    <option [value]="value"></option>
+                                }
+                            </datalist>
+                            <p-button
+                                label="Applica"
+                                size="small"
+                                severity="secondary"
+                                pTooltip="In corsivo prima della nota: sopra il rigo le indicazioni di tempo, sotto le altre"
+                                [disabled]="!note || !expressionText.trim()"
+                                (onClick)="applyExpression(expressionText)"
+                            />
+                            <p-button label="Togli" size="small" severity="secondary" text [disabled]="!note?.expression" (onClick)="applyExpression(null)" />
                         </div>
                     </div>
                 </p-tabpanel>
 
+                @if (writingMode) {
+                    <p-tabpanel value="layout">
+                        <div class="score-editor__group-row">
+                            <div class="score-editor__group" role="group" aria-label="Interruzione">
+                                <span class="score-editor__label">Battuta {{ measure?.number }}</span>
+                                <p-selectbutton
+                                    [options]="breakOptions"
+                                    [ngModel]="measure?.break ?? null"
+                                    (ngModelChange)="applyBreak($event)"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    [allowEmpty]="false"
+                                    size="small"
+                                    aria-label="Interruzione prima della battuta"
+                                    [disabled]="!measure || readOnly"
+                                />
+                                <span class="score-editor__hint">La battuta inizia una nuova riga o una nuova pagina; nell'editor la pagina nuova si vede come una riga nuova</span>
+                            </div>
+                            <div class="score-editor__group" role="group" aria-label="Battute per riga">
+                                <span class="score-editor__label">Battute per riga</span>
+                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
+                                <p-button
+                                    label="Applica a tutta la parte"
+                                    size="small"
+                                    severity="secondary"
+                                    pTooltip="Una riga nuova ogni tante battute, contate dall'inizio e da ogni pagina nuova, al posto delle interruzioni di riga che ci sono"
+                                    [disabled]="readOnly || !breaksEvery"
+                                    (onClick)="applyBreaksEvery(breaksEvery)"
+                                />
+                                <p-button label="Togli le interruzioni di riga" size="small" severity="secondary" text pTooltip="Le righe seguono la larghezza; le pagine nuove restano" [disabled]="readOnly" (onClick)="applyBreaksEvery(null)" />
+                            </div>
+                        </div>
+                    </p-tabpanel>
+                }
+
                 <p-tabpanel value="keys">
+                    @if (writingMode) {
+                        <h3 class="score-editor__panel-title mb-2">Modalità di inserimento</h3>
+                        <ul class="score-editor__shortcuts mb-3">
+                            <li><kbd>N</kbd> entra o esce dalla modalità di inserimento; <kbd>Esc</kbd> ne esce</li>
+                            <li><kbd>A</kbd>–<kbd>G</kbd> scrive la nota al cursore; con <kbd>Maiusc</kbd> la aggiunge all'accordo</li>
+                            <li><kbd>1</kbd>–<kbd>7</kbd> figura delle note seguenti; <kbd>.</kbd> punto di valore</li>
+                            <li><kbd>0</kbd> pausa, <kbd>T</kbd> nota legata alla precedente</li>
+                            <li><kbd>←</kbd> <kbd>→</kbd> sposta il cursore; <kbd>↑</kbd> <kbd>↓</kbd> cambiano l'altezza della nota scritta</li>
+                            <li><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>1</kbd>–<kbd>4</kbd> voce del cursore</li>
+                            <li><kbd>Alt</kbd>+<kbd>3</kbd>, <kbd>5</kbd>, <kbd>6</kbd> terzina, quintina e sestina al cursore</li>
+                            <li><kbd>Canc</kbd> la nota scritta diventa una pausa</li>
+                            <li>Tastiera MIDI e pianoforte: la nota suonata si scrive al cursore, quelle premute insieme formano un accordo; <kbd>+</kbd> <kbd>-</kbd> <kbd>=</kbd> ne correggono la grafia</li>
+                        </ul>
+                        <h3 class="score-editor__panel-title mb-2">Passaggio</h3>
+                        <ul class="score-editor__shortcuts mb-3">
+                            <li><kbd>Maiusc</kbd>+clic o <kbd>Maiusc</kbd>+<kbd>←</kbd> <kbd>→</kbd> seleziona un passaggio dalla nota selezionata; <kbd>Ctrl</kbd>+<kbd>A</kbd> tutta la parte; <kbd>Esc</kbd> toglie la selezione</li>
+                            <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copia, <kbd>Ctrl</kbd>+<kbd>X</kbd> taglia, <kbd>Ctrl</kbd>+<kbd>V</kbd> incolla al cursore o all'inizio della selezione, anche in un'altra parte</li>
+                            <li><kbd>R</kbd> ripete il passaggio o la nota subito dopo di lei</li>
+                            <li><kbd>↑</kbd> <kbd>↓</kbd> spostano il passaggio di un grado, con <kbd>Ctrl</kbd> di un'ottava; <kbd>Canc</kbd> lo trasforma in pause</li>
+                        </ul>
+                        <h3 class="score-editor__panel-title mb-2">Selezione</h3>
+                    }
                     <ul class="score-editor__shortcuts">
                         <li><kbd>←</kbd> <kbd>→</kbd> nota precedente o seguente</li>
                         <li><kbd>↑</kbd> <kbd>↓</kbd> su o giù di un grado; con <kbd>Ctrl</kbd> di un'ottava</li>
                         <li><kbd>A</kbd>–<kbd>G</kbd> nome della nota (La–Sol), all'ottava più vicina</li>
                         <li><kbd>1</kbd>–<kbd>7</kbd> figura, dalla semibiscroma alla semibreve; <kbd>.</kbd> punto di valore</li>
                         <li><kbd>+</kbd> diesis, <kbd>-</kbd> bemolle, <kbd>=</kbd> bequadro</li>
-                        <li><kbd>0</kbd> nota o pausa, <kbd>I</kbd> inserisci dopo, <kbd>Canc</kbd> elimina, <kbd>T</kbd> legatura di valore</li>
-                        <li><kbd>Spazio</kbd> ascolta la battuta o l'intervallo; <kbd>Maiusc</kbd>+clic sceglie l'ultima battuta, <kbd>Esc</kbd> la toglie</li>
+                        @if (writingMode) {
+                            <li><kbd>0</kbd> nota o pausa, <kbd>Canc</kbd> la nota diventa una pausa, <kbd>T</kbd> legatura di valore</li>
+                        } @else {
+                            <li><kbd>0</kbd> nota o pausa, <kbd>I</kbd> inserisci dopo, <kbd>Canc</kbd> elimina, <kbd>T</kbd> legatura di valore</li>
+                        }
+                        @if (writingMode) {
+                            <li><kbd>Spazio</kbd> ascolta la battuta o le battute del passaggio selezionato</li>
+                        } @else {
+                            <li><kbd>Spazio</kbd> ascolta la battuta o l'intervallo; <kbd>Maiusc</kbd>+clic sceglie l'ultima battuta, <kbd>Esc</kbd> la toglie</li>
+                        }
+                        <li><kbd>S</kbd> legatura di portamento, <kbd>&lt;</kbd> <kbd>&gt;</kbd> crescendo e diminuendo, sulla nota o sul passaggio</li>
                         <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla, <kbd>Ctrl</kbd>+<kbd>Y</kbd> ripristina</li>
                     </ul>
                 </p-tabpanel>
@@ -208,61 +636,78 @@
         </p-tabs>
 
         <div class="score-editor__status" role="status">
-            <span class="font-medium">{{ selectionLabel }}</span>
+            @if (inserting) {
+                <span class="font-medium score-editor__insertion"><i class="pi pi-pencil mr-1" aria-hidden="true"></i>{{ insertionLabel }}</span>
+                @if (midiDrumHint; as hint) {
+                    <span class="text-sm text-muted-color">{{ hint }}</span>
+                }
+            }
+            <span [class.font-medium]="!inserting">{{ selectionLabel }}</span>
             @if (measure?.empty) {
                 <p-button label="Aggiungi una pausa" icon="pi pi-plus" size="small" severity="secondary" outlined pTooltip="La battuta riceve una pausa di battuta, da trasformare in note con «In nota»" [disabled]="saving" (onClick)="fillMeasure()" />
             }
             @if (message) {
                 <span class="score-editor__message"><i class="pi pi-exclamation-triangle mr-1" aria-hidden="true"></i>{{ message }}</span>
+            } @else if (info) {
+                <span class="score-editor__info"><i class="pi pi-check mr-1" aria-hidden="true"></i>{{ info }}</span>
             }
         </div>
+
+        @if (writingMode && showPiano) {
+            <app-piano-keyboard class="score-editor__piano" [startOctave]="pianoOctave" [pads]="drumPads" [disabled]="readOnly" (play)="playKey($event)" />
+        }
 
         <div class="score-editor__body">
             <section class="score-editor__notation-pane" aria-label="Spartito">
                 @if (status === 'loading' || rendering) {
                     <div class="score-editor__loading" role="status">
                         <i class="pi pi-spin pi-spinner" aria-hidden="true"></i>
-                        <span>{{ status === 'loading' ? 'Apertura della versione…' : 'Disegno dello spartito…' }}</span>
+                        <span>{{ status === 'loading' ? (writingMode ? 'Apertura della parte…' : 'Apertura della versione…') : 'Disegno dello spartito…' }}</span>
                     </div>
                 }
-                <div #notation class="score-editor__notation" (click)="onNotationClick($event)"></div>
+                <div #notation class="score-editor__notation" [class.score-editor__notation--inserting]="inserting" (click)="onNotationClick($event)"></div>
+                @if (inserting && cursorBox; as box) {
+                    <div class="score-editor__cursor" aria-hidden="true" [style.left.px]="box.left" [style.top.px]="box.top" [style.height.px]="box.height"></div>
+                }
             </section>
 
             <aside class="score-editor__side" aria-label="Pagina originale e controlli">
-                <div class="score-editor__page-tools">
-                    <p-button icon="pi pi-chevron-left" size="small" severity="secondary" text ariaLabel="Pagina precedente" [disabled]="pageIndex <= 0" (onClick)="showPage(pageIndex - 1)" />
-                    <span class="text-sm">Pagina {{ pages.length ? pageIndex + 1 : 0 }} di {{ pages.length }}</span>
-                    <p-button icon="pi pi-chevron-right" size="small" severity="secondary" text ariaLabel="Pagina seguente" [disabled]="pageIndex >= pages.length - 1" (onClick)="showPage(pageIndex + 1)" />
-                    <p-selectbutton [options]="zoomOptions" [(ngModel)]="zoom" optionLabel="label" optionValue="value" [allowEmpty]="false" size="small" aria-label="Ingrandimento" />
-                </div>
-                @if (editor && !pages.length) {
-                    <app-inline-alert severity="info" heading="Nessuna pagina" detail="La parte non ha immagini delle pagine da confrontare." />
-                } @else if (editor && !hasLayout) {
-                    <app-inline-alert severity="info" heading="Posizioni non disponibili" detail="Per questa versione la posizione delle battute sulle pagine non è nota: scorri la pagina per confrontarla." />
-                } @else if (editor?.version?.pagesChanged) {
-                    <app-inline-alert severity="warn" heading="Pagine modificate" detail="Le pagine sono cambiate dopo questa versione: i riquadri delle battute potrebbero non corrispondere." />
+                @if (!writingMode || pages.length) {
+                    <div class="score-editor__page-tools">
+                        <p-button icon="pi pi-chevron-left" size="small" severity="secondary" text ariaLabel="Pagina precedente" [disabled]="pageIndex <= 0" (onClick)="showPage(pageIndex - 1)" />
+                        <span class="text-sm">Pagina {{ pages.length ? pageIndex + 1 : 0 }} di {{ pages.length }}</span>
+                        <p-button icon="pi pi-chevron-right" size="small" severity="secondary" text ariaLabel="Pagina seguente" [disabled]="pageIndex >= pages.length - 1" (onClick)="showPage(pageIndex + 1)" />
+                        <p-selectbutton [options]="zoomOptions" [(ngModel)]="zoom" optionLabel="label" optionValue="value" [allowEmpty]="false" size="small" aria-label="Ingrandimento" />
+                    </div>
+                    @if (editor && !pages.length) {
+                        <app-inline-alert severity="info" heading="Nessuna pagina" detail="La parte non ha immagini delle pagine da confrontare." />
+                    } @else if (editor && !hasLayout) {
+                        <app-inline-alert severity="info" heading="Posizioni non disponibili" detail="Per questa versione la posizione delle battute sulle pagine non è nota: scorri la pagina per confrontarla." />
+                    } @else if (editor?.version?.pagesChanged) {
+                        <app-inline-alert severity="warn" heading="Pagine modificate" detail="Le pagine sono cambiate dopo questa versione: i riquadri delle battute potrebbero non corrispondere." />
+                    }
+                    <div #pageViewer class="score-editor__page">
+                        @if (pageLoading) {
+                            <div class="score-editor__loading" role="status"><i class="pi pi-spin pi-spinner" aria-hidden="true"></i><span>Caricamento della pagina…</span></div>
+                        }
+                        @if (pageUrl) {
+                            <div class="score-editor__page-inner" [style.width.%]="zoom">
+                                <img [src]="pageUrl" [alt]="'Pagina ' + (pageIndex + 1) + ' della parte'" />
+                                @if (highlight) {
+                                    <div
+                                        class="score-editor__box"
+                                        [class.score-editor__box--approximate]="highlight.approximate"
+                                        [style.left.%]="highlight.left"
+                                        [style.top.%]="highlight.top"
+                                        [style.width.%]="highlight.width"
+                                        [style.height.%]="highlight.height"
+                                        [title]="highlight.approximate ? 'Posizione approssimata' : 'Battuta selezionata'"
+                                    ></div>
+                                }
+                            </div>
+                        }
+                    </div>
                 }
-                <div #pageViewer class="score-editor__page">
-                    @if (pageLoading) {
-                        <div class="score-editor__loading" role="status"><i class="pi pi-spin pi-spinner" aria-hidden="true"></i><span>Caricamento della pagina…</span></div>
-                    }
-                    @if (pageUrl) {
-                        <div class="score-editor__page-inner" [style.width.%]="zoom">
-                            <img [src]="pageUrl" [alt]="'Pagina ' + (pageIndex + 1) + ' della parte'" />
-                            @if (highlight) {
-                                <div
-                                    class="score-editor__box"
-                                    [class.score-editor__box--approximate]="highlight.approximate"
-                                    [style.left.%]="highlight.left"
-                                    [style.top.%]="highlight.top"
-                                    [style.width.%]="highlight.width"
-                                    [style.height.%]="highlight.height"
-                                    [title]="highlight.approximate ? 'Posizione approssimata' : 'Battuta selezionata'"
-                                ></div>
-                            }
-                        </div>
-                    }
-                </div>
 
                 <div class="score-editor__panel">
                     <h3 class="score-editor__panel-title">Controlli</h3>
@@ -296,7 +741,7 @@
                                 <span class="text-xs text-muted-color">{{ report.reportedBy || 'Utente' }} · {{ report.reportedAt | date: 'dd/MM/yyyy HH:mm' }}</span>
                             </button>
                         }
-                        <p class="text-xs text-muted-color m-0">Salvando e approvando la correzione le segnalazioni si chiudono.</p>
+                        <p class="text-xs text-muted-color m-0">Salvando e approvando {{ writingMode ? 'la versione' : 'la correzione' }} le segnalazioni si chiudono.</p>
                     </div>
                 }
             </aside>

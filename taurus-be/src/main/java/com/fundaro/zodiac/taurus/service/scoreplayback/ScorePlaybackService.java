@@ -13,7 +13,11 @@ import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Par
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackSettingsDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PlaybackVersionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DraftSummaryDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EditLockDTO;
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScorePlaybackSupport.Viewer;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -45,6 +49,8 @@ public class ScorePlaybackService {
     private final UsersService usersService;
     private final ScoreRecognitionService recognitionService;
     private final ScoreErrorReportService reportService;
+    private final ScoreEditLockService lockService;
+    private final ScoreDraftService draftService;
 
     public ScorePlaybackService(
         ScorePlaybackSupport support,
@@ -52,7 +58,9 @@ public class ScorePlaybackService {
         MediaService mediaService,
         UsersService usersService,
         ScoreRecognitionService recognitionService,
-        ScoreErrorReportService reportService
+        ScoreErrorReportService reportService,
+        ScoreEditLockService lockService,
+        ScoreDraftService draftService
     ) {
         this.support = support;
         this.versionRepository = versionRepository;
@@ -60,6 +68,8 @@ public class ScorePlaybackService {
         this.usersService = usersService;
         this.recognitionService = recognitionService;
         this.reportService = reportService;
+        this.lockService = lockService;
+        this.draftService = draftService;
     }
 
     public TrackPlaybackDTO overview(Long trackId, AbstractAuthenticationToken token) {
@@ -76,6 +86,10 @@ public class ScorePlaybackService {
         Map<Long, Integer> openReports = viewer == Viewer.MANAGER
             ? reportService.openCounts(track.getScores().stream().map(SheetsMusic::getId).toList())
             : Map.of();
+        Map<Long, EditLockDTO> editing = viewer == Viewer.MANAGER
+            ? lockService.active(track.getScores().stream().map(SheetsMusic::getId).filter(Objects::nonNull).toList())
+            : Map.of();
+        Map<Long, DraftSummaryDTO> drafts = viewer == Viewer.MANAGER ? draftService.summaries(track.getScores()) : Map.of();
 
         List<PartPlaybackDTO> parts = new ArrayList<>();
         int order = 0;
@@ -98,7 +112,9 @@ public class ScorePlaybackService {
                     : null,
                 !part.getMedia().isEmpty(),
                 recognitions.containsKey(part.getId()) ? recognitionService.toDto(recognitions.get(part.getId())) : null,
-                openReports.getOrDefault(part.getId(), 0)
+                openReports.getOrDefault(part.getId(), 0),
+                editing.get(part.getId()),
+                drafts.get(part.getId())
             ));
         }
         Long referenceScoreId = track.getScores().stream().anyMatch(part -> Objects.equals(part.getId(), track.getReferenceSheetMusicId()))

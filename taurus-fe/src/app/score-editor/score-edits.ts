@@ -8,6 +8,7 @@ import {
     DIRECTION_ORDER,
     element,
     ensureChild,
+    insertAtStart,
     insertOrdered,
     integer,
     NOTE_ORDER,
@@ -20,6 +21,7 @@ import {
 } from './musicxml-dom';
 import { Alteration, ALTERATIONS, CLEF_OPTIONS, clefBottom, clefValue, diatonic, fraction, fromDiatonic, inferType, middleLine, NOTE_TYPES, noteQuarters, noteTypeOption, NoteType, Step, STEP_NAMES, toNumber } from './notation-rules';
 import { EditError, isRest, MusicalState, NoteEvent, pitchOf, ScoreDocument, voiceOf } from './score-document';
+import { BreakKind, breakOf, expressionOf, GraceKind, graceKindOf, hasFermata, hasSlur, rehearsalOf, WedgeKind, wedgeOf } from './score-notation';
 
 /**
  * Operazioni dell'editor di correzione sul MusicXML di una parte. Ogni operazione modifica il documento o, se non è
@@ -29,13 +31,17 @@ import { EditError, isRest, MusicalState, NoteEvent, pitchOf, ScoreDocument, voi
 export type Dynamic = 'ppp' | 'pp' | 'p' | 'mp' | 'mf' | 'f' | 'ff' | 'fff' | 'sfz' | 'fp';
 export const DYNAMICS: readonly Dynamic[] = ['ppp', 'pp', 'p', 'mp', 'mf', 'f', 'ff', 'fff', 'sfz', 'fp'];
 
-export type Articulation = 'accent' | 'strong-accent' | 'staccato' | 'tenuto';
+export type Articulation = 'accent' | 'strong-accent' | 'staccato' | 'tenuto' | 'breath-mark';
 export const ARTICULATIONS: readonly { value: Articulation; label: string }[] = [
     { value: 'accent', label: 'Accento' },
     { value: 'strong-accent', label: 'Marcato' },
     { value: 'staccato', label: 'Staccato' },
-    { value: 'tenuto', label: 'Tenuto' }
+    { value: 'tenuto', label: 'Tenuto' },
+    { value: 'breath-mark', label: 'Respiro' }
 ];
+
+/** Indicazioni di tempo proposte accanto al metronomo; se ne può scrivere qualsiasi altra. */
+export const TEMPO_TEXTS: readonly string[] = ['Largo', 'Lento', 'Adagio', 'Andante', 'Andantino', 'Moderato', 'Allegretto', 'Allegro', 'Vivace', 'Presto', 'Maestoso', 'Tempo di marcia'];
 
 export type StructureMark = 'segno' | 'coda' | 'toCoda' | 'daCapo' | 'dalSegno' | 'fine';
 export const STRUCTURE_MARKS: readonly { value: StructureMark; label: string }[] = [
@@ -74,6 +80,15 @@ export interface NoteInfo {
     dynamic: Dynamic | null;
     articulations: Articulation[];
     voice: string;
+    /** La nota inizia o finisce una legatura di portamento. */
+    slur: boolean;
+    /** Forcella che inizia dalla nota. */
+    wedge: WedgeKind | null;
+    fermata: boolean;
+    /** Testo di espressione scritto prima della nota. */
+    expression: string | null;
+    /** Tipo dell'abbellimento, se la nota è un abbellimento. */
+    graceKind: GraceKind | null;
 }
 
 export interface MeasureInfo {
@@ -91,6 +106,12 @@ export interface MeasureInfo {
     ending: string | null;
     marks: StructureMark[];
     tempo: number | null;
+    /** Testo dell'indicazione di tempo, per esempio «Allegro». */
+    tempoText: string | null;
+    /** Lettera di prova o numero di riferimento all'inizio della battuta. */
+    rehearsal: string | null;
+    /** La battuta inizia una nuova riga o una nuova pagina. */
+    break: BreakKind | null;
     /** Battute raggruppate dalla pausa che inizia qui; 1 se la battuta non apre una pausa di più battute. */
     multiRest: number;
     /** La battuta non contiene né note né pause, come capita in alcune versioni riconosciute o salvate in passato. */
@@ -99,6 +120,7 @@ export interface MeasureInfo {
     hasNotes: boolean;
 }
 
+const MAX_TEMPO_TEXT = 40;
 const STATE_ATTRIBUTES = ['divisions', 'key', 'time', 'staves', 'part-symbol', 'instruments', 'clef', 'transpose'];
 const MAX_MULTI_REST = 200;
 
@@ -137,7 +159,12 @@ export function noteInfo(score: ScoreDocument, id: string): NoteInfo {
         tieStop: hasTie(note, 'stop'),
         dynamic: dynamicOf(score.eventOf(note).notes[0]),
         articulations: children(child(child(note, 'notations'), 'articulations')).map((item) => item.tagName as Articulation),
-        voice: voiceOf(note)
+        voice: voiceOf(note),
+        slur: hasSlur(score, note),
+        wedge: wedgeOf(score, note),
+        fermata: hasFermata(score, note),
+        expression: expressionOf(score, note),
+        graceKind: graceKindOf(note)
     };
 }
 
@@ -160,6 +187,9 @@ export function measureInfo(score: ScoreDocument, index: number): MeasureInfo {
         ending: endingNumbers(score)[index],
         marks: STRUCTURE_MARKS.map((mark) => mark.value).filter((mark) => markElements(measure, mark).length > 0),
         tempo: tempoOf(measure),
+        tempoText: tempoTextOf(measure),
+        rehearsal: rehearsalOf(measure),
+        break: breakOf(measure),
         multiRest: multiRestCount(measure),
         empty: !child(measure, 'note'),
         hasNotes: children(measure, 'note').some((note) => !isRest(note))
@@ -174,6 +204,7 @@ export function noteLabel(info: NoteInfo): string {
     if (info.rest) return `Pausa di ${figure}${dots}${tuplet}`;
     const symbol = ({ [-2]: '♭♭', [-1]: '♭', 1: '♯', 2: '♯♯' } as Record<number, string>)[info.alter] ?? '';
     const name = info.step ? `${STEP_NAMES[info.step]}${symbol}${info.octave}` : 'Nota';
+    if (info.graceKind) return `${name} · ${info.graceKind} di ${figure}${dots}`;
     return `${name} · ${figure}${dots}${tuplet}${info.chordSize > 1 ? ` · accordo di ${info.chordSize} note` : ''}`;
 }
 
@@ -257,6 +288,7 @@ export function cycleDots(score: ScoreDocument, id: string): void {
 /** Trasforma una nota, o un accordo, in pausa e una pausa in nota. */
 export function toggleRest(score: ScoreDocument, id: string): void {
     const note = score.note(id);
+    if (child(note, 'grace')) throw new EditError('Gli abbellimenti non diventano pause: cancellali con Canc');
     const event = score.eventOf(note);
     const measure = score.measureOf(note);
     if (isRest(note)) {
@@ -358,6 +390,7 @@ export function toggleTie(score: ScoreDocument, id: string): void {
     const note = score.note(id);
     const pitch = pitchOf(note);
     if (!pitch || pitch.unpitched) throw new EditError('Si legano solo note intonate');
+    if (child(note, 'grace')) throw new EditError('Gli abbellimenti non si legano di valore: usa la legatura di portamento');
     if (hasTie(note, 'start')) {
         const partner = tiePartner(score, note, 'next');
         removeTie(note, 'start');
@@ -378,6 +411,7 @@ export function toggleTie(score: ScoreDocument, id: string): void {
 /** Crea un gruppo irregolare dalla nota con le note seguenti della voce, oppure toglie il gruppo a cui appartiene. */
 export function toggleTuplet(score: ScoreDocument, id: string, actual: number): void {
     const note = score.note(id);
+    if (child(note, 'grace')) throw new EditError('Gli abbellimenti non entrano nei gruppi irregolari');
     const measure = score.measureOf(note);
     const events = score.events(measure);
     const event = score.eventOf(note);
@@ -690,12 +724,19 @@ export function toggleMark(score: ScoreDocument, index: number, mark: StructureM
     else insertAtEnd(measure, direction);
 }
 
-/** Indicazione metronomica in semiminime al minuto all'inizio della battuta; `null` la toglie. */
-export function setTempo(score: ScoreDocument, index: number, bpm: number | null): void {
+/**
+ * Indicazione di tempo all'inizio della battuta: semiminime al minuto ed eventualmente un testo, per esempio «Allegro»;
+ * `null` la toglie. Il testo accompagna sempre il metronomo, che serve all'ascolto.
+ */
+export function setTempo(score: ScoreDocument, index: number, bpm: number | null, words: string | null = null): void {
     if (bpm !== null && (!Number.isInteger(bpm) || bpm < 20 || bpm > 400)) throw new EditError('Il tempo va da 20 a 400 semiminime al minuto');
+    const label = (words ?? '').replace(/\s+/g, ' ').trim();
+    if (label && bpm === null) throw new EditError("Indica anche le semiminime al minuto: servono all'ascolto");
+    if (label.length > MAX_TEMPO_TEXT) throw new EditError(`Il testo del tempo può avere al massimo ${MAX_TEMPO_TEXT} caratteri`);
     const measure = score.measure(index);
     for (const direction of children(measure, 'direction')) {
-        for (const type of children(direction, 'direction-type')) if (child(type, 'metronome')) type.remove();
+        const tempo = isTempoDirection(direction);
+        for (const type of children(direction, 'direction-type')) if (child(type, 'metronome') || (tempo && child(type, 'words'))) type.remove();
         child(direction, 'sound')?.removeAttribute('tempo');
         const sound = child(direction, 'sound');
         if (sound && !sound.attributes.length && !sound.children.length) sound.remove();
@@ -708,14 +749,15 @@ export function setTempo(score: ScoreDocument, index: number, bpm: number | null
     if (bpm === null) return;
     const owner = score.document;
     const direction = element(owner, 'direction', null, { placement: 'above' });
-    const metronome = direction.appendChild(element(owner, 'direction-type')).appendChild(element(owner, 'metronome'));
+    if (label) direction.appendChild(element(owner, 'direction-type')).appendChild(element(owner, 'words', label, { 'font-weight': 'bold' }));
+    const metronome = direction.appendChild(element(owner, 'direction-type')).appendChild(element(owner, 'metronome', null, label ? { parentheses: 'yes' } : {}));
     metronome.appendChild(element(owner, 'beat-unit', 'quarter'));
     metronome.appendChild(element(owner, 'per-minute', bpm));
     direction.appendChild(element(owner, 'sound', null, { tempo: String(bpm) }));
     insertAtStart(measure, direction);
 }
 
-// Funzioni interne
+// Funzioni di supporto, usate anche dalla scrittura (`score-writing.ts`)
 
 const MARK_SOUNDS: Readonly<Record<StructureMark, string[]>> = {
     segno: ['segno'],
@@ -763,6 +805,18 @@ function tempoOf(measure: Element): number | null {
     }
     const sound = Number(child(measure, 'sound')?.getAttribute('tempo'));
     return sound ? Math.round(sound) : null;
+}
+
+/** Direzione con l'indicazione di tempo: metronomo o tempo dell'ascolto. */
+function isTempoDirection(direction: Element): boolean {
+    return children(direction, 'direction-type').some((type) => child(type, 'metronome')) || !!child(direction, 'sound')?.hasAttribute('tempo');
+}
+
+/** Testo che accompagna l'indicazione di tempo della battuta, per esempio «Allegro». */
+function tempoTextOf(measure: Element): string | null {
+    const direction = children(measure, 'direction').find(isTempoDirection);
+    const words = children(direction, 'direction-type').flatMap((type) => children(type, 'words').map((item) => (item.textContent ?? '').trim()));
+    return words.filter(Boolean).join(' ') || null;
 }
 
 function multiRestCount(measure: Element): number {
@@ -819,7 +873,7 @@ function barlineAt(measure: Element, location: 'left' | 'right'): Element {
 }
 
 /** Gli attributi che aprono la battuta, prima di note e avanzamenti; creati se richiesto. */
-function leadingAttributes(measure: Element, create = false): Element | null {
+export function leadingAttributes(measure: Element, create = false): Element | null {
     for (const item of children(measure)) {
         if (item.tagName === 'attributes') return item;
         if (['note', 'backup', 'forward'].includes(item.tagName)) break;
@@ -831,12 +885,7 @@ function leadingAttributes(measure: Element, create = false): Element | null {
     return created;
 }
 
-function insertAtStart(measure: Element, node: Element): void {
-    const anchor = children(measure).find((item) => !['print', 'attributes', 'barline'].includes(item.tagName) || (item.tagName === 'barline' && item.getAttribute('location') !== 'left'));
-    measure.insertBefore(node, anchor ?? null);
-}
-
-function insertAtEnd(measure: Element, node: Element): void {
+export function insertAtEnd(measure: Element, node: Element): void {
     const right = children(measure, 'barline').find((barline) => (barline.getAttribute('location') ?? 'right') === 'right');
     measure.insertBefore(node, right ?? null);
 }
@@ -910,7 +959,7 @@ function removeNote(score: ScoreDocument, note: Element): void {
 }
 
 /** Figura e punti della nota; per le note senza `type` si ricavano dalla durata. */
-function figureOf(score: ScoreDocument, note: Element): { type: NoteType; dots: number } | null {
+export function figureOf(score: ScoreDocument, note: Element): { type: NoteType; dots: number } | null {
     const type = text(child(note, 'type'));
     if (noteTypeOption(type)) return { type: type as NoteType, dots: children(note, 'dot').length };
     const divisions = score.stateBefore(note).divisions;
@@ -920,7 +969,7 @@ function figureOf(score: ScoreDocument, note: Element): { type: NoteType; dots: 
     return inferType(duration / divisions, tuplet?.actual ?? 1, tuplet?.normal ?? 1);
 }
 
-function tupletOf(note: Element): { actual: number; normal: number } | null {
+export function tupletOf(note: Element): { actual: number; normal: number } | null {
     const modification = child(note, 'time-modification');
     const actual = integer(child(modification, 'actual-notes'));
     const normal = integer(child(modification, 'normal-notes'));
@@ -928,7 +977,7 @@ function tupletOf(note: Element): { actual: number; normal: number } | null {
 }
 
 /** Scrive figura, punti, gruppo irregolare e durata sulle note di un accordo. */
-function writeFigure(score: ScoreDocument, notes: Element[], type: NoteType, dots: number, tuplet: { actual: number; normal: number } | null): void {
+export function writeFigure(score: ScoreDocument, notes: Element[], type: NoteType, dots: number, tuplet: { actual: number; normal: number } | null): void {
     const quarters = noteQuarters(type, dots, tuplet?.actual ?? 1, tuplet?.normal ?? 1);
     const divisions = score.ensureDivisions(quarters, score.stateBefore(notes[0]).divisions);
     const duration = Math.round(divisions * toNumber(quarters));
@@ -947,7 +996,7 @@ function writeFigure(score: ScoreDocument, notes: Element[], type: NoteType, dot
     }
 }
 
-function writePitch(note: Element, step: Step, octave: number): void {
+export function writePitch(note: Element, step: Step, octave: number): void {
     const pitch = child(note, 'pitch');
     if (pitch) {
         setChildText(pitch, 'step', step, PITCH_ORDER);
@@ -976,7 +1025,7 @@ function followTies(score: ScoreDocument, note: Element): void {
 }
 
 /** La nota con le note legate prima e dopo di lei. */
-function tieChain(score: ScoreDocument, note: Element): Element[] {
+export function tieChain(score: ScoreDocument, note: Element): Element[] {
     const chain = [note];
     let current: Element | null = note;
     while (current && hasTie(current, 'stop')) {
@@ -1027,17 +1076,17 @@ function neighbourEvent(score: ScoreDocument, note: Element, delta: 1 | -1): Not
     return (delta === 1 ? candidates[0] : candidates[candidates.length - 1]) ?? null;
 }
 
-function hasTie(note: Element, type: 'start' | 'stop'): boolean {
+export function hasTie(note: Element, type: 'start' | 'stop'): boolean {
     return children(note, 'tie').some((tie) => tie.getAttribute('type') === type);
 }
 
-function addTie(note: Element, type: 'start' | 'stop'): void {
+export function addTie(note: Element, type: 'start' | 'stop'): void {
     if (!hasTie(note, type)) insertOrdered(note, element(note.ownerDocument, 'tie', null, { type }), NOTE_ORDER);
     const notations = ensureChild(note, 'notations', NOTE_ORDER);
     if (!children(notations, 'tied').some((tied) => tied.getAttribute('type') === type)) notations.appendChild(element(note.ownerDocument, 'tied', null, { type }));
 }
 
-function removeTie(note: Element, type: 'start' | 'stop'): void {
+export function removeTie(note: Element, type: 'start' | 'stop'): void {
     for (const tie of children(note, 'tie')) if (tie.getAttribute('type') === type) tie.remove();
     const notations = child(note, 'notations');
     for (const tied of children(notations, 'tied')) if (tied.getAttribute('type') === type) tied.remove();
@@ -1045,7 +1094,7 @@ function removeTie(note: Element, type: 'start' | 'stop'): void {
 }
 
 /** Toglie le legature della nota anche dalle note a cui era legata. */
-function clearTies(score: ScoreDocument, note: Element): void {
+export function clearTies(score: ScoreDocument, note: Element): void {
     if (hasTie(note, 'start')) {
         const partner = tiePartner(score, note, 'next');
         if (partner) removeTie(partner, 'stop');
@@ -1070,17 +1119,17 @@ function removeSlurBetween(start: Element, stop: Element): void {
     }
 }
 
-function hasTuplet(note: Element, type: 'start' | 'stop'): boolean {
+export function hasTuplet(note: Element, type: 'start' | 'stop'): boolean {
     return children(child(note, 'notations'), 'tuplet').some((tuplet) => tuplet.getAttribute('type') === type);
 }
 
-function addTuplet(note: Element, type: 'start' | 'stop'): void {
+export function addTuplet(note: Element, type: 'start' | 'stop'): void {
     const notations = ensureChild(note, 'notations', NOTE_ORDER);
     notations.appendChild(element(note.ownerDocument, 'tuplet', null, type === 'start' ? { type, bracket: 'yes' } : { type }));
 }
 
 /** Altezza della nota intonata precedente nella stessa voce, per trasformare una pausa in nota. */
-function previousPitch(score: ScoreDocument, note: Element): { step: Step; octave: number } | null {
+export function previousPitch(score: ScoreDocument, note: Element): { step: Step; octave: number } | null {
     const notes = score.notes();
     const voice = voiceOf(note);
     for (let index = notes.indexOf(note) - 1; index >= 0; index--) {
@@ -1112,7 +1161,7 @@ function dynamicOf(note: Element): Dynamic | null {
 }
 
 /** Dopo una modifica delle note: ritorni all'inizio della battuta per le altre voci e travature per movimento. */
-function refreshMeasure(score: ScoreDocument, measure: Element): void {
+export function refreshMeasure(score: ScoreDocument, measure: Element): void {
     let position = 0;
     for (const item of children(measure)) {
         if (item.tagName === 'note') {

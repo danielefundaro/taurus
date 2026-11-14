@@ -9,6 +9,7 @@ import com.fundaro.zodiac.taurus.repository.InstrumentsRepository;
 import com.fundaro.zodiac.taurus.repository.MediaRepository;
 import com.fundaro.zodiac.taurus.repository.TracksRepository;
 import com.fundaro.zodiac.taurus.repository.instrumentsuggestion.SheetMusicInstrumentSuggestionRepository;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreWritingCleanup;
 import com.fundaro.zodiac.taurus.service.QueueUploadFilesService;
 import com.fundaro.zodiac.taurus.service.upload.UploadJobMetrics;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -61,7 +62,8 @@ class TracksServiceImplTest {
             sender,
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         JwtAuthenticationToken token = authentication();
         MultipartFile file = mock(MultipartFile.class);
@@ -101,7 +103,8 @@ class TracksServiceImplTest {
             sender,
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         JwtAuthenticationToken token = authentication();
         MultipartFile file = mock(MultipartFile.class);
@@ -141,7 +144,8 @@ class TracksServiceImplTest {
             sender,
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         JwtAuthenticationToken token = authentication();
         Tracks track = new Tracks();
@@ -186,7 +190,8 @@ class TracksServiceImplTest {
             sender,
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         JwtAuthenticationToken token = authentication();
         Tracks track = new Tracks();
@@ -228,7 +233,8 @@ class TracksServiceImplTest {
             sender,
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         JwtAuthenticationToken token = authentication();
         Tracks track = new Tracks();
@@ -263,7 +269,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         Tracks entity = new Tracks();
         TracksDTO request = new TracksDTO();
@@ -299,7 +306,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         Tracks entity = new Tracks();
         entity.setId(8L);
@@ -345,7 +353,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         Tracks entity = new Tracks();
         entity.setId(8L);
@@ -388,7 +397,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         Tracks entity = new Tracks();
         entity.setId(8L);
@@ -435,7 +445,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         Tracks entity = new Tracks();
         entity.setId(8L);
@@ -461,7 +472,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
@@ -485,7 +497,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         MultipartFile file = mock(MultipartFile.class);
         when(file.isEmpty()).thenReturn(false);
@@ -512,7 +525,8 @@ class TracksServiceImplTest {
             mock(Sender.class),
             new ImageTransformationService(),
             new UploadJobMetrics(new SimpleMeterRegistry()),
-            mock(SheetMusicInstrumentSuggestionRepository.class)
+            mock(SheetMusicInstrumentSuggestionRepository.class),
+            mock(ScoreWritingCleanup.class)
         );
         MultipartFile file = mock(MultipartFile.class);
         Tracks track = new Tracks();

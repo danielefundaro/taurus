@@ -68,7 +68,7 @@ class TenantFeaturesSecurityConfigurationTest {
     @BeforeEach
     void answerWithTheFeatures() {
         when(tenantFeatureService.current()).thenReturn(
-            new TenantFeaturesDTO("banda", "Banda", 1L, true, false, false, false, false, false, false, false, false, false, false, true, false)
+            new TenantFeaturesDTO("banda", "Banda", 1L, true, false, false, false, false, false, false, false, false, false, false, true, false, false)
         );
         when(tenantFeatureService.capabilities()).thenReturn(
             Map.of(TenantFeature.FINANCE, new TenantFeatureCapabilityDTO(true, null, List.of()))

@@ -4,6 +4,7 @@ import com.fundaro.zodiac.taurus.config.ApplicationProperties;
 import com.fundaro.zodiac.taurus.domain.Media;
 import com.fundaro.zodiac.taurus.domain.SheetsMusic;
 import com.fundaro.zodiac.taurus.domain.Tracks;
+import com.fundaro.zodiac.taurus.domain.enumeration.TenantFeature;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersion;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionOrigin;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionStatus;
@@ -11,6 +12,7 @@ import com.fundaro.zodiac.taurus.repository.TracksRepository;
 import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
 import com.fundaro.zodiac.taurus.security.SecurityUtils;
 import com.fundaro.zodiac.taurus.service.MediaService;
+import com.fundaro.zodiac.taurus.service.TenantFeatureService;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.CorrectionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.MeasureBoxDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.MusicXmlPartDTO;
@@ -24,6 +26,9 @@ import com.fundaro.zodiac.taurus.service.scoreplayback.ScorePlaybackSupport.View
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScoreVersionWriter.NewVersion;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrClient;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrException;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreWritingMetrics;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
@@ -46,7 +51,8 @@ import java.util.stream.Collectors;
  * Management of the MusicXML versions of a part: upload, correction, approval, choice of the current version and
  * playback settings. Reserved to archivists and administrators by the security configuration. MIDI files are converted
  * into MusicXML by the OMR service, when it is configured. Approving a version closes the error reports made on the
- * other versions of the part.
+ * other versions of the part. Versions written in the correction and in the writing editor are accepted only from the
+ * editor session that holds the edit lock of the part.
  */
 @Service
 @Transactional
@@ -66,6 +72,10 @@ public class ScoreVersionService {
     private final OmrClient omrClient;
     private final ScorePlaybackMetrics metrics;
     private final ScoreErrorReportService reportService;
+    private final ScoreEditLockService lockService;
+    private final ScoreDraftService draftService;
+    private final TenantFeatureService tenantFeatureService;
+    private final ScoreWritingMetrics writingMetrics;
 
     public ScoreVersionService(
         ScorePlaybackSupport support,
@@ -76,7 +86,11 @@ public class ScoreVersionService {
         ScoreVersionWriter writer,
         OmrClient omrClient,
         ScorePlaybackMetrics metrics,
-        ScoreErrorReportService reportService
+        ScoreErrorReportService reportService,
+        ScoreEditLockService lockService,
+        ScoreDraftService draftService,
+        TenantFeatureService tenantFeatureService,
+        ScoreWritingMetrics writingMetrics
     ) {
         this.support = support;
         this.versionRepository = versionRepository;
@@ -87,6 +101,10 @@ public class ScoreVersionService {
         this.omrClient = omrClient;
         this.metrics = metrics;
         this.reportService = reportService;
+        this.lockService = lockService;
+        this.draftService = draftService;
+        this.tenantFeatureService = tenantFeatureService;
+        this.writingMetrics = writingMetrics;
     }
 
     /** A readable upload: the MusicXML document, converted when the file is MIDI. */
@@ -166,13 +184,20 @@ public class ScoreVersionService {
     }
 
     /**
-     * Stores the content written in the correction editor as a new version derived from {@code parentVersionId}, and
-     * makes it the current one. The version inherits the pages of its parent and, through {@code measureSources}, the
-     * position of the measures on them.
+     * Stores the content written in an editor as a new version and makes it the current one: a correction or, with
+     * origin {@code WRITING}, a version written in the writing editor.
+     * <p>
+     * A correction derives from {@code parentVersionId}: it inherits the pages of its parent and, through
+     * {@code measureSources}, the position of the measures on them.
      */
     public ScoreVersionDTO correct(Long trackId, Long scoreId, CorrectionDTO correction, AbstractAuthenticationToken token) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
+        if (correction != null && correction.origin() == ScoreVersionOrigin.WRITING) return write(part, correction, token);
+        if (correction != null && correction.origin() != null && correction.origin() != ScoreVersionOrigin.CORRECTION) {
+            throw rejectedCorrection(invalidCorrection("origin"));
+        }
         if (correction == null || correction.parentVersionId() == null) throw versionNotFound();
+        lockService.requireHeld(part.getId(), correction.editSession(), token);
         ScoreVersion parent = requireVersion(part, correction.parentVersionId());
         if (correction.content() == null || correction.content().isBlank()) throw rejectedCorrection(invalidCorrection("empty"));
         byte[] content = correction.content().getBytes(StandardCharsets.UTF_8);
@@ -225,9 +250,55 @@ public class ScoreVersionService {
             throw rejectedCorrection(invalidCorrection(exception.reason()));
         }
         metrics.upload(CORRECTION_FORMAT, "stored");
+        writingMetrics.save("correction");
 
         part.setCurrentScoreVersionId(version.getId());
         if (correction.approve()) reportService.closeForApproval(part, version.getId(), actor);
+        return support.toDto(version, part);
+    }
+
+    /**
+     * Stores a version written in the writing editor and removes the draft of the part. When another version became the
+     * current one after the writing started, the author has to confirm that the written one replaces it.
+     */
+    private ScoreVersionDTO write(SheetsMusic part, CorrectionDTO request, AbstractAuthenticationToken token) {
+        tenantFeatureService.requireEnabled(TenantFeature.SCORE_WRITING);
+        lockService.requireHeld(part.getId(), request.editSession(), token);
+        ScoreVersion parent = request.parentVersionId() == null ? null : requireVersion(part, request.parentVersionId());
+        if (!request.confirmOutdated() && !Objects.equals(part.getCurrentScoreVersionId(), request.parentVersionId())) {
+            throw new RequestAlertException(HttpStatus.CONFLICT, "Another version became current", ScorePlaybackSupport.ENTITY, "scoreWriting.draftOutdated");
+        }
+        ScoreDraftService.Content content = draftService.readContent(request.content());
+
+        String actor = actor(token);
+        ScoreVersion version;
+        try {
+            version = writer.write(
+                new NewVersion(
+                    part,
+                    content.document(),
+                    ScoreVersionOrigin.WRITING,
+                    "scrittura",
+                    null,
+                    content.part().name(),
+                    null,
+                    null,
+                    parent == null ? null : parent.getId(),
+                    null,
+                    request.approve(),
+                    actor
+                ),
+                (stored, fileName) -> mediaService.store(stored, fileName, MusicXmlDocuments.COMPRESSED_MEDIA_TYPE, MEDIA_CATEGORY, token)
+            ).version();
+        } catch (MusicXmlException exception) {
+            throw new RequestAlertException(HttpStatus.UNPROCESSABLE_CONTENT, "Invalid written score", ScorePlaybackSupport.ENTITY, "scoreWriting.contentInvalid")
+                .with("reason", exception.reason());
+        }
+        writingMetrics.save("writing");
+
+        part.setCurrentScoreVersionId(version.getId());
+        draftService.remove(part.getId());
+        if (request.approve()) reportService.closeForApproval(part, version.getId(), actor);
         return support.toDto(version, part);
     }
 

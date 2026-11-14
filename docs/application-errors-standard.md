@@ -509,6 +509,7 @@ Le chiavi sono riportate senza il prefisso `error.` che il backend aggiunge nel 
 | `tenantFeature.inventorySignature.disabled` | 403 | La firma elettronica è disattivata, direttamente o perché lo sono i Fogli di affidamento | — | «La funzionalità Firma elettronica non è disponibile per questo tenant» |
 | `tenantFeature.calendar.disabled` | 403 | Il calendario è disattivato: eventi, serie, presenze, eventi del profilo e dell'utente, voci della dashboard ed economia degli eventi | — | «La funzionalità Calendario non è disponibile per questo tenant» |
 | `tenantFeature.eventPayouts.disabled` | 403 | I compensi ai presenti sono disattivati, direttamente o perché lo sono l'Economia o il Calendario | — | «La funzionalità Compensi ai presenti non è disponibile per questo tenant» |
+| `tenantFeature.scoreWriting.disabled` | 403 | La scrittura musicale è disattivata, direttamente, perché non è installata o perché lo è l'Ascolto delle parti: bozze e versioni scritte | — | «La funzionalità Scrittura musicale non è disponibile per questo tenant» |
 
 ### Utenti e tenant
 
@@ -971,7 +972,7 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scorePlayback.playback.notAvailable` | 404 | La parte non ha una versione ascoltabile dall'utente | — | «Ascolto non ancora disponibile» |
 | `scorePlayback.upload.empty` | 400 | Caricamento di un file vuoto | — | «Il file è vuoto» |
 | `scorePlayback.upload.unsupportedFormat` | 415 | Il file non è MusicXML (`.musicxml`, `.xml`, `.mxl`) né, con il servizio OMR configurato, MIDI (`.mid`, `.midi`) | — | «Formato non supportato: caricare un file MusicXML (.musicxml, .xml, .mxl) o MIDI (.mid, .midi)» |
-| `scorePlayback.upload.tooLarge` | 413 | Il file, o la correzione scritta nell'editor, supera la dimensione massima | `maxMegabytes` | «Il file supera {maxMegabytes} MB» |
+| `scorePlayback.upload.tooLarge` | 413 | Il file, la correzione o la parte scritta negli editor, o la sua bozza, supera la dimensione massima | `maxMegabytes` | «Il file supera {maxMegabytes} MB» |
 | `scorePlayback.upload.invalid` | 422 | Il file non è una partitura MusicXML leggibile, o un MIDI convertibile | `reason`: `empty`, `malformed`, `notMusicXml`, `timewise`, `archive`, `archiveTooLarge`, `noParts`, `unreadable`, `unreadableMidi` | Testo per motivo, per esempio «Il file non è un MusicXML valido» |
 | `scorePlayback.upload.partRequired` | 422 | Il file contiene più parti e non è indicata quella da importare | — | «Scegliere la parte da importare» |
 | `scorePlayback.upload.partNotFound` | 422 | La parte indicata non è nel file | — | «La parte scelta non è presente nel file» |
@@ -980,10 +981,22 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scorePlayback.recognition.alreadyRunning` | 409 | Il riconoscimento della parte, o di tutte le parti con pagine, è già in coda o in corso | — | «Riconoscimento già in corso» |
 | `scorePlayback.recognition.noPages` | 422 | La parte, o nessuna parte del brano, ha pagine da riconoscere | — | «Nessuna pagina da riconoscere» |
 | `scorePlayback.omr.unavailable` | 503 | Il servizio di riconoscimento non è configurato o non risponde, per il riconoscimento o la conversione di un MIDI | — | «Servizio di riconoscimento non disponibile: riprovare più tardi» |
-| `scorePlayback.correction.invalid` | 422 | La correzione scritta nell'editor non è un MusicXML con una sola parte, oppure l'origine delle battute non corrisponde alla versione di partenza | `reason`: `empty`, `malformed`, `notMusicXml`, `timewise`, `noParts`, `severalParts`, `measureSources` | Testo per motivo, per esempio «La correzione deve contenere una sola parte» |
+| `scorePlayback.correction.invalid` | 422 | La correzione scritta nell'editor non è un MusicXML con una sola parte, l'origine delle battute non corrisponde alla versione di partenza, oppure l'origine indicata non è né una correzione né una scrittura | `reason`: `empty`, `malformed`, `notMusicXml`, `timewise`, `noParts`, `severalParts`, `measureSources`, `origin` | Testo per motivo, per esempio «La correzione deve contenere una sola parte» |
 | `scorePlayback.report.invalid` | 422 | Segnalazione senza descrizione, con una descrizione oltre 1000 caratteri o un numero di battuta oltre 16 caratteri | — | «Descrivere l'errore in al massimo 1000 caratteri» |
 | `scorePlayback.report.limitReached` | 409 | L'utente ha già il numero massimo di segnalazioni aperte sulla parte | `maxOpen` | «Hai già {maxOpen} segnalazioni aperte su questa parte: attendi che vengano esaminate» |
 | `scorePlayback.report.notFound` | 404 | Segnalazione inesistente o di un'altra traccia | — | «Segnalazione non trovata» |
+
+### Scrittura musicale e blocco degli editor
+
+| Chiave | HTTP | Quando si verifica | Parametri | Messaggio |
+| --- | --- | --- | --- | --- |
+| `scoreWriting.locked` | 409 | Un'altra sessione dell'editor, di scrittura o di correzione, ha il blocco della parte: all'apertura, al rinnovo, al salvataggio di una bozza o di una versione, o allo scarto di una bozza mentre qualcuno scrive. `ownerName` è il nome di chi ha il blocco, `since` l'istante ISO 8601 in cui l'ha preso, `sameUser` indica lo stesso utente in un'altra finestra | `ownerName` facoltativo, `since`, `sameUser` | «In modifica da {ownerName} dalle {since}», oppure «La parte è aperta in un'altra finestra dalle {since}» |
+| `scoreWriting.sessionInvalid` | 400 | La sessione dell'editor manca o non è un identificativo di 8–64 lettere, cifre o trattini | — | «Sessione dell'editor non valida: ricaricare la pagina» |
+| `scoreWriting.contentInvalid` | 422 | La bozza o la versione scritta non è un MusicXML con una sola parte | `reason`: `empty`, `malformed`, `notMusicXml`, `timewise`, `noParts`, `severalParts` | Testo per motivo, per esempio «La parte scritta deve contenere una sola parte» |
+| `scoreWriting.draftConflict` | 409 | La bozza sul server è cambiata, o è stata eliminata, dopo che l'editor l'ha letta | — | «La bozza è stata modificata altrove: riaprire l'editor» |
+| `scoreWriting.draftTooFrequent` | 429 | Salvataggio della stessa bozza prima dell'intervallo minimo dal precedente | — | Nessuno: l'editor riprova al salvataggio successivo |
+| `scoreWriting.draftOutdated` | 409 | Salvataggio di una versione scritta quando un'altra versione è diventata corrente dopo l'inizio della scrittura, senza la conferma esplicita | — | «Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla» |
+| `scoreWriting.instrumentNotFound` | 400 | Uno degli strumenti scelti per una parte scritta da zero non esiste o è stato eliminato | — | «Uno degli strumenti scelti non esiste più: ricaricare la pagina» |
 
 ### Onboarding
 
