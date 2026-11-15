@@ -4,9 +4,9 @@ import { AutoCompleteCompleteEvent } from 'primeng/autocomplete';
 import { finalize, first } from 'rxjs';
 import { StateLabelsMap } from '../../../../constants';
 import { ImportsModule } from '../../../../imports';
-import { Albums, AlbumsCriteria, EventPreparationProgramEntry, EventPreparationScore, EventPreparationScoreFile, EventPreparationView, Tracks, TracksCriteria } from '../../../../module';
+import { Albums, AlbumsCriteria, EventPreparationProgramEntry, EventPreparationScore, EventPreparationScoreFile, EventPreparationView, SheetsMusic, Tracks, TracksCriteria } from '../../../../module';
 import { StringFilter } from '../../../../module/criteria/filter';
-import { AlbumsService, ConfirmService, EventPreparationService, MediaService, ToastService, TracksService, withHandledErrors } from '../../../../service';
+import { AlbumsService, ConfirmService, EventPreparationService, MediaService, PrinterService, ToastService, TracksService, withHandledErrors } from '../../../../service';
 import { programFromAlbum } from '../event-program';
 import { formatDuration, isVersionConflict, MAX_PREPARATION_ROWS, VERSION_CONFLICT } from './preparation-labels';
 
@@ -35,6 +35,8 @@ export class PreparationProgramComponent implements OnChanges {
     @Input() editable = false;
     /** The personal view lists only the parts of the reader's instruments. */
     @Input() personal = false;
+    /** The name of the event, the title of the printed program. */
+    @Input() eventName = '';
     @Output() readonly saved = new EventEmitter<EventPreparationView>();
     @Output() readonly dirtyChange = new EventEmitter<boolean>();
     @Output() readonly conflict = new EventEmitter<void>();
@@ -64,7 +66,8 @@ export class PreparationProgramComponent implements OnChanges {
         private readonly albumsService: AlbumsService,
         private readonly mediaService: MediaService,
         private readonly confirmService: ConfirmService,
-        private readonly toastService: ToastService
+        private readonly toastService: ToastService,
+        private readonly printerService: PrinterService
     ) {}
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -79,6 +82,17 @@ export class PreparationProgramComponent implements OnChanges {
         return this.rows.length >= this.maxRows;
     }
 
+    /** Pages of the saved program that the print would include, each track once. */
+    protected get printablePages(): number {
+        return this.printableEntries().reduce((total, entry) => total + entry.scores.reduce((pages, score) => pages + score.files.length, 0), 0);
+    }
+
+    protected get printHint(): string {
+        if (this.dirty) return 'Salva il programma prima di stamparlo';
+        if (!this.printablePages) return this.personal ? 'Nessuno spartito pronto per i tuoi strumenti' : 'Nessuna parte con pagine da stampare';
+        return 'Le parti di tutti i brani per strumento, in ordine di scaletta e nel formato marcia';
+    }
+
     protected get hasMoreTracks(): boolean {
         return this.trackSuggestions.length < this.trackTotal;
     }
@@ -90,7 +104,31 @@ export class PreparationProgramComponent implements OnChanges {
 
     protected scoreState(score: EventPreparationScore): { label: string; severity: 'success' | 'warn' | 'secondary' } {
         if (score.ready) return { label: 'Pronto', severity: 'success' };
+        if (score.unengraved) return { label: 'Da impaginare', severity: 'warn' };
         return score.needsReview ? { label: 'In revisione', severity: 'warn' } : { label: 'Non pronto', severity: 'secondary' };
+    }
+
+    /**
+     * The saved program in the preview: the parts of every track, each track once even when it returns as an encore,
+     * by instrument and in the order of the program. The parts to engrave are counted, not printed.
+     */
+    protected printProgram(): void {
+        if (this.dirty || !this.printablePages) return;
+
+        const scores: SheetsMusic[] = [];
+        const unengraved: number[] = [];
+        this.printableEntries().forEach((entry) =>
+            entry.scores.forEach((score) => {
+                scores.push({
+                    id: score.id,
+                    description: score.description,
+                    instruments: score.instruments.map((name, index) => ({ index: score.instrumentIds[index], name })),
+                    media: score.files.map((file) => ({ index: file.mediaId, name: file.fileName }))
+                });
+                if (score.unengraved) unengraved.push(score.id);
+            })
+        );
+        this.printerService.previewProgram(this.eventName, scores, unengraved);
     }
 
     protected searchTracks(event: AutoCompleteCompleteEvent): void {
@@ -191,6 +229,15 @@ export class PreparationProgramComponent implements OnChanges {
                 anchor.click();
                 URL.revokeObjectURL(url);
             });
+    }
+
+    private printableEntries(): EventPreparationProgramEntry[] {
+        const tracks = new Set<number>();
+        return (this.entries ?? []).filter((entry) => {
+            if (!entry.trackAvailable || tracks.has(entry.trackId)) return false;
+            tracks.add(entry.trackId);
+            return true;
+        });
     }
 
     protected markDirty(): void {

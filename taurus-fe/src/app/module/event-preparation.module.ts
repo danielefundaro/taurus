@@ -70,8 +70,12 @@ export interface EventPreparationScore {
     id: number;
     description?: string;
     instruments: string[];
+    /** The ids of the instruments, in the order of `instruments`. */
+    instrumentIds: number[];
     ready: boolean;
     needsReview: boolean;
+    /** A part with a version and without pages, written or derived and still to engrave. */
+    unengraved: boolean;
     files: EventPreparationScoreFile[];
 }
 

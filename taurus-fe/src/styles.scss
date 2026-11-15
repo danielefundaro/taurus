@@ -70,6 +70,63 @@
     }
 }
 
+/*
+ * Formato marcia: due pagine di 18 × 13 cm a grandezza reale su un A4 verticale, con la linea di taglio tratteggiata.
+ * Senza il supporto delle pagine con nome, l'A4 verticale si sceglie nella finestra di stampa.
+ */
+@page march {
+    size: A4 portrait;
+    margin: 0;
+}
+
+app-preview .print-sheet-preview.print-sheet-preview--march {
+    grid-template-rows: none;
+    align-content: space-evenly;
+    justify-items: center;
+}
+
+app-preview .print-sheet-preview--march .print-sheet-preview__slot {
+    width: 85.714%;
+    aspect-ratio: 180 / 130;
+    outline: 1px dashed #94a3b8;
+}
+
+app-preview .print-sheet-preview--march .print-sheet-preview__slot img {
+    width: 100%;
+    height: 100%;
+}
+
+app-preview .print-sheet-preview--march .print-sheet-preview__slot--blank {
+    outline: none;
+}
+
+@media print {
+    app-preview .print-sheet.print-sheet--march {
+        page: march;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: space-evenly;
+        padding: 0;
+    }
+
+    app-preview .print-sheet--march .print-sheet__slot {
+        flex: none;
+        width: 180mm;
+        height: 130mm;
+        outline: 0.2mm dashed #888;
+    }
+
+    app-preview .print-sheet--march .print-sheet__slot img {
+        width: 100%;
+        height: 100%;
+    }
+
+    app-preview .print-sheet--march .print-sheet__slot--blank {
+        outline: none;
+    }
+}
+
 @media print and (orientation: portrait) {
     app-preview .print-sheet--two-up {
         grid-template-rows: repeat(2, minmax(0, 1fr));

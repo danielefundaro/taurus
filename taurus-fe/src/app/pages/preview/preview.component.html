@@ -97,13 +97,17 @@
                 <div class="print-options" appTourAnchor="preview.print" aria-label="Impostazioni di stampa">
                     <label class="print-option">
                         <span>Pagine per foglio</span>
-                        <select [(ngModel)]="printPagesPerSheet" aria-label="Pagine dello spartito per foglio">
+                        <select [(ngModel)]="printLayout" aria-label="Pagine dello spartito per foglio">
                             <option [ngValue]="1">1</option>
                             <option [ngValue]="2">2 · automatico</option>
+                            <option [ngValue]="'march'">2 · formato marcia</option>
                         </select>
                     </label>
                     <span class="print-sheet-count">{{ printSheetCount }} {{ printSheetCount === 1 ? 'foglio' : 'fogli'
                         }}</span>
+                    @if (marchFormat && nonMarchPageCount) {
+                    <span class="print-sheet-count text-orange-600" role="status">{{ nonMarchPageLabel }}</span>
+                    }
                 </div>
 
                 @if (mediaStreams.length) {
@@ -138,12 +142,12 @@
                     }
                 </div>
                 } @else {
-                <div class="paper-frame print-sheet-preview"
+                <div class="paper-frame print-sheet-preview" [class.print-sheet-preview--march]="marchFormat"
                     [class.print-sheet-preview--portrait]="printOrientation === 'portrait'"
                     [class.print-sheet-preview--landscape]="printOrientation === 'landscape'"
                     [style.transform]="'scale(' + zoom / 100 + ')'">
                     @for (mediaStream of currentPrintSheet; track $index; let slotIndex = $index) {
-                    <div class="print-sheet-preview__slot"
+                    <div class="print-sheet-preview__slot" [class.print-sheet-preview__slot--blank]="!mediaStream"
                         [class.active]="currentPrintSheetStartPage + slotIndex === currentPage">
                         @if (mediaStream) {
                         <span>Pagina {{ currentPrintSheetStartPage + slotIndex }}</span>
@@ -194,9 +198,10 @@
 
 <div class="print-pages print">
     @for (sheet of printSheets; track $index; let sheetIndex = $index) {
-    <section class="print-sheet" [class.print-sheet--two-up]="printPagesPerSheet === 2">
+    <section class="print-sheet" [class.print-sheet--two-up]="printPagesPerSheet === 2 && !marchFormat"
+        [class.print-sheet--march]="marchFormat">
         @for (mediaStream of sheet; track $index; let slotIndex = $index) {
-        <div class="print-sheet__slot">
+        <div class="print-sheet__slot" [class.print-sheet__slot--blank]="!mediaStream">
             @if (mediaStream && mediaStatus(mediaStream) === 'ready') {
             <img [src]="mediaSource(mediaStream)"
                 [alt]="'Pagina ' + (sheetIndex * printPagesPerSheet + slotIndex + 1) + ' di ' + mediaStreams.length"

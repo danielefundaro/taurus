@@ -75,3 +75,51 @@ describe('PrinterService album preview', () => {
         expect(service.previewError).toBeFalse();
     });
 });
+
+describe('PrinterService event program preview', () => {
+    let navigate: jasmine.Spy;
+    let service: PrinterService;
+
+    beforeEach(() => {
+        navigate = jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true));
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: TracksService, useValue: { getById: jasmine.createSpy('getById') } },
+                { provide: Router, useValue: { navigate } }
+            ]
+        });
+        service = TestBed.inject(PrinterService);
+    });
+
+    it('opens the parts of the program by instrument, with the parts to engrave known by the event', () => {
+        const parts = [
+            { id: 4, instruments: [{ index: 3, name: 'Tromba' }], media: [{ index: 99 }] },
+            { id: 6, instruments: [{ index: 8, name: 'Flicorno' }], media: [] }
+        ];
+
+        service.previewProgram('  Sfilata  ', parts, [6]);
+
+        expect([service.previewTitle, service.previewSource, service.byInstrument]).toEqual(['Sfilata', 'Scaletta', true]);
+        expect(service.scores).toEqual(parts);
+        expect(service.scores).not.toBe(parts);
+        expect(parts.map((part) => service.isUnengraved(part))).toEqual([false, true]);
+        expect(navigate).toHaveBeenCalledWith(['preview']);
+
+        service.retry();
+        expect(navigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('forgets the program when another source opens or the state is released', () => {
+        service.previewProgram('', [{ id: 6, media: [] }], [6]);
+        expect(service.previewTitle).toBe('Scaletta');
+
+        service.preview({ name: 'Marcia', scores: [{ id: 6, media: [] }] } as never);
+        expect([service.byInstrument, service.isUnengraved({ id: 6, media: [] })]).toEqual([false, false]);
+        // A written part of a track carries its version: it stays to engrave without the program.
+        expect(service.isUnengraved({ id: 6, media: [], currentScoreVersionId: 2 })).toBeTrue();
+
+        service.previewProgram('Sfilata', [{ id: 6, media: [] }], [6]);
+        service.clear();
+        expect([service.byInstrument, service.previewSource, service.isUnengraved({ id: 6, media: [] })]).toEqual([false, 'Traccia', false]);
+    });
+});

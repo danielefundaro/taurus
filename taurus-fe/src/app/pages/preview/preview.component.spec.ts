@@ -6,6 +6,7 @@ import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { SheetsMusic } from '../../module';
 import { MediaService, PrinterService, ScorePlaybackService, ToastService } from '../../service';
+import { unengravedPart } from '../../score-editor/score-engraving';
 import { PreviewComponent } from './preview.component';
 
 const TRANSPARENT_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -26,7 +27,7 @@ describe('PreviewComponent', () => {
 
     beforeEach(() => {
         component = new PreviewComponent(
-            { scores: [], previewTitle: 'Titolo', previewSource: 'Traccia', clear: () => undefined } as unknown as PrinterService,
+            { scores: [], previewTitle: 'Titolo', previewSource: 'Traccia', clear: () => undefined, isUnengraved: unengravedPart } as unknown as PrinterService,
             { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
             { navigate: () => Promise.resolve(true), currentNavigation: () => null, lastSuccessfulNavigation: () => null } as unknown as Router,
             { back: () => undefined } as Location,
@@ -50,7 +51,7 @@ describe('PreviewComponent', () => {
                 ],
                 previewTitle: 'Titolo',
                 previewSource: 'Traccia',
-                clear: () => undefined
+                clear: () => undefined, isUnengraved: unengravedPart
             } as unknown as PrinterService,
             { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
             { navigate: () => Promise.resolve(true) } as unknown as Router,
@@ -72,7 +73,7 @@ describe('PreviewComponent', () => {
         const back = jasmine.createSpy('back');
         const warn = jasmine.createSpy('warn');
         const orphan = new PreviewComponent(
-            { scores: [], previewTitle: 'Spartiti selezionati', previewSource: 'Traccia', clear: () => undefined } as unknown as PrinterService,
+            { scores: [], previewTitle: 'Spartiti selezionati', previewSource: 'Traccia', clear: () => undefined, isUnengraved: unengravedPart } as unknown as PrinterService,
             { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
             { navigate, currentNavigation: () => null, lastSuccessfulNavigation: () => null } as unknown as Router,
             { back } as unknown as Location,
@@ -99,7 +100,7 @@ describe('PreviewComponent', () => {
                 scores: [{ instruments: [{ index: 7, name: 'Flauto' }], media: [] }],
                 previewTitle: 'Marcia sinfonica',
                 previewSource: 'Traccia',
-                clear: () => undefined
+                clear: () => undefined, isUnengraved: unengravedPart
             } as unknown as PrinterService,
             { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
             { navigate, currentNavigation: () => ({ previousNavigation: {} }), lastSuccessfulNavigation: () => null } as unknown as Router,
@@ -122,7 +123,7 @@ describe('PreviewComponent', () => {
         const open = (playback: ScorePlaybackService, written: SheetsMusic[]) => {
             const warn = jasmine.createSpy('warn');
             const preview = new PreviewComponent(
-                { scores: written, previewTitle: 'Marcia', previewSource: 'Traccia', clear: () => undefined } as unknown as PrinterService,
+                { scores: written, previewTitle: 'Marcia', previewSource: 'Traccia', clear: () => undefined, isUnengraved: unengravedPart } as unknown as PrinterService,
                 { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
                 { navigate: () => Promise.resolve(true), currentNavigation: () => ({ previousNavigation: {} }), lastSuccessfulNavigation: () => null } as unknown as Router,
                 { back: () => undefined } as unknown as Location,
@@ -156,7 +157,7 @@ describe('PreviewComponent', () => {
                 ],
                 previewTitle: 'Marcia',
                 previewSource: 'Traccia',
-                clear: () => undefined
+                clear: () => undefined, isUnengraved: unengravedPart
             } as unknown as PrinterService,
             { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
             { navigate: () => Promise.resolve(true) } as unknown as Router,
@@ -218,6 +219,54 @@ describe('PreviewComponent', () => {
         expect(component['printOrientation']).toBe('landscape');
     });
 
+    it('prints the program of an event by instrument and in the march format', () => {
+        const program = new PreviewComponent(
+            {
+                scores: [
+                    { id: 1, instruments: [{ index: 3, name: 'Tromba' }], media: [{ index: 1 }] },
+                    { id: 2, instruments: [{ index: 8, name: 'Flicorno' }], media: [{ index: 2 }] },
+                    { id: 3, instruments: [{ index: 8, name: 'Flicorno' }, { index: 3, name: 'Tromba' }], media: [{ index: 3 }] },
+                    { id: 4, instruments: [{ index: 3, name: 'Tromba' }], media: [{ index: 4 }] },
+                    { id: 5, instruments: [], media: [{ index: 5 }] }
+                ],
+                previewTitle: 'Sfilata',
+                previewSource: 'Scaletta',
+                byInstrument: true,
+                clear: () => undefined,
+                isUnengraved: unengravedPart
+            } as unknown as PrinterService,
+            { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
+            { navigate: () => Promise.resolve(true) } as unknown as Router,
+            { back: () => undefined } as Location,
+            { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
+            { markForCheck: () => undefined } as ChangeDetectorRef,
+            { warn: () => undefined } as unknown as ToastService,
+            MEMBER
+        );
+        program.ngOnInit();
+        const state = program as unknown as Record<string, any>;
+
+        // The parts of each instrument in the order of the program; one with two instruments goes under the first.
+        expect(state['mediaStreams']).toEqual(['/media/1', '/media/3', '/media/4', '/media/2', '/media/5']);
+        expect([state['printLayout'], state['marchFormat'], state['printPagesPerSheet'], state['printOrientation']]).toEqual(['march', true, 2, 'portrait']);
+        expect(state['printSheets'][2]).toEqual(['/media/5', null]);
+
+        state['selectedInstruments']['3'] = false;
+        state['selectedInstrumentChange']();
+        expect(state['mediaStreams']).toEqual(['/media/2', '/media/3', '/media/5']);
+
+        // An engraved march page is 2126 × 1535 pixels at 300 DPI; a scanned A4 page is reduced to fit.
+        state['printPageDimensions'].set('/media/2', { width: 2126, height: 1535 });
+        state['printPageDimensions'].set('/media/3', { width: 2480, height: 3508 });
+        expect(state['nonMarchPageLabel']).toBe('1 pagina non in formato marcia, ridotta in stampa');
+        state['printPageDimensions'].set('/media/5', { width: 3508, height: 2480 });
+        expect([state['nonMarchPageCount'], state['nonMarchPageLabel']]).toEqual([2, '2 pagine non in formato marcia, ridotte in stampa']);
+
+        state['printLayout'] = 1;
+        expect([state['marchFormat'], state['printPagesPerSheet']]).toEqual([false, 1]);
+        program.ngOnDestroy();
+    });
+
     it('opens and closes the filter sidebar explicitly', () => {
         component['openFilters']();
         expect(component['filtersOpen']).toBeTrue();
@@ -264,7 +313,7 @@ describe('PreviewComponent template', () => {
             providers: [
                 provideRouter([]),
                 { provide: Location, useValue: { back: () => undefined } },
-                { provide: PrinterService, useValue: { scores, previewTitle: 'Marcia sinfonica', previewSource: 'Traccia', clear: () => undefined } },
+                { provide: PrinterService, useValue: { scores, previewTitle: 'Marcia sinfonica', previewSource: 'Traccia', clear: () => undefined, isUnengraved: unengravedPart } },
                 { provide: ToastService, useValue: { warn: () => undefined } },
                 { provide: ScorePlaybackService, useValue: MEMBER }
             ]
@@ -305,6 +354,25 @@ describe('PreviewComponent template', () => {
         click('.filter-action');
 
         expect(query('.filter-action').getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('lays out the march format with a cut line around each page and no frame for the blank slot', () => {
+        const select = query<HTMLSelectElement>('.print-option select');
+        select.value = select.options[2].value;
+        select.dispatchEvent(new Event('change'));
+        render();
+
+        expect(component['marchFormat']).toBeTrue();
+        expect(query('.print-sheet-preview--march')).not.toBeNull();
+        const sheets = Array.from(fixture.nativeElement.querySelectorAll('.print-sheet')) as HTMLElement[];
+        expect(sheets.map((sheet) => sheet.classList.contains('print-sheet--march') && !sheet.classList.contains('print-sheet--two-up'))).toEqual([true, true]);
+        expect(sheets[1].querySelectorAll('.print-sheet__slot--blank').length).toBe(1);
+
+        // The dimensions arrive with the load of the images, an event of the template that marks the view.
+        component['printPageDimensions'].set('/media/11', { width: 2480, height: 3508 });
+        component['changeDetector'].markForCheck();
+        fixture.detectChanges();
+        expect(query('.print-options [role="status"]').textContent?.trim()).toBe('1 pagina non in formato marcia, ridotta in stampa');
     });
 
     it('keeps the closed sidebar out of the focus order', () => {

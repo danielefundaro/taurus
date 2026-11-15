@@ -5,7 +5,7 @@ import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { RoleEnums } from '../../../../constants';
 import { Albums, EventPreparationProgramEntry, EventPreparationView, Page, Tracks } from '../../../../module';
-import { AlbumsService, ConfirmService, EventPreparationService, KeycloakService, MediaService, ToastService, TracksService } from '../../../../service';
+import { AlbumsService, ConfirmService, EventPreparationService, KeycloakService, MediaService, PrinterService, ToastService, TracksService } from '../../../../service';
 import { PreparationProgramComponent, ProgramRow } from './preparation-program.component';
 
 const entry = (trackId: number, overrides: Partial<EventPreparationProgramEntry> = {}): EventPreparationProgramEntry => ({
@@ -212,8 +212,8 @@ describe('PreparationProgramComponent', () => {
         const element = render([
             entry(1, {
                 scores: [
-                    { id: 4, description: 'Tromba 1', instruments: ['Tromba'], ready: true, needsReview: false, files: [{ mediaId: 99, fileName: 'tromba.pdf' }] },
-                    { id: 5, description: 'Tromba 2', instruments: [], ready: false, needsReview: true, files: [] }
+                    { id: 4, description: 'Tromba 1', instruments: ['Tromba'], instrumentIds: [3], ready: true, needsReview: false, unengraved: false, files: [{ mediaId: 99, fileName: 'tromba.pdf' }] },
+                    { id: 5, description: 'Tromba 2', instruments: [], instrumentIds: [], ready: false, needsReview: true, unengraved: false, files: [] }
                 ]
             })
         ]);
@@ -232,6 +232,69 @@ describe('PreparationProgramComponent', () => {
         state()['download']({ mediaId: 99, fileName: 'tromba.pdf' });
         expect(media.streamImage).toHaveBeenCalledWith(99);
         expect(click).toHaveBeenCalled();
+    });
+
+    it('marks the written parts to engrave and leads the managers to the listening tab of the track', () => {
+        const scores = [{ id: 6, description: 'Flicorno', instruments: ['Flicorno'], instrumentIds: [8], ready: false, needsReview: false, unengraved: true, files: [] }];
+        let element = render([entry(1, { scores })]);
+        (element.querySelector('button[aria-controls]') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(element.textContent).toContain('Da impaginare');
+        const link = element.querySelector('a[aria-label^="Impagina"]') as HTMLAnchorElement;
+        expect(link.getAttribute('href')).toBe('/tracks/1?tab=playback');
+
+        element = render([entry(1, { scores })], false, true);
+        expect(element.querySelector('a[aria-label^="Impagina"]')).toBeNull();
+    });
+
+    it('prints the saved program by instrument, each track once, counting the parts to engrave', () => {
+        const printer = TestBed.inject(PrinterService);
+        const preview = spyOn(printer, 'previewProgram');
+        const trumpet = { id: 4, description: 'Tromba', instruments: ['Tromba', 'Cornetta'], instrumentIds: [3, 9], ready: true, needsReview: false, unengraved: false, files: [{ mediaId: 99, fileName: 'tromba-1.png' }] };
+        const written = { id: 6, description: 'Flicorno', instruments: ['Flicorno'], instrumentIds: [8], ready: false, needsReview: false, unengraved: true, files: [] };
+        fixture.componentRef.setInput('eventName', 'Sfilata di primavera');
+        const element = render([entry(1, { scores: [trumpet, written] }), entry(2, { trackAvailable: false }), entry(1, { id: 30, encore: true, scores: [trumpet] })]);
+
+        expect(state()['printablePages']).toBe(1);
+        state()['printProgram']();
+
+        expect(preview).toHaveBeenCalledOnceWith(
+            'Sfilata di primavera',
+            [
+                {
+                    id: 4,
+                    description: 'Tromba',
+                    instruments: [
+                        { index: 3, name: 'Tromba' },
+                        { index: 9, name: 'Cornetta' }
+                    ],
+                    media: [{ index: 99, name: 'tromba-1.png' }]
+                },
+                { id: 6, description: 'Flicorno', instruments: [{ index: 8, name: 'Flicorno' }], media: [] }
+            ],
+            [6]
+        );
+
+        // A program being composed prints only once saved.
+        state()['markDirty']();
+        fixture.detectChanges();
+        expect(state()['printHint']).toBe('Salva il programma prima di stamparlo');
+        state()['printProgram']();
+        expect(preview).toHaveBeenCalledTimes(1);
+        expect(element.textContent).toContain('Stampa la scaletta');
+    });
+
+    it('explains why a program without pages cannot be printed', () => {
+        render([entry(1)], false, true);
+        expect(state()['printablePages']).toBe(0);
+        expect(state()['printHint']).toBe('Nessuno spartito pronto per i tuoi strumenti');
+
+        render([entry(1)], true, false);
+        expect(state()['printHint']).toBe('Nessuna parte con pagine da stampare');
+
+        render([entry(1, { scores: [{ id: 4, instruments: [], instrumentIds: [], ready: true, needsReview: false, unengraved: false, files: [{ mediaId: 99, fileName: 'p.png' }] }] })]);
+        expect(state()['printHint']).toBe('Le parti di tutti i brani per strumento, in ordine di scaletta e nel formato marcia');
     });
 
     it('reads the program without editing tools and explains missing parts and tracks', () => {
