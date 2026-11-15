@@ -14,6 +14,7 @@ import {
     displayedXml,
     emptyRow,
     ensembleRows,
+    extractedParts,
     isConcertScore,
     isPercussionRow,
     isStructureDirection,
@@ -552,6 +553,70 @@ describe('score arrangement', () => {
             const lowBefore = low.snapshot();
             expect(() => convertNotation(low, [{ instruments: [TUBA] }, { instruments: [CLARINET] }], true)).toThrowError(EditError, 'Le note di Clarinetto uscirebbero dalle altezze scrivibili');
             expect(low.snapshot()).toBe(lowBefore);
+        });
+    });
+
+    describe('extraction', () => {
+        const writtenPitches = (xml: string): string[] =>
+            Array.from(xmlDocument(xml).querySelectorAll('note pitch')).map((pitch) => `${pitch.querySelector('step')?.textContent}${pitch.querySelector('alter')?.textContent ?? ''}${pitch.querySelector('octave')?.textContent}`);
+        const fifths = (xml: string): string | null | undefined => xmlDocument(xml).querySelector('key > fifths')?.textContent;
+
+        it('extracts each row with its measures, the name of its part and the texts of the track, without the breaks of the score', () => {
+            const score = ScoreDocument.open(scoreXml().replace('<part-list>', '<identification><creator type="composer">Ignoto</creator><encoding/></identification><part-list>'));
+            score.everyPart(() => {
+                const print = score.measure(1).insertBefore(score.document.createElement('print'), score.measure(1).firstChild);
+                print.setAttribute('new-system', 'yes');
+            });
+
+            const [tuba, clarinet] = extractedParts(
+                score.cleanXml(),
+                [
+                    { id: 'P2', instruments: [TUBA], partName: 'Basso in Do' },
+                    { id: 'P1', instruments: [CLARINET], partName: 'Clarinetto 1°' }
+                ],
+                { title: 'Marcia reale', composer: 'G. Gabetti', arranger: '  ' }
+            );
+
+            const extracted = xmlDocument(tuba);
+            expect(partNames(tuba)).toEqual(['Basso in Do']);
+            expect(Array.from(extracted.querySelectorAll('part'), (part) => part.getAttribute('id'))).toEqual(['P2']);
+            expect(Array.from(extracted.documentElement.children, (item) => item.tagName)).toEqual(['work', 'identification', 'part-list', 'part']);
+            expect(extracted.querySelector('work > work-title')?.textContent).toBe('Marcia reale');
+            expect(Array.from(extracted.querySelectorAll('identification > *'), (item) => `${item.tagName} ${item.getAttribute('type') ?? ''} ${item.textContent}`.trim())).toEqual(['creator composer G. Gabetti', 'encoding']);
+            expect(extracted.querySelector('print')).toBeNull();
+            expect(writtenPitches(tuba)).toEqual(['C3']);
+
+            expect(partNames(clarinet)).toEqual(['Clarinetto 1°']);
+            expect(xmlDocument(clarinet).querySelector('rehearsal')?.textContent).toBe('A');
+            expect(fifths(clarinet)).toBe('2');
+            expect(writtenPitches(clarinet)).toEqual(['D5']);
+
+            // Senza testi della traccia restano quelli della partitura.
+            const titled = scoreXml().replace('<part-list>', '<work><work-number>3</work-number><opus xlink:href="op.xml" xmlns:xlink="http://www.w3.org/1999/xlink"/></work><part-list>');
+            const [kept] = extractedParts(titled, [{ id: 'P2', instruments: [TUBA], partName: 'Tuba' }], { title: 'Marcia' });
+            expect(Array.from(xmlDocument(kept).querySelector('work')!.children, (item) => item.tagName)).toEqual(['work-number', 'work-title', 'opus']);
+            const [untitled] = extractedParts(scoreXml(), [{ id: 'P2', instruments: [TUBA], partName: 'Tuba' }]);
+            expect(xmlDocument(untitled).querySelector('work, identification')).toBeNull();
+        });
+
+        it('writes the rows of a concert-pitch score in the notation of their instrument', () => {
+            const score = openScore();
+            convertNotation(score, ROWS, true);
+            const concert = score.cleanXml();
+
+            const [clarinet, tuba, drums] = extractedParts(concert, [
+                { id: 'P1', instruments: [CLARINET], partName: 'Clarinetto' },
+                { id: 'P2', instruments: [TUBA], partName: 'Tuba' },
+                { id: 'P3', instruments: [SNARE, BASS_DRUM], partName: 'Percussioni' }
+            ]);
+
+            expect([clarinet, tuba, drums].map((xml) => xml.includes('concert-score'))).toEqual([false, false, false]);
+            expect(fifths(clarinet)).toBe('2');
+            expect(writtenPitches(clarinet)).toEqual(['D5']);
+            expect(writtenPitches(tuba)).toEqual(['C3']);
+            expect(xmlDocument(drums).querySelector('clef > sign')?.textContent).toBe('percussion');
+            expect(() => extractedParts(concert, [{ id: 'P1', instruments: [UNCONFIGURED], partName: 'Corno' }])).toThrowError(EditError, 'Configura la trasposizione di Corno per convertire la partitura');
+            expect(() => extractedParts(concert, [{ id: 'P9', instruments: [TUBA], partName: 'Bombardino' }])).toThrowError(EditError, 'Il rigo Bombardino non è nella partitura');
         });
     });
 });

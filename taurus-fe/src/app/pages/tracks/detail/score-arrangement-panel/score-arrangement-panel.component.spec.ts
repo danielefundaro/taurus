@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { of, Subject, throwError } from 'rxjs';
+import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
+import { ExtractPartsDialogComponent } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { Arrangement, ArrangementVersion } from '../../../../module';
@@ -202,6 +204,72 @@ describe('ScoreArrangementPanelComponent', () => {
         service.file.and.rejectWith(new Error('offline'));
         await component.download(VERSION);
         expect(toast.error).toHaveBeenCalledWith('File non scaricato', 'Riprovare più tardi.');
+    });
+
+    it('extracts the parts and engraves them with one dialog of options', async () => {
+        const playback = { trackId: 5, trackName: 'Marcia reale', version: 2, parts: [], recognitionAvailable: true };
+        playbackService.playback.and.returnValue(of(playback));
+        component.composer = 'G. Gabetti';
+        const versions: number[] = [];
+        let changes = 0;
+        component.trackVersionChange.subscribe((version: number) => versions.push(version));
+        component.partsChange.subscribe(() => changes++);
+
+        await component.extract();
+
+        expect(opened().component).toBe(ExtractPartsDialogComponent);
+        expect(opened().options.data).toEqual(jasmine.objectContaining({ trackId: 5, playback, canEngrave: true, header: { title: 'Marcia reale', composer: 'G. Gabetti', arranger: '' }, arrangement: component.arrangement }));
+        service.arrangement.calls.reset();
+        const parts = [
+            { scoreId: 9, versionId: 90, partLabel: 'Clarinetto', hasPages: true },
+            { scoreId: 11, versionId: 91, partLabel: 'Percussioni', hasPages: false }
+        ];
+        close({ result: { parts: [], trackVersion: 4 }, engrave: parts });
+
+        expect(versions).toEqual([4]);
+        expect(changes).toBe(1);
+        expect(service.arrangement).toHaveBeenCalledWith(5);
+        expect(opened().component).toBe(EngraveDialogComponent);
+        expect(opened().options.data).toEqual({
+            trackId: 5,
+            scoreId: 9,
+            versionId: 90,
+            partLabel: 'Clarinetto',
+            header: { title: 'Marcia reale', composer: 'G. Gabetti', arranger: '', partName: 'Clarinetto' },
+            hasPages: true,
+            trackVersion: 4,
+            parts
+        });
+        // Le pagine assegnate da sole cambiano la traccia.
+        close();
+        expect(changes).toBe(2);
+    });
+
+    it('extracts only from a saved version of a saved track, and does nothing when the dialog closes empty', async () => {
+        component.trackDirty = true;
+        expect(component.extractBlocker).toBe('Salva la traccia prima di estrarre le parti');
+        await component.extract();
+        expect(dialogs.open).not.toHaveBeenCalled();
+
+        component.trackDirty = false;
+        component.arrangement = arrangement({ currentVersion: null });
+        expect(component.extractBlocker).toBe('Salva una versione della partitura per estrarne le parti');
+        component.arrangement = arrangement();
+        expect(component.extractBlocker).toBeNull();
+
+        playbackService.playback.and.returnValue(throwError(() => new Error('offline')));
+        await component.extract();
+        expect(toast.error).toHaveBeenCalledWith('Parti non estratte', 'Le parti della traccia non si possono leggere: riprovare più tardi.');
+        expect(dialogs.open).not.toHaveBeenCalled();
+        expect(component.opening).toBeFalse();
+
+        playbackService.playback.and.returnValue(of({ trackId: 5, version: 2, parts: [], recognitionAvailable: false }));
+        let changes = 0;
+        component.partsChange.subscribe(() => changes++);
+        await component.extract();
+        close();
+        expect(changes).toBe(0);
+        expect(dialogs.open).toHaveBeenCalledTimes(1);
     });
 
     it('deletes the score after a confirmation', async () => {

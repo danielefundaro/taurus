@@ -2,7 +2,7 @@
  * Partitura della traccia: un documento con una parte per rigo, creato dall'organico o dalle parti della traccia, con
  * la struttura comune a tutti i righi. Qui stanno la creazione, l'allineamento delle parti alla parte di riferimento, i
  * righi aggiunti e tolti nell'editor, l'armatura in suoni reali, la conversione tra suoni reali e trasposta, i passaggi su
- * tutti i righi, l'ascolto, i controlli per rigo e il disegno con i righi nascosti.
+ * tutti i righi, l'ascolto, i controlli per rigo, il disegno con i righi nascosti e il MusicXML delle parti estratte.
  */
 
 import { ArrangementRowRequest, PlaybackInstrument, PlaybackSound } from '../module';
@@ -15,7 +15,7 @@ import { newPartXml, proposedClef, writtenFifths } from './new-part';
 import { CLEF_OPTIONS, fraction, NOTE_TYPES, toNumber } from './notation-rules';
 import { applyDerivation, clefTransposition, DerivationPlan, derivedPartXml, initialClef, planDerivation, RangeInstrument, rangeLabel, RangeWarning, rangeWarnings, writtenRange } from './score-derivation';
 import { EditError, ROW_INSTRUMENTS_ATTRIBUTE, ScoreDocument } from './score-document';
-import { insertAtEnd, leadingAttributes, setKey, setTime } from './score-edits';
+import { insertAtEnd, leadingAttributes, openScore, setKey, setTime } from './score-edits';
 import { clearPassage, copyPassage, Passage, pastePassage, ScoreClip } from './score-passage';
 import { measureLength } from './score-writing';
 
@@ -96,6 +96,20 @@ export interface RowCheck {
     /** Estensione scritta del rigo, «Si♭3–Fa6»; `null` senza estensione o per un rigo senza un solo strumento intonato. */
     range: string | null;
     outOfRange: RangeWarning[];
+}
+
+/** Titolo, compositore e arrangiatore della traccia, scritti nelle parti estratte. */
+export interface PartHeader {
+    title?: string | null;
+    composer?: string | null;
+    arranger?: string | null;
+}
+
+/** Un rigo da estrarre: il suo `id` nel MusicXML, i suoi strumenti e il nome della parte che lo riceve. */
+export interface RowToExtract {
+    id: string;
+    instruments: readonly RowInstrument[];
+    partName: string;
 }
 
 /** Elementi delle direzioni che fanno parte della struttura comune: segni, lettere di prova e tempo. */
@@ -497,12 +511,33 @@ export function playbackRows(score: ScoreDocument, rows: readonly { instruments:
 /** MusicXML di un solo rigo della partitura. */
 export function rowXml(xml: string, index: number): string {
     const document = new DOMParser().parseFromString(xml, 'application/xml');
-    const root = document.documentElement;
-    const parts = children(root, 'part');
-    const kept = parts[index]?.getAttribute('id');
-    for (const part of parts) if (part.getAttribute('id') !== kept) part.remove();
-    for (const scorePart of children(child(root, 'part-list'), 'score-part')) if (scorePart.getAttribute('id') !== kept) scorePart.remove();
+    keepRow(document, children(document.documentElement, 'part')[index]?.getAttribute('id') ?? '');
     return new XMLSerializer().serializeToString(document);
+}
+
+/**
+ * MusicXML delle parti estratte dai righi, nell'ordine dato: le battute del rigo con la struttura comune, il nome della
+ * parte e il titolo, il compositore e l'arrangiatore della traccia, senza le interruzioni di riga e di pagina della
+ * partitura, che ogni parte impagina a modo suo. Da una partitura in suoni reali il rigo torna nella notazione trasposta
+ * del suo strumento, con lo stesso codice della conversione. La partitura si legge una volta sola.
+ */
+export function extractedParts(xml: string, rows: readonly RowToExtract[], header: PartHeader = {}): string[] {
+    const source = new DOMParser().parseFromString(xml, 'application/xml');
+    const serializer = new XMLSerializer();
+    return rows.map((row) => {
+        const copy = source.cloneNode(true) as Document;
+        if (!keepRow(copy, row.id)) throw new EditError(`Il rigo ${row.partName} non è nella partitura`);
+        const score = openScore(serializer.serializeToString(copy));
+        if (isConcertScore(score)) convertNotation(score, [{ instruments: row.instruments }], false);
+        renameRow(score, row.partName);
+        writeHeader(score, header);
+        for (const print of Array.from(score.document.getElementsByTagName('print'))) {
+            print.removeAttribute('new-system');
+            print.removeAttribute('new-page');
+            if (!print.attributes.length && !print.children.length) print.remove();
+        }
+        return score.cleanXml();
+    });
 }
 
 /**
@@ -630,6 +665,48 @@ export function isStructureDirection(item: Element): boolean {
 }
 
 // Funzioni interne
+
+/** Lascia nel documento solo il rigo indicato, con la sua voce dell'elenco delle parti; `false` se il rigo non c'è. */
+function keepRow(document: Document, id: string): boolean {
+    const root = document.documentElement;
+    const parts = children(root, 'part');
+    const found = parts.some((part) => part.getAttribute('id') === id);
+    for (const part of parts) if (part.getAttribute('id') !== id) part.remove();
+    for (const scorePart of children(child(root, 'part-list'), 'score-part')) if (scorePart.getAttribute('id') !== id) scorePart.remove();
+    return found;
+}
+
+/** Il nome della parte dell'unico rigo, al posto di quello del rigo nella partitura. */
+function renameRow(score: ScoreDocument, name: string): void {
+    const scorePart = scoreParts(score)[0];
+    if (!scorePart) return;
+    const current = child(scorePart, 'part-name');
+    if (current) current.textContent = name;
+    else scorePart.insertBefore(element(score.document, 'part-name', name), scorePart.firstChild);
+    for (const item of children(scorePart, 'part-name-display')) item.remove();
+}
+
+/** Titolo in `<work-title>`, compositore e arrangiatore nei `<creator>` di `<identification>`; un testo vuoto lascia quello che c'è. */
+function writeHeader(score: ScoreDocument, header: PartHeader): void {
+    const owner = score.document;
+    const root = owner.documentElement;
+    const title = header.title?.trim();
+    if (title) {
+        let work = child(root, 'work');
+        if (!work) work = root.insertBefore(element(owner, 'work'), root.firstElementChild);
+        // In <work> il titolo viene dopo il numero e prima dell'opera.
+        const workTitle = child(work, 'work-title') ?? work.insertBefore(element(owner, 'work-title'), child(work, 'opus') ?? null);
+        workTitle.textContent = title;
+    }
+    const creators = (['composer', 'arranger'] as const).map((type) => ({ type, value: header[type]?.trim() })).filter((creator) => !!creator.value);
+    if (!creators.length) return;
+    let identification = child(root, 'identification');
+    if (!identification) identification = root.insertBefore(element(owner, 'identification'), children(root).find((item) => !['work', 'movement-number', 'movement-title'].includes(item.tagName)) ?? null);
+    for (const item of children(identification, 'creator')) if (creators.some((creator) => creator.type === item.getAttribute('type'))) item.remove();
+    // I <creator> vengono per primi in <identification>.
+    const after = children(identification).find((item) => item.tagName !== 'creator') ?? null;
+    for (const creator of creators) identification.insertBefore(element(owner, 'creator', creator.value, { type: creator.type }), after);
+}
 
 function scoreParts(score: ScoreDocument): Element[] {
     return children(child(score.document.documentElement, 'part-list'), 'score-part');

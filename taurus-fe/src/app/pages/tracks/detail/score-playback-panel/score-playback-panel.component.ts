@@ -11,10 +11,10 @@ import { ScoreUploadDialogComponent, ScoreUploadDialogData } from '../../../../d
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData, ScoreVersionsDialogResult } from '../../../../dialogs/score-versions-dialog/score-versions-dialog.component';
 import { ImportsModule } from '../../../../imports';
 import { editLockMessage } from '../../../../constants';
-import { DraftSummary, EditLock, PartPlayback, RecognitionJob, ScoreVersion, TrackPlayback } from '../../../../module';
+import { ArrangementRowState, DraftSummary, EditLock, PartPlayback, RecognitionJob, ScoreVersion, TrackPlayback } from '../../../../module';
 import { drumName, programName } from '../../../../score-player/general-midi';
 import { checksSummary, isRecognitionActive, partLabel, recognitionLabel } from '../../../../score-player/playback-labels';
-import { ConfirmService, ScoreDraftService, ScorePlaybackService, TenantFeatureService, ToastService, withErrorSummary } from '../../../../service';
+import { ArrangementService, ConfirmService, ScoreDraftService, ScorePlaybackService, TenantFeatureService, ToastService, withErrorSummary } from '../../../../service';
 
 /** Intervallo di aggiornamento dello stato mentre un riconoscimento è in coda o in corso. */
 export const RECOGNITION_POLL_MILLIS = 5000;
@@ -22,7 +22,8 @@ export const RECOGNITION_POLL_MILLIS = 5000;
 /**
  * Ascolto delle parti di una traccia: disponibilità per parte, apertura del lettore e, per archivisti e amministratori,
  * riconoscimento delle pagine, caricamento dei file MusicXML o MIDI, correzione, scrittura con le bozze, versioni,
- * segnalazioni d'errore, suono delle parti, impaginazione delle parti scritte e impostazioni della partitura.
+ * segnalazioni d'errore, suono delle parti, impaginazione delle parti scritte, origine delle parti estratte dalla partitura
+ * e impostazioni della partitura.
  */
 @Component({
     selector: 'app-score-playback-panel',
@@ -49,6 +50,8 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     protected starting = false;
     protected tempoBpm: number | null = null;
     protected referenceScoreId: number | null = null;
+    /** Righi della partitura collegati alle parti, per l'origine delle parti estratte; vuoto senza scrittura. */
+    protected extractions = new Map<number, ArrangementRowState>();
     private polling?: Subscription;
 
     constructor(
@@ -57,7 +60,8 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         private readonly toastService: ToastService,
         private readonly draftService: ScoreDraftService,
         private readonly confirmService: ConfirmService,
-        private readonly tenantFeatureService: TenantFeatureService
+        private readonly tenantFeatureService: TenantFeatureService,
+        private readonly arrangementService: ArrangementService
     ) {}
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -114,6 +118,29 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         const source = origin ? this.playback?.parts.find((candidate) => candidate.scoreId === origin.scoreId) : undefined;
         if (!origin || !source?.version || source.version.id === origin.versionId) return null;
         return `Ora si ascolta la versione ${source.version.versionNumber} di ${partLabel(source)}: la parte ricavata non si aggiorna da sola`;
+    }
+
+    /** «Estratta dalla partitura (versione 4)»; `null` se la parte non è mai stata estratta. */
+    protected extractedLabel(part: PartPlayback): string | null {
+        const row = this.extractions.get(part.scoreId);
+        return row?.extractedFrom ? `Estratta dalla partitura (versione ${row.extractedFrom})` : null;
+    }
+
+    /** Come la parte estratta si discosta dalla partitura, con il suggerimento; `null` se è aggiornata. */
+    protected extractionDivergence(part: PartPlayback): { label: string; hint: string } | null {
+        const row = this.extractions.get(part.scoreId);
+        if (!row?.extractedFrom) return null;
+        if (row.status === 'MODIFIED') return { label: "Modificata dopo l'estrazione", hint: "La parte ha una versione più recente di quella estratta: un'altra estrazione la sostituirebbe" };
+        if (row.status === 'TO_EXTRACT') return { label: 'La partitura è cambiata', hint: 'La partitura ha una versione più recente: la parte non si aggiorna da sola, si estrae di nuovo dalla scheda Partitura' };
+        return null;
+    }
+
+    /** «Le 2 pagine impaginate dalla versione 3…», per il suggerimento delle pagine da assegnare. */
+    protected pendingHint(part: PartPlayback): string {
+        const pending = part.pendingPages;
+        if (!pending) return '';
+        const pages = pending.pageCount === 1 ? 'La pagina impaginata' : `Le ${pending.pageCount} pagine impaginate`;
+        return `${pages} dalla versione ${pending.versionNumber} aspettano: sostituiscono quelle della parte o vanno in una parte nuova`;
     }
 
     protected get anyAvailable(): boolean {
@@ -303,14 +330,17 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         this.openWriting(part, { resume });
     }
 
-    /** Impagina una versione della parte, di norma quella ascoltata, in pagine e PDF. */
-    protected engrave(part: PartPlayback, versionId = part.version?.id): void {
+    /**
+     * Impagina una versione della parte, di norma quella ascoltata, in pagine e PDF; con le pagine da assegnare il dialogo
+     * riprende dal loro job.
+     */
+    protected engrave(part: PartPlayback, versionId = part.version?.id, versionNumber?: number): void {
         if (!this.playback || !versionId) return;
         const data: EngraveDialogData = {
             trackId: this.trackId,
             scoreId: part.scoreId,
             versionId,
-            versionNumber: part.version?.id === versionId ? part.version.versionNumber : null,
+            versionNumber: versionNumber ?? (part.version?.id === versionId ? part.version.versionNumber : null),
             partLabel: partLabel(part),
             header: { title: this.playback.trackName ?? '', composer: this.composer ?? '', arranger: this.arranger ?? '', partName: partLabel(part) },
             hasPages: part.hasPages,
@@ -386,6 +416,18 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
                 this.watchRecognitions();
                 loaded?.(playback);
             });
+        this.loadExtractions();
+    }
+
+    /** Righi della partitura con lo stato della loro parte; senza partitura, o se non si legge, nessuna etichetta. */
+    private loadExtractions(): void {
+        if (!this.canWrite) return;
+        this.arrangementService.arrangement(this.trackId).then(
+            (arrangement) => {
+                this.extractions = new Map((arrangement?.rows ?? []).filter((row) => row.scoreId !== null && row.scoreId !== undefined).map((row) => [row.scoreId!, row]));
+            },
+            () => (this.extractions = new Map())
+        );
     }
 
     private openWriting(part: PartPlayback, options: { resume?: boolean; initialContent?: string }): void {

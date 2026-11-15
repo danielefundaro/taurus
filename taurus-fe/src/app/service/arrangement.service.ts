@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpParams, HttpResponse } from '@angular/comm
 import { Injectable } from '@angular/core';
 import { firstValueFrom, map } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { Arrangement, ArrangementDraft, ArrangementVersion, ArrangementVersionRequest, NewArrangement } from '../module';
+import { Arrangement, ArrangementDraft, ArrangementVersion, ArrangementVersionRequest, ExtractionRequest, ExtractionResult, NewArrangement } from '../module';
 
 /** Partitura di una traccia, per chi gestisce la traccia con la scrittura attiva: versioni, bozza e creazione. */
 @Injectable({ providedIn: 'root' })
@@ -42,6 +42,11 @@ export class ArrangementService {
     /** MusicXML compresso di una versione, da scaricare per MuseScore. */
     file(trackId: number, versionId: number): Promise<Blob> {
         return firstValueFrom(this.http.get(`${this.url(trackId)}/versions/${versionId}/file`, { responseType: 'blob' }));
+    }
+
+    /** Estrae i righi scelti della versione corrente nelle parti della traccia, con il MusicXML costruito nel browser. */
+    extract(trackId: number, versionId: number, request: ExtractionRequest, context?: HttpContext): Promise<ExtractionResult> {
+        return firstValueFrom(this.http.post<ExtractionResult>(`${this.url(trackId)}/versions/${versionId}/extract`, request, { context }));
     }
 
     approve(trackId: number, versionId: number, context?: HttpContext): Promise<ArrangementVersion> {

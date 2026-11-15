@@ -4,7 +4,7 @@ import { DerivePartDialogComponent } from '../../../../dialogs/derive-part-dialo
 import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
-import { PartPlayback, PlaybackSound, RecognitionJob, TrackPlayback } from '../../../../module';
+import { Arrangement, ArrangementRowState, PartPlayback, PlaybackSound, RecognitionJob, TrackPlayback } from '../../../../module';
 import { RECOGNITION_POLL_MILLIS, ScorePlaybackPanelComponent } from './score-playback-panel.component';
 
 function part(sound: Partial<PlaybackSound>, overrides: Partial<PartPlayback> = {}): PartPlayback {
@@ -33,7 +33,7 @@ function playback(parts: PartPlayback[], recognitionAvailable = true): TrackPlay
 }
 
 describe('ScorePlaybackPanelComponent', () => {
-    const component: any = new ScorePlaybackPanelComponent({ canManage: true, playback: () => of() } as never, null!, null!, null!, null!, { scoreWritingEnabled: () => true } as never);
+    const component: any = new ScorePlaybackPanelComponent({ canManage: true, playback: () => of() } as never, null!, null!, null!, null!, { scoreWritingEnabled: () => true } as never, null!);
 
     it('names the instruments to configure when the part has no sound', () => {
         expect(component.soundLabel(part({ configured: false }))).toBe('Suono e trasposizione non configurati per Flicorno tenore, Euphonium');
@@ -77,7 +77,8 @@ describe('ScorePlaybackPanelComponent writing', () => {
         drafts.discard.and.resolveTo();
         const confirm = jasmine.createSpyObj('ConfirmService', ['confirmDestructive']);
         confirm.confirmDestructive.and.callFake((request: { accept: () => void }) => request.accept());
-        const component: any = new ScorePlaybackPanelComponent(service as never, dialogs as never, toast, drafts, confirm, { scoreWritingEnabled: () => writing } as never);
+        const arrangements = { arrangement: jasmine.createSpy('arrangement').and.resolveTo(null) };
+        const component: any = new ScorePlaybackPanelComponent(service as never, dialogs as never, toast, drafts, confirm, { scoreWritingEnabled: () => writing } as never, arrangements as never);
         component.trackId = 5;
         component.reload();
         /** Chiude l'ultimo dialogo aperto con il risultato indicato. */
@@ -219,9 +220,10 @@ describe('ScorePlaybackPanelComponent writing', () => {
 describe('ScorePlaybackPanelComponent engraving', () => {
     const version = { id: 7, versionNumber: 2, status: 'APPROVED' as const, origin: 'WRITING' as const, measureCount: 8, checks: null as never, pagesChanged: false };
 
-    function setup(parts: PartPlayback[], { writing = true, recognitionAvailable = true } = {}) {
+    function setup(parts: PartPlayback[], { writing = true, recognitionAvailable = true, arrangement = null as Arrangement | null } = {}) {
         const closes: Subject<unknown>[] = [];
         const service = { canManage: true, playback: jasmine.createSpy().and.returnValue(of(playback(parts, recognitionAvailable))) };
+        const arrangements = { arrangement: jasmine.createSpy('arrangement').and.resolveTo(arrangement) };
         const dialogs = {
             open: jasmine.createSpy('open').and.callFake(() => {
                 const onClose = new Subject<unknown>();
@@ -229,7 +231,7 @@ describe('ScorePlaybackPanelComponent engraving', () => {
                 return { onClose };
             })
         };
-        const component: any = new ScorePlaybackPanelComponent(service as never, dialogs as never, jasmine.createSpyObj('ToastService', ['success']), null!, null!, { scoreWritingEnabled: () => writing } as never);
+        const component: any = new ScorePlaybackPanelComponent(service as never, dialogs as never, jasmine.createSpyObj('ToastService', ['success']), null!, null!, { scoreWritingEnabled: () => writing } as never, arrangements as never);
         component.trackId = 5;
         component.composer = 'G. Gabetti';
         component.arranger = null;
@@ -240,13 +242,45 @@ describe('ScorePlaybackPanelComponent engraving', () => {
             onClose.complete();
         };
         const opened = () => ({ component: dialogs.open.calls.mostRecent().args[0], data: dialogs.open.calls.mostRecent().args[1].data });
-        return { component, service, dialogs, close, opened };
+        return { component, service, dialogs, close, opened, arrangements };
     }
 
     it('engraves with the writing on and the music service configured', () => {
         expect(setup([]).component.canEngrave).toBeTrue();
         expect(setup([], { writing: false }).component.canEngrave).toBeFalse();
         expect(setup([], { recognitionAvailable: false }).component.canEngrave).toBeFalse();
+    });
+
+    it('labels the parts extracted from the score and reopens the engraving of the pages to assign', async () => {
+        const extracted = part({}, { scoreId: 1, version });
+        const corrected = part({}, { scoreId: 2, version, description: 'Basso' });
+        const waiting = part({}, { scoreId: 3, version, description: 'Rullante', pendingPages: { jobId: 40, versionId: 6, versionNumber: 1, pageCount: 2 } });
+        const written = part({}, { scoreId: 4, version, description: 'Clarinetto' });
+        const row = (scoreId: number | null, status: ArrangementRowState['status'], extractedFrom: number | null): ArrangementRowState => ({ id: `P${scoreId}`, name: 'Rigo', instruments: [], scoreId, status, extractedFrom });
+        const rows = [row(1, 'UP_TO_DATE', 4), row(2, 'MODIFIED', 3), row(3, 'TO_EXTRACT', 3), row(4, 'TO_EXTRACT', null), row(null, 'NEW', null)];
+        const { component, opened, arrangements } = setup([extracted, corrected, waiting, written], { arrangement: { id: 1, trackId: 5, rows } });
+        await new Promise((resolve) => setTimeout(resolve));
+
+        expect(arrangements.arrangement).toHaveBeenCalledWith(5);
+        expect([extracted, corrected, waiting, written].map((item) => component.extractedLabel(item))).toEqual(['Estratta dalla partitura (versione 4)', 'Estratta dalla partitura (versione 3)', 'Estratta dalla partitura (versione 3)', null]);
+        expect([extracted, corrected, waiting, written].map((item) => component.extractionDivergence(item)?.label ?? null)).toEqual([null, "Modificata dopo l'estrazione", 'La partitura è cambiata', null]);
+        expect(component.pendingHint(waiting)).toBe('Le 2 pagine impaginate dalla versione 1 aspettano: sostituiscono quelle della parte o vanno in una parte nuova');
+        expect(component.pendingHint(written)).toBe('');
+
+        component.engrave(waiting, 6, 1);
+        expect(opened().component).toBe(EngraveDialogComponent);
+        expect(opened().data).toEqual(jasmine.objectContaining({ scoreId: 3, versionId: 6, versionNumber: 1, hasPages: true }));
+    });
+
+    it('reads the score only with the writing on, and shows no label when it cannot be read', async () => {
+        const { arrangements } = setup([], { writing: false });
+        expect(arrangements.arrangement).not.toHaveBeenCalled();
+
+        const failing = setup([part({}, { version })]);
+        failing.arrangements.arrangement.and.rejectWith(new Error('offline'));
+        failing.component.reload();
+        await new Promise((resolve) => setTimeout(resolve));
+        expect(failing.component.extractedLabel(part({}, { version }))).toBeNull();
     });
 
     it('marks the parts to engrave and those with pages of an older version', () => {
@@ -319,7 +353,7 @@ describe('ScorePlaybackPanelComponent recognition', () => {
             recognizeAll: jasmine.createSpy().and.returnValue(of([job(1, 'QUEUED'), job(2, 'QUEUED')]))
         };
         const toast = jasmine.createSpyObj('ToastService', ['success']);
-        const component: any = new ScorePlaybackPanelComponent(service as never, null!, toast, null!, null!, { scoreWritingEnabled: () => false } as never);
+        const component: any = new ScorePlaybackPanelComponent(service as never, null!, toast, null!, null!, { scoreWritingEnabled: () => false } as never, null!);
         component.trackId = 5;
         component.reload();
         return { component, service, toast };

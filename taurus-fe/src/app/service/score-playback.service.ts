@@ -104,8 +104,10 @@ export class ScorePlaybackService {
     }
 
     /** Avvia l'impaginazione di una versione in pagine e PDF. */
-    engrave(trackId: number, scoreId: number, versionId: number, options: EngravingOptions, context?: HttpContext): Observable<EngravingJob> {
-        return this.http.post<EngravingJob>(this.engravings(trackId, scoreId, versionId), options, { context });
+    /** Avvia l'impaginazione; con `assign` le pagine vanno alla parte al termine, se la parte non ha pagine. */
+    engrave(trackId: number, scoreId: number, versionId: number, options: EngravingOptions, context?: HttpContext, assign = false): Observable<EngravingJob> {
+        const params = assign ? new HttpParams().set('assign', 'true') : undefined;
+        return this.http.post<EngravingJob>(this.engravings(trackId, scoreId, versionId), options, { context, params });
     }
 
     /** Ultima impaginazione della versione; `null` se non ce ne sono. */

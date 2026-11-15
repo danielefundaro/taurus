@@ -34,6 +34,8 @@ export interface ArrangementRowState extends ArrangementRow {
     /** Parte della traccia collegata al rigo. */
     scoreId?: number | null;
     status: ArrangementRowStatus;
+    /** Numero della versione della partitura da cui viene l'ultima versione estratta della parte; vuoto se mai estratta. */
+    extractedFrom?: number | null;
 }
 
 /** Controlli automatici di un rigo di una versione. */
@@ -78,6 +80,38 @@ export interface ArrangementDraft extends ScoreDraft {
 export interface NewArrangement {
     content: string;
     rows: ArrangementRowRequest[];
+}
+
+/** Un rigo da estrarre: la parte che riceve la versione, o `null` per una parte nuova, e il MusicXML della parte. */
+export interface ExtractedRow {
+    row: string;
+    sheetMusicId: number | null;
+    /** Descrizione della parte nuova; vuota per il nome del rigo. */
+    description?: string | null;
+    /** MusicXML non compresso con la sola parte estratta. */
+    content: string;
+}
+
+/** Estrazione delle parti dalla versione corrente della partitura. */
+export interface ExtractionRequest {
+    /** Versione della traccia letta da chi estrae, per non estrarre su una traccia cambiata nel frattempo. */
+    trackVersion: number | null;
+    rows: ExtractedRow[];
+}
+
+/** Una parte che ha ricevuto la versione estratta. */
+export interface ExtractedPart {
+    row: string;
+    scoreId: number;
+    versionId: number;
+    /** La parte è stata creata dall'estrazione, senza pagine. */
+    created: boolean;
+}
+
+export interface ExtractionResult {
+    parts: ExtractedPart[];
+    /** Versione della traccia dopo l'estrazione. */
+    trackVersion: number;
 }
 
 /** Versione della partitura scritta nell'editor, che possiede il blocco. */

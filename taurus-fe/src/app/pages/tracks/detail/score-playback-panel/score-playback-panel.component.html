@@ -69,6 +69,24 @@
                         @if (canManage && sourceChanged(part); as changed) {
                             <p-tag severity="warn" icon="pi pi-exclamation-triangle" value="La parte di origine è cambiata" [pTooltip]="changed" />
                         }
+                        @if (canManage && extractedLabel(part); as extracted) {
+                            <p-tag severity="secondary" icon="pi pi-clone" [value]="extracted" />
+                        }
+                        @if (canManage && extractionDivergence(part); as divergence) {
+                            <p-tag severity="warn" icon="pi pi-exclamation-triangle" [value]="divergence.label" [pTooltip]="divergence.hint" />
+                        }
+                        @if (canWrite && part.pendingPages; as pending) {
+                            <button
+                                type="button"
+                                class="p-0 border-0 bg-transparent cursor-pointer"
+                                [attr.aria-label]="'Assegna le pagine impaginate di ' + label(part)"
+                                [disabled]="trackDirty"
+                                [pTooltip]="pendingHint(part)"
+                                (click)="engrave(part, pending.versionId, pending.versionNumber)"
+                            >
+                                <p-tag severity="warn" icon="pi pi-file-pdf" value="Pagine da assegnare" />
+                            </button>
+                        }
                         @if (canManage && part.editing; as editing) {
                             <p-tag severity="info" icon="pi pi-pencil" [value]="editingLabel(editing)" />
                         }

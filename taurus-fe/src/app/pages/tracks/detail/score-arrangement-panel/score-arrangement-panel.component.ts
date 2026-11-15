@@ -1,11 +1,13 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
 import { DialogService } from 'primeng/dynamicdialog';
 import { first, firstValueFrom } from 'rxjs';
+import { openEngraveDialog } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
+import { ExtractedPartToEngrave, ExtractPartsDialogComponent, ExtractPartsDialogData, ExtractPartsDialogResult } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent, NewArrangementDialogData, NewArrangementDialogResult } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
 import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { editLockMessage } from '../../../../constants';
 import { ImportsModule } from '../../../../imports';
-import { Arrangement, ArrangementRowStatus, ArrangementVersion, DraftSummary, EditLock } from '../../../../module';
+import { Arrangement, ArrangementRowStatus, ArrangementVersion, DraftSummary, EditLock, TrackPlayback } from '../../../../module';
 import { ArrangementService, ConfirmService, ScorePlaybackService, ToastService, withErrorSummary } from '../../../../service';
 
 /** Telefono: la scheda mostra solo lo stato della partitura, che si scrive da un computer o da un tablet. */
@@ -28,8 +30,8 @@ function moment(value: string | null | undefined): string {
 
 /**
  * Partitura della traccia, per chi gestisce la traccia con la scrittura attiva: la crea dall'organico o dalle parti, la
- * apre nell'editor della partitura, ne mostra i righi con lo stato delle loro parti, le versioni da approvare o scaricare
- * e la elimina. Sul telefono mostra solo lo stato.
+ * apre nell'editor della partitura, ne mostra i righi con lo stato delle loro parti, ne estrae le parti e le impagina,
+ * mostra le versioni da approvare o scaricare e la elimina. Sul telefono mostra solo lo stato.
  */
 @Component({
     selector: 'app-score-arrangement-panel',
@@ -43,6 +45,12 @@ export class ScoreArrangementPanelComponent implements OnChanges {
     @Input({ required: true }) trackId!: number;
     /** La traccia ha modifiche non salvate: le parti nuove non sono ancora sul server. */
     @Input() trackDirty = false;
+    /** Compositore e arrangiatore della traccia, scritti nelle parti estratte e proposti nell'intestazione delle pagine. */
+    @Input() composer?: string | null;
+    @Input() arranger?: string | null;
+    @Output() trackVersionChange = new EventEmitter<number>();
+    /** L'estrazione o l'impaginazione hanno cambiato le parti: la pagina le ricarica. */
+    @Output() partsChange = new EventEmitter<void>();
 
     protected arrangement: Arrangement | null = null;
     protected versions: ArrangementVersion[] | null = null;
@@ -165,6 +173,64 @@ export class ScoreArrangementPanelComponent implements OnChanges {
                     () => void this.reload()
                 )
         });
+    }
+
+    /** Perché le parti non si estraggono; `null` se si può. */
+    protected get extractBlocker(): string | null {
+        if (!this.arrangement?.currentVersion) return 'Salva una versione della partitura per estrarne le parti';
+        if (this.trackDirty) return 'Salva la traccia prima di estrarre le parti';
+        return null;
+    }
+
+    /** Estrae le parti dalla versione corrente; al termine le parti scelte si impaginano con le stesse opzioni. */
+    protected async extract(): Promise<void> {
+        const arrangement = this.arrangement;
+        if (!arrangement?.currentVersion || this.extractBlocker || this.opening) return;
+        this.opening = true;
+        this.changeDetector.markForCheck();
+        let playback: TrackPlayback;
+        try {
+            playback = await firstValueFrom(this.playbackService.playback(this.trackId));
+        } catch {
+            this.toastService.error('Parti non estratte', 'Le parti della traccia non si possono leggere: riprovare più tardi.');
+            return;
+        } finally {
+            this.opening = false;
+            this.changeDetector.markForCheck();
+        }
+        const data: ExtractPartsDialogData = {
+            trackId: this.trackId,
+            arrangement,
+            playback,
+            header: { title: playback.trackName ?? '', composer: this.composer ?? '', arranger: this.arranger ?? '' },
+            canEngrave: playback.recognitionAvailable
+        };
+        const ref = this.dialogService.open(ExtractPartsDialogComponent, { showHeader: false, width: 'min(48rem, 95vw)', modal: true, focusOnShow: false, data });
+        ref?.onClose.pipe(first()).subscribe((closed: ExtractPartsDialogResult | undefined) => {
+            if (!closed) return;
+            this.trackVersionChange.emit(closed.result.trackVersion);
+            this.partsChange.emit();
+            void this.reload();
+            if (closed.engrave?.length) this.engrave(closed.engrave, playback.trackName ?? '', closed.result.trackVersion);
+        });
+    }
+
+    /** Un solo dialogo di opzioni, con l'anteprima della prima parte, per un'impaginazione di ogni parte. */
+    private engrave(parts: ExtractedPartToEngrave[], title: string, trackVersion: number): void {
+        const [lead] = parts;
+        openEngraveDialog(this.dialogService, {
+            trackId: this.trackId,
+            scoreId: lead.scoreId,
+            versionId: lead.versionId,
+            partLabel: lead.partLabel,
+            header: { title, composer: this.composer ?? '', arranger: this.arranger ?? '', partName: lead.partLabel },
+            hasPages: lead.hasPages,
+            trackVersion,
+            parts
+        })
+            .pipe(first())
+            // Le pagine assegnate da sole cambiano la traccia: la pagina la rilegge.
+            .subscribe(() => this.partsChange.emit());
     }
 
     /** Mostra o nasconde le versioni della partitura. */

@@ -37,6 +37,9 @@
                     } @else {
                         <p-button label="Scrivi" icon="pi pi-pencil" [disabled]="!arrangement.currentVersion" (onClick)="write()" />
                     }
+                    <span [pTooltip]="extractBlocker ?? 'Le parti della traccia ricevono una nuova versione dai righi scelti'">
+                        <p-button label="Estrai le parti" icon="pi pi-clone" severity="secondary" outlined [loading]="opening" [disabled]="!!extractBlocker" (onClick)="extract()" />
+                    </span>
                     <p-button [label]="versions ? 'Nascondi le versioni' : 'Versioni'" icon="pi pi-history" severity="secondary" outlined (onClick)="toggleVersions()" />
                     <p-button label="Elimina la partitura" icon="pi pi-trash" severity="danger" outlined [disabled]="editedElsewhere" [pTooltip]="editedElsewhere ? 'Qualcuno sta scrivendo la partitura' : ''" (onClick)="remove()" />
                 </div>
