@@ -249,7 +249,7 @@ Se richiesti, il programma deve contenere almeno una voce e ogni voce deve avere
 
 Media `MIGRATION_PENDING`, `PROCESSING`, `FAILED`, `INVALID` o `DELETED` non soddisfano la verifica. Anche la visibilità della traccia deve essere compatibile con quella dell'evento.
 
-`SCORE_NOT_READY` compare quando almeno una voce non ha nessuno spartito pronto, o quando in un evento `PUBLIC` la traccia non è `PUBLIC`; il dettaglio dice quanti spartiti sono in revisione, senza strumenti o senza file pronti. Uno spartito senza strumenti o in revisione non blocca se la traccia ha un'alternativa pronta, ma non conta come pronto: le alternative ancora in revisione producono l'avviso `SCORE_ALTERNATIVE_IN_REVIEW`, con una riga per parte.
+`SCORE_NOT_READY` compare quando almeno una voce non ha nessuno spartito pronto, o quando in un evento `PUBLIC` la traccia non è `PUBLIC`; il dettaglio dice quanti spartiti sono in revisione, senza strumenti, da impaginare o senza file pronti. Una parte è da impaginare quando ha una versione corrente e nessuna pagina, per esempio una parte scritta nell'[editor](music-writing-editor-spec.md#parti-da-impaginare) e non ancora impaginata; una parte con le pagine ancora in elaborazione resta tra quelle senza file pronti. Uno spartito senza strumenti o in revisione non blocca se la traccia ha un'alternativa pronta, ma non conta come pronto: le alternative ancora in revisione producono l'avviso `SCORE_ALTERNATIVE_IN_REVIEW`, con una riga per parte.
 
 `INSTRUMENT_NOT_COVERED` (`INFO`) è una stima, non un organico: per ogni strumento dei partecipanti attesi che hanno risposto “disponibile”, conta i brani con parti pronte che non hanno una parte pronta per quello strumento. Il dettaglio riporta soltanto conteggi (“3 brani su 8 senza una parte pronta · 2 disponibili”), mai chi suona cosa, e la criticità non cambia stato né percentuale.
 
@@ -371,13 +371,15 @@ Il programma contiene al più 100 voci: la pagina disattiva l'aggiunta al limite
 
 ### Fruizione degli spartiti
 
-Ogni voce del programma riporta gli spartiti della traccia: descrizione, strumenti, se lo spartito è pronto o in revisione e i file `READY` con identificativo e nome. Il DTO non contiene binari né URL: i file si scaricano tramite l'endpoint media autorizzato (`/api/media/{id}/stream`), che verifica di nuovo il lettore.
+Ogni voce del programma riporta gli spartiti della traccia: descrizione, strumenti con nome e identificativo, se lo spartito è pronto, in revisione o da impaginare e i file `READY` con identificativo e nome. Il DTO non contiene binari né URL: i file si scaricano tramite l'endpoint media autorizzato (`/api/media/{id}/stream`), che verifica di nuovo il lettore.
 
 - Admin, super admin e archivista ricevono tutti gli spartiti di ogni voce, pronti o no, e li aprono dal programma.
 - L'utente interno vede nel programma soltanto tracce `COMPLETE` o `PUBLIC` e, per ciascuna, soltanto gli spartiti pronti dei propri strumenti.
 - L'utente esterno vede soltanto eventi e tracce `PUBLIC`, con la stessa regola sugli spartiti.
 - Le voci di tracce cancellate non compaiono nelle viste personali.
 - Il tesoriere non riceve il programma.
+
+**Stampa la scaletta** apre l'anteprima di stampa con le pagine degli spartiti che la vista mostra a chi stampa, per strumento e nel formato marcia, come descritto nella [stampa della scaletta](music-writing-editor-spec.md#stampa-della-scaletta). Le pagine passano dallo stesso endpoint media.
 
 Il pacchetto ZIP di tutti gli spartiti resta rinviato perché richiede limiti, autorizzazione file-per-file e gestione di documenti voluminosi.
 
@@ -735,10 +737,11 @@ La configurazione mostra profilo, requisiti come scelte “Richiesto/Non richies
 - avviso per la traccia rinominata (con il nome salvato) o non più nel catalogo;
 - selettore paginato delle tracce e collegamento di un album, con i limiti di 100 voci;
 - riordinamento trascinando la maniglia o con i pulsanti “sposta prima/dopo”, duplicazione e rimozione, ognuno annunciato agli screen reader;
-- espansione “Spartiti” di ogni voce con descrizione, strumenti, stato e download dei file pronti;
-- salvataggio esplicito dell'intero programma con la versione letta.
+- espansione “Spartiti” di ogni voce con descrizione, strumenti, stato (“Pronto”, “Da impaginare”, “In revisione”, “Non pronto”) e download dei file pronti; una parte da impaginare ha “Impagina”, che apre la scheda Ascolto della traccia;
+- salvataggio esplicito dell'intero programma con la versione letta;
+- “Stampa la scaletta”, attiva sul programma salvato con almeno una pagina da stampare.
 
-Utenti ed esterni vedono lo stesso elenco in sola lettura, con i soli spartiti pronti dei propri strumenti.
+Utenti ed esterni vedono lo stesso elenco in sola lettura, con i soli spartiti pronti dei propri strumenti, e stampano la scaletta con quelli.
 
 ### Disponibilità
 
@@ -948,7 +951,7 @@ Le disponibilità e le loro notifiche sono coperte dai test del calendario indic
 - duplicazione consentita della stessa traccia;
 - ordine univoco e sostituzione atomica;
 - traccia `DRAFT`, cancellata o con visibilità incompatibile;
-- spartito assente, in revisione, senza strumento o senza media `READY`;
+- spartito assente, in revisione, senza strumento, da impaginare o senza media `READY`;
 - alternativa in revisione con almeno uno spartito pronto;
 - durata totale superiore alla durata evento;
 - filtro spartiti per strumenti e ruolo;
@@ -1009,7 +1012,7 @@ I casi elencati sotto sono coperti dalle specifiche Karma accanto ai componenti:
 - `preparation/preparation-summary.component.spec.ts`: stato, fase e barra di avanzamento, criticità con collegamenti e dettagli, “Mostra criticità” e focus, aree escluse, criticità non elencate;
 - `preparation/preparation-configuration.component.spec.ts`: scelte esplicite, profilo su piano salvato, vincoli, moduli disattivati, ricarica senza perdita, salvataggio e conflitto;
 - `preparation/preparation-confirmation.component.spec.ts`: conferma nuova, corrente e superata, API economica del tesoriere, attesa delle presenze non salvate, motivo con limite;
-- `preparation/preparation-program.component.spec.ts`: selettore paginato, duplicazione, riordino con trascinamento e pulsanti, limite, album, salvataggio con bis e versione, conflitto, spartiti e download, sola lettura;
+- `preparation/preparation-program.component.spec.ts`: selettore paginato, duplicazione, riordino con trascinamento e pulsanti, limite, album, salvataggio con bis e versione, conflitto, spartiti e download, parti da impaginare, stampa della scaletta, sola lettura;
 - `preparation/preparation-materials.component.spec.ts`: numero d'inventario, quantità in carico, collegamento e problemi, assegnazione dell'oggetto scelto, limite, salvataggio con versione, conflitto;
 - `detail.component.spec.ts`: sezioni e chiamate HTTP per ogni ruolo, guardia delle unità sporche attraverso una ricarica, live region, focus dal frammento, lettura fallita con “Riprova”;
 - `finance.component.spec.ts`: movimenti non riconciliati dell'evento aperti dal collegamento della criticità.
@@ -1025,6 +1028,7 @@ Casi coperti:
 - programma con aggiunta, duplicazione, riordino e rimozione;
 - fallback accessibile al drag and drop;
 - spartiti filtrati e download autorizzato;
+- stampa della scaletta del programma salvato, con ogni brano una volta;
 - soglia e scadenza disponibilità;
 - materiali pianificati, collegati e confermati;
 - conferma preventivo e presenze;

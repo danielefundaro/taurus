@@ -39,7 +39,7 @@ La specifica completa il [Workspace per la gestione delle parti di una traccia](
 - Selezione e deselezione globale delle parti.
 - Navigazione tra pagine, adattamento e zoom visuale.
 - Presentazione a schermo intero.
-- Stampa delle sole pagine incluse dal filtro, con una o due pagine per foglio.
+- Stampa delle sole pagine incluse dal filtro, con una o due pagine per foglio o nel formato marcia.
 - Comportamento responsive della spalla filtri.
 - Stati senza contenuto, caricamento ed errore dei media.
 - Accessibilità tramite tastiera e tecnologie assistive.
@@ -77,6 +77,10 @@ L'azione di anteprima usa le tracce selezionate quando la selezione non è vuota
 
 Un errore durante il caricamento di una o più tracce impedisce l'apertura di un'anteprima parziale silenziosa. `PrinterService` libera lo stato e mostra il riepilogo d'errore «Anteprima non disponibile»; la pagina sorgente — elenco o dettaglio dell'album — conserva la selezione e presenta un avviso con l'azione «Riprova», che ripete il comando con la stessa sorgente e la stessa selezione. L'avviso resta finché l'anteprima non si apre; aprendo un'altra pagina sorgente l'avviso non viene riproposto.
 
+### Scaletta dell'evento
+
+Il programma di un evento apre l'anteprima con **Stampa la scaletta**, descritta nella [stampa della scaletta](music-writing-editor-spec.md#stampa-della-scaletta). Le parti arrivano già caricate con la preparazione e con le sole pagine che la vista mostra a chi stampa, ogni brano una volta. Il titolo deriva dal nome dell'evento, o «Scaletta» in sua assenza, e l'etichetta di contesto è «Scaletta». Le pagine seguono gli strumenti e, per ognuno, l'ordine dei brani; una parte con più strumenti compare una volta, sotto il primo strumento scelto. L'anteprima propone il formato marcia, e le parti che l'evento segnala da impaginare sono contate come quelle di una traccia.
+
 ### Durata dello stato
 
 I dati preparati vivono nella sessione applicativa necessaria alla navigazione verso `/preview`. Uscendo dall'anteprima, lo stato viene liberato. Un refresh o un collegamento diretto non ricostruisce la selezione: l'anteprima spiega che i dati non sopravvivono al ricaricamento e torna alla home, senza errori JavaScript.
@@ -97,7 +101,7 @@ La pagina usa quattro zone, nell'ordine seguente:
 L'intestazione contiene:
 
 - pulsante «Torna indietro»;
-- etichetta «Traccia» o «Album»;
+- etichetta «Traccia», «Album» o «Scaletta»;
 - titolo «Anteprima spartiti»;
 - nome della sorgente e numero di pagine incluse;
 - pulsante «Filtri»;
@@ -144,7 +148,7 @@ La chiusura su desktop restituisce al canvas tutta la larghezza disponibile. Su 
 
 ## 6. Filtro e stati del contenuto
 
-Il filtro opera sulle parti: una parte è inclusa quando non ha strumenti e la voce «Senza strumento» è selezionata, oppure quando possiede almeno uno strumento selezionato. Le pagine risultanti mantengono l'ordine della sorgente.
+Il filtro opera sulle parti: una parte è inclusa quando non ha strumenti e la voce «Senza strumento» è selezionata, oppure quando possiede almeno uno strumento selezionato. Le pagine risultanti mantengono l'ordine della sorgente, che per la scaletta di un evento è per strumento.
 
 Dopo ogni filtro:
 
@@ -193,7 +197,8 @@ Lo zoom modifica soltanto il canvas e non la dimensione stampata. Il valore corr
 Nell'anteprima l'utente sceglie:
 
 - una pagina per foglio, valore predefinito compatibile con il comportamento precedente;
-- due pagine per foglio, con accorpamento automatico delle pagine consecutive.
+- due pagine per foglio, con accorpamento automatico delle pagine consecutive;
+- il formato marcia, proposto per la scaletta di un evento: due pagine di 18 × 13 cm a grandezza reale, una sopra l'altra su un A4 verticale, con una linea di taglio tratteggiata attorno a ogni pagina. Una pagina di un altro rapporto tra i lati si riduce per entrare nel riquadro, e accanto al numero di fogli l'anteprima indica quante sono («1 pagina non in formato marcia, ridotta in stampa»).
 
 Nell'anteprima 2-up Taurus usa il rapporto medio delle immagini per mostrare una composizione coerente per l'intero lavoro: pagine prevalentemente verticali sono rappresentate affiancate, mentre pagine prevalentemente orizzontali sono rappresentate sovrapposte. Questa rappresentazione non imposta l'orientamento del dispositivo. Nel documento stampabile la disposizione segue l'orientamento scelto nel dialogo: due righe in verticale e due colonne in orizzontale.
 
@@ -214,7 +219,7 @@ Regole di composizione:
 - sfondo neutro e nessuna ombra decorativa;
 - nessuna pagina vuota iniziale o finale introdotta dal layout.
 
-Taurus non imposta il formato carta né l'orientamento del dispositivo. Il foglio composto occupa l'area di pagina fornita dal browser; in modalità 2-up le pagine vengono sovrapposte quando nel dialogo è selezionato l'orientamento verticale e affiancate quando è selezionato quello orizzontale. Il dialogo del browser resta autorevole anche per margini fisici e scala finale. Poiché l'accorpamento è già eseguito da Taurus, nel dialogo del browser «Pagine per foglio» deve restare impostato a 1 per evitare un secondo accorpamento.
+Taurus non imposta il formato carta né l'orientamento del dispositivo, tranne che nel formato marcia: lì il foglio chiede un A4 verticale senza margini con una pagina con nome (`@page march`), e un browser che non la supporta lascia la scelta al dialogo, dove va indicato l'A4 verticale. Il foglio composto occupa l'area di pagina fornita dal browser; in modalità 2-up le pagine vengono sovrapposte quando nel dialogo è selezionato l'orientamento verticale e affiancate quando è selezionato quello orizzontale. Il dialogo del browser resta autorevole anche per margini fisici e scala finale. Poiché l'accorpamento è già eseguito da Taurus, nel dialogo del browser «Pagine per foglio» deve restare impostato a 1 per evitare un secondo accorpamento.
 
 ## 9. Responsive
 
