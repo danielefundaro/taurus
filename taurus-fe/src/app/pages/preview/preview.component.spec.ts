@@ -219,6 +219,39 @@ describe('PreviewComponent', () => {
         expect(component['printOrientation']).toBe('landscape');
     });
 
+    it('lists the instruments of the filter and prints the program in the order of the ensemble', () => {
+        const program = new PreviewComponent(
+            {
+                scores: [
+                    { id: 1, instruments: [{ index: 3, name: 'Tromba' }], media: [{ index: 1 }] },
+                    { id: 2, instruments: [{ index: 8, name: 'Flicorno' }], media: [{ index: 2 }] },
+                    { id: 3, instruments: [{ index: 5, name: 'Voce' }], media: [{ index: 3 }] },
+                    { id: 4, instruments: [{ index: 3, name: 'Tromba' }], media: [{ index: 4 }] }
+                ],
+                previewTitle: 'Sfilata',
+                previewSource: 'Scaletta',
+                byInstrument: true,
+                ensemble: [8, 3],
+                clear: () => undefined,
+                isUnengraved: unengravedPart
+            } as unknown as PrinterService,
+            { stream: (id: number) => `/media/${id}`, streamImage: () => of(imageBlob()) } as unknown as MediaService,
+            { navigate: () => Promise.resolve(true) } as unknown as Router,
+            { back: () => undefined } as Location,
+            { bypassSecurityTrustUrl: (url: string) => url } as unknown as DomSanitizer,
+            { markForCheck: () => undefined } as ChangeDetectorRef,
+            { warn: () => undefined } as unknown as ToastService,
+            MEMBER
+        );
+        program.ngOnInit();
+        const state = program as unknown as Record<string, any>;
+
+        // The instruments outside the ensemble follow, in the order of the parts.
+        expect(state['instrumentKeys'].map((key: string) => state['instruments'][key])).toEqual(['Flicorno', 'Tromba', 'Voce']);
+        expect(state['mediaStreams']).toEqual(['/media/2', '/media/1', '/media/4', '/media/3']);
+        program.ngOnDestroy();
+    });
+
     it('prints the program of an event by instrument and in the march format', () => {
         const program = new PreviewComponent(
             {

@@ -585,6 +585,7 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
 
     // Instruments and the instruments to add of the tracks
     'instrument.name.exists': 'Esiste già uno strumento con questo nome',
+    'instrument.ensemble.invalid': "Uno degli strumenti dell'organico non esiste più o compare due volte",
     'instrumentSuggestion.notOpen': "Uno dei nomi è già stato deciso da un'altra richiesta",
 
     // Tracks, uploads and page images

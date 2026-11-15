@@ -856,6 +856,16 @@ export const GUIDED_TOUR_PAGES: readonly GuidedTourPageDefinition[] = [
                 title: 'Da configurare',
                 body: "Mostra solo gli strumenti ancora da configurare per l'ascolto e aprili per scegliere il suono.",
                 introducedIn: 2
+            },
+            {
+                id: 'page.instruments.ensemble',
+                roles: CATALOG,
+                anchors: ['instruments.ensemble'],
+                icon: 'pi pi-list',
+                title: 'Organico',
+                body: "Nella scheda Organico metti in ordine gli strumenti che suonano nella banda: l'anteprima e la stampa seguono lo stesso ordine.",
+                points: [{ text: "Comincia da «Proponi l'ordine di riferimento»" }],
+                introducedIn: 5
             }
         ]
     },

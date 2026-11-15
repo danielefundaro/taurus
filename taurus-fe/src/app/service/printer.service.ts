@@ -1,8 +1,10 @@
 import { inject, Injectable } from "@angular/core";
 import { Router } from "@angular/router";
-import { forkJoin, Subscription } from "rxjs";
+import { catchError, forkJoin, map, Observable, of, Subscription } from "rxjs";
 import { TracksService } from "./tracks.service";
-import { withErrorSummary } from "./api-error-context";
+import { InstrumentsService } from "./instruments.service";
+import { withErrorSummary, withHandledErrors } from "./api-error-context";
+import { byEnsemble } from "./ensemble-order";
 import { Albums, ChildrenEntities, SheetsMusic, Tracks } from "../module";
 import { unengravedPart } from "../score-editor/score-engraving";
 
@@ -26,7 +28,9 @@ export class PrinterService {
     private _byInstrument = false;
     private _unengraved = new Set<number>();
     private _lastRequest?: PreviewRequest;
+    private _ensemble: number[] = [];
     private readonly tracksService = inject(TracksService);
+    private readonly instrumentsService = inject(InstrumentsService);
     private readonly router = inject(Router);
     private $subscription?: Subscription;
 
@@ -54,6 +58,14 @@ export class PrinterService {
         return this._byInstrument;
     }
 
+    /**
+     * Gli id degli strumenti dell'organico della banda, nel loro ordine, letti all'apertura dell'anteprima: le parti di
+     * ogni traccia e i filtri degli strumenti lo seguono. Vuoto senza organico.
+     */
+    public get ensemble(): number[] {
+        return this._ensemble;
+    }
+
     /** Parte scritta o ricavata senza pagine: resta fuori da anteprima e stampa, e il titolo la conta. */
     public isUnengraved(score: SheetsMusic): boolean {
         return unengravedPart(score) || (score.id !== undefined && this._unengraved.has(score.id));
@@ -65,7 +77,9 @@ export class PrinterService {
     }
 
     public preview(element: Albums | Tracks, selectedTracks?: ChildrenEntities[]): void {
+        this.$subscription?.unsubscribe();
         this._scores = [];
+        this._ensemble = [];
         this._previewError = false;
         this._byInstrument = false;
         this._unengraved.clear();
@@ -74,8 +88,11 @@ export class PrinterService {
 
         if (typeof element === "object" && "scores" in element) {
             this._previewSource = 'Traccia';
-            this._scores.push(...element.scores!);
-            this.router.navigate(["preview"]);
+            this.$subscription = this.ensembleOrder().subscribe(ensemble => {
+                this._ensemble = ensemble;
+                this._scores.push(...byEnsemble(element.scores ?? [], ensemble));
+                this.router.navigate(["preview"]);
+            });
         } else if (typeof element === "object" && "tracks" in element) {
             this._previewSource = 'Album';
             let childrenEntities: ChildrenEntities[] = [];
@@ -87,9 +104,14 @@ export class PrinterService {
             }
 
             const context = withErrorSummary('Anteprima non disponibile');
-            this.$subscription = forkJoin(childrenEntities.map(track => this.tracksService.getById(track.index, context))).subscribe({
-                next: tracks => {
-                    this._scores.push(...tracks.flatMap(track => track.scores!))
+            this.$subscription = forkJoin([
+                forkJoin(childrenEntities.map(track => this.tracksService.getById(track.index, context))),
+                this.ensembleOrder()
+            ]).subscribe({
+                // Le parti seguono l'organico dentro ogni traccia: i brani restano nell'ordine dell'album.
+                next: ([tracks, ensemble]) => {
+                    this._ensemble = ensemble;
+                    this._scores.push(...tracks.flatMap(track => byEnsemble(track.scores ?? [], ensemble)));
                     this.router.navigate(["preview"]);
                 },
                 // Un errore su una traccia non deve aprire un'anteprima parziale: la pagina sorgente conserva la selezione e offre «Riprova».
@@ -113,7 +135,10 @@ export class PrinterService {
         this._scores = [...scores];
         this._byInstrument = true;
         this._unengraved = new Set(unengraved);
-        this.router.navigate(["preview"]);
+        this.$subscription = this.ensembleOrder().subscribe(ensemble => {
+            this._ensemble = ensemble;
+            this.router.navigate(["preview"]);
+        });
     }
 
     /** Nasconde l'avviso: una pagina sorgente che si apre non deve mostrare l'errore di un'altra. */
@@ -128,6 +153,14 @@ export class PrinterService {
         this.preview(this._lastRequest.element, this._lastRequest.selectedTracks);
     }
 
+    /** L'organico non è indispensabile: se non si legge, l'anteprima si apre nell'ordine delle parti, senza avvisi. */
+    private ensembleOrder(): Observable<number[]> {
+        return this.instrumentsService.ensemble(withHandledErrors(['*'])).pipe(
+            map(ensemble => ensemble.map(instrument => instrument.id)),
+            catchError(() => of([]))
+        );
+    }
+
     public clear(): void {
         this._scores = [];
         this._previewTitle = 'Spartiti selezionati';
@@ -135,6 +168,7 @@ export class PrinterService {
         this._previewError = false;
         this._byInstrument = false;
         this._unengraved.clear();
+        this._ensemble = [];
 
         if (this.$subscription) {
             this.$subscription.unsubscribe();

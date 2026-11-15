@@ -3,90 +3,105 @@
     <div pageActions appTourAnchor="instruments.create"><p-button label="Nuovo strumento" icon="pi pi-plus" (onClick)="addNew()" /></div>
 </app-page-header>
 
-<app-list-toolbar [search]="searchTerm" [sortOptions]="sortOptions" [layout]="layout"
-    (searchChange)="onSearchChange($event)" (sortChange)="onSortValue($event)"
-    (layoutChange)="onLayoutChange($event)" />
-@if (scorePlaybackEnabled) {
-<div class="flex items-center gap-2 mb-3" appTourAnchor="instruments.unconfigured">
-    <p-checkbox inputId="onlyUnconfigured" [binary]="true" [(ngModel)]="onlyUnconfigured" (ngModelChange)="onUnconfiguredChange()" />
-    <label for="onlyUnconfigured">Da configurare per l'ascolto</label>
-</div>
-}
-<app-selection-bar [count]="selectedInstruments.length" [allSelected]="isAllSelected(instruments)"
-    (toggleAll)="toggleSelectAll(instruments)" (clear)="selectedInstruments = []" (delete)="deleteSelectedElements()" />
+<p-tabs [(value)]="activeTab">
+    <p-tablist>
+        <p-tab value="list">Elenco</p-tab>
+        <p-tab value="ensemble" appTourAnchor="instruments.ensemble">Organico</p-tab>
+    </p-tablist>
+    <p-tabpanels>
+        <p-tabpanel value="list">
+            <app-list-toolbar [search]="searchTerm" [sortOptions]="sortOptions" [layout]="layout"
+                (searchChange)="onSearchChange($event)" (sortChange)="onSortValue($event)"
+                (layoutChange)="onLayoutChange($event)" />
+            @if (scorePlaybackEnabled) {
+            <div class="flex items-center gap-2 mb-3" appTourAnchor="instruments.unconfigured">
+                <p-checkbox inputId="onlyUnconfigured" [binary]="true" [(ngModel)]="onlyUnconfigured" (ngModelChange)="onUnconfiguredChange()" />
+                <label for="onlyUnconfigured">Da configurare per l'ascolto</label>
+            </div>
+            }
+            <app-selection-bar [count]="selectedInstruments.length" [allSelected]="isAllSelected(instruments)"
+                (toggleAll)="toggleSelectAll(instruments)" (clear)="selectedInstruments = []" (delete)="deleteSelectedElements()" />
 
-<div class="card p-0! overflow-hidden">
-    <p-dataview [value]="instruments" [layout]="layout" [lazy]="true" [lazyLoadOnInit]="true" [loading]="loading"
-        [first]="dataViewLazyLoadEvent.first" [rows]="dataViewLazyLoadEvent.rows" [paginator]="true"
-        paginatorPosition="bottom" [showCurrentPageReport]="true"
-        currentPageReportTemplate="Da {first} a {last} di {totalRecords} elementi" [totalRecords]="totalRecords"
-        [sortField]="dataViewLazyLoadEvent.sortField" [sortOrder]="dataViewLazyLoadEvent.sortOrder"
-        [rowsPerPageOptions]="[12, 24, 48]" paginatorDropdownAppendTo="body" (onLazyLoad)="onLazyLoad($event)">
-        <ng-template #loadingicon><app-list-loading-skeleton [layout]="layout" /></ng-template>
-        <ng-template #list let-items>
-            <div class="flex flex-col">
-                @for (item of items; track item.id) {
-                <app-list-row>
-                    <p-checkbox rowSelection [binary]="true" [ngModel]="isSelected(item)"
-                        (ngModelChange)="toggleSelection(item)" [ariaLabel]="'Seleziona ' + item.name" />
-                    <p-avatar rowMedia [label]="item.name | initials" size="large" shape="circle" />
-                    <div rowIdentity>
-                        <a class="text-base font-semibold cursor-pointer block" [routerLink]="item.id">{{ item.name
-                            }}</a>
-                        <span class="block text-sm text-muted-color whitespace-nowrap overflow-hidden text-ellipsis">{{
-                            item.description || 'Nessuna descrizione' }}</span>
-                        @if (scorePlaybackEnabled && !item.playbackConfigured) {
-                        <p-tag severity="warn" value="Da configurare per l'ascolto" class="mt-1" />
-                        }
-                    </div>
-                    <div rowMetrics class="list-metric">
-                        <strong>{{ item.usersCount ?? 0 }}</strong><small>{{ item.usersCount === 1 ? 'utente' : 'utenti'
-                            }}</small>
-                    </div>
-                    <div rowActions>
-                        <p-button icon="pi pi-pencil" label="Modifica" [routerLink]="item.id" />
-                        <p-button icon="pi pi-trash" severity="danger" text ariaLabel="Elimina strumento"
-                            pTooltip="Elimina" (onClick)="deleteElement(item)" />
-                    </div>
-                </app-list-row>
-                }
-            </div>
-        </ng-template>
-        <ng-template #grid let-items>
-            <div class="grid grid-cols-12 gap-4 p-4">
-                @for (item of items; track item.id) {
-                <div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-3">
-                    <app-entity-card [selected]="isSelected(item)">
-                        <p-checkbox cardSelection [binary]="true" [ngModel]="isSelected(item)"
-                            (ngModelChange)="toggleSelection(item)" [ariaLabel]="'Seleziona ' + item.name" />
-                        <p-avatar cardMedia [label]="item.name | initials" size="xlarge" shape="circle" />
-                        <div cardBody>
-                            <a class="text-base font-semibold block" [routerLink]="item.id">{{ item.name }}</a>
-                            <p class="text-sm text-muted-color line-clamp-2 mt-2 mb-0">{{ item.description || 'Nessuna
-                                descrizione' }}</p>
+            <div class="card p-0! overflow-hidden">
+                <p-dataview [value]="instruments" [layout]="layout" [lazy]="true" [lazyLoadOnInit]="true" [loading]="loading"
+                    [first]="dataViewLazyLoadEvent.first" [rows]="dataViewLazyLoadEvent.rows" [paginator]="true"
+                    paginatorPosition="bottom" [showCurrentPageReport]="true"
+                    currentPageReportTemplate="Da {first} a {last} di {totalRecords} elementi" [totalRecords]="totalRecords"
+                    [sortField]="dataViewLazyLoadEvent.sortField" [sortOrder]="dataViewLazyLoadEvent.sortOrder"
+                    [rowsPerPageOptions]="[12, 24, 48]" paginatorDropdownAppendTo="body" (onLazyLoad)="onLazyLoad($event)">
+                    <ng-template #loadingicon><app-list-loading-skeleton [layout]="layout" /></ng-template>
+                    <ng-template #list let-items>
+                        <div class="flex flex-col">
+                            @for (item of items; track item.id) {
+                            <app-list-row>
+                                <p-checkbox rowSelection [binary]="true" [ngModel]="isSelected(item)"
+                                    (ngModelChange)="toggleSelection(item)" [ariaLabel]="'Seleziona ' + item.name" />
+                                <p-avatar rowMedia [label]="item.name | initials" size="large" shape="circle" />
+                                <div rowIdentity>
+                                    <a class="text-base font-semibold cursor-pointer block" [routerLink]="item.id">{{ item.name
+                                        }}</a>
+                                    <span class="block text-sm text-muted-color whitespace-nowrap overflow-hidden text-ellipsis">{{
+                                        item.description || 'Nessuna descrizione' }}</span>
+                                    @if (scorePlaybackEnabled && !item.playbackConfigured) {
+                                    <p-tag severity="warn" value="Da configurare per l'ascolto" class="mt-1" />
+                                    }
+                                </div>
+                                <div rowMetrics class="list-metric">
+                                    <strong>{{ item.usersCount ?? 0 }}</strong><small>{{ item.usersCount === 1 ? 'utente' : 'utenti'
+                                        }}</small>
+                                </div>
+                                <div rowActions>
+                                    <p-button icon="pi pi-pencil" label="Modifica" [routerLink]="item.id" />
+                                    <p-button icon="pi pi-trash" severity="danger" text ariaLabel="Elimina strumento"
+                                        pTooltip="Elimina" (onClick)="deleteElement(item)" />
+                                </div>
+                            </app-list-row>
+                            }
                         </div>
-                        <div cardMetrics>
-                            <div>
-                                <strong>{{ item.usersCount ?? 0 }}</strong><small class="block text-muted-color">{{
-                                    item.usersCount === 1 ? 'utente' : 'utenti' }}</small>
+                    </ng-template>
+                    <ng-template #grid let-items>
+                        <div class="grid grid-cols-12 gap-4 p-4">
+                            @for (item of items; track item.id) {
+                            <div class="col-span-12 sm:col-span-6 lg:col-span-4 xl:col-span-3">
+                                <app-entity-card [selected]="isSelected(item)">
+                                    <p-checkbox cardSelection [binary]="true" [ngModel]="isSelected(item)"
+                                        (ngModelChange)="toggleSelection(item)" [ariaLabel]="'Seleziona ' + item.name" />
+                                    <p-avatar cardMedia [label]="item.name | initials" size="xlarge" shape="circle" />
+                                    <div cardBody>
+                                        <a class="text-base font-semibold block" [routerLink]="item.id">{{ item.name }}</a>
+                                        <p class="text-sm text-muted-color line-clamp-2 mt-2 mb-0">{{ item.description || 'Nessuna
+                                            descrizione' }}</p>
+                                    </div>
+                                    <div cardMetrics>
+                                        <div>
+                                            <strong>{{ item.usersCount ?? 0 }}</strong><small class="block text-muted-color">{{
+                                                item.usersCount === 1 ? 'utente' : 'utenti' }}</small>
+                                        </div>
+                                    </div>
+                                    <div cardActions class="contents">
+                                        <p-button label="Modifica" icon="pi pi-pencil" [routerLink]="item.id"
+                                            styleClass="flex-1" /><p-button icon="pi pi-trash" severity="danger" text
+                                            ariaLabel="Elimina strumento" (onClick)="deleteElement(item)" />
+                                    </div>
+                                </app-entity-card>
                             </div>
+                            }
                         </div>
-                        <div cardActions class="contents">
-                            <p-button label="Modifica" icon="pi pi-pencil" [routerLink]="item.id"
-                                styleClass="flex-1" /><p-button icon="pi pi-trash" severity="danger" text
-                                ariaLabel="Elimina strumento" (onClick)="deleteElement(item)" />
-                        </div>
-                    </app-entity-card>
-                </div>
-                }
+                    </ng-template>
+                    <ng-template #empty>
+                        <app-empty-state icon="pi pi-wrench" [heading]="searchTerm ? 'Nessun risultato' : 'Nessuno strumento'"
+                            [message]="searchTerm ? 'Prova a modificare o azzerare la ricerca.' : 'Aggiungi il primo strumento per iniziare.'"
+                            [actionLabel]="searchTerm ? 'Azzera ricerca' : 'Nuovo strumento'"
+                            (action)="searchTerm ? onSearchChange('') : addNew()" />
+                    </ng-template>
+                </p-dataview>
             </div>
-        </ng-template>
-        <ng-template #empty>
-            <app-empty-state icon="pi pi-wrench" [heading]="searchTerm ? 'Nessun risultato' : 'Nessuno strumento'"
-                [message]="searchTerm ? 'Prova a modificare o azzerare la ricerca.' : 'Aggiungi il primo strumento per iniziare.'"
-                [actionLabel]="searchTerm ? 'Azzera ricerca' : 'Nuovo strumento'"
-                (action)="searchTerm ? onSearchChange('') : addNew()" />
-        </ng-template>
-    </p-dataview>
-</div>
+        </p-tabpanel>
+        <p-tabpanel value="ensemble">
+            @if (ensembleOpened) {
+            <app-instrument-ensemble />
+            }
+        </p-tabpanel>
+    </p-tabpanels>
+</p-tabs>
 <p-scrolltop />
