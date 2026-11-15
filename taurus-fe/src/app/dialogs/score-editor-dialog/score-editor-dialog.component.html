@@ -23,9 +23,29 @@
                 outlined
                 [loading]="preparingAudio"
                 [disabled]="status !== 'ready' || !measure"
-                pTooltip="Spazio. Maiusc+clic su un'altra battuta sceglie un intervallo"
+                [pTooltip]="data.arrangement ? 'Spazio: suonano tutti i righi. Maiusc+clic su un\'altra battuta sceglie un intervallo' : 'Spazio. Maiusc+clic su un\'altra battuta sceglie un intervallo'"
                 (onClick)="togglePlay()"
             />
+            @if (data.arrangement && status === 'ready') {
+                <span class="flex gap-1" role="group" aria-label="Notazione della partitura">
+                    @for (option of notations; track option.label) {
+                        <button
+                            pButton
+                            type="button"
+                            size="small"
+                            severity="secondary"
+                            [outlined]="concertPitch !== option.value"
+                            [attr.aria-pressed]="concertPitch === option.value"
+                            [disabled]="readOnly || saving"
+                            [pTooltip]="option.tooltip"
+                            tooltipPosition="bottom"
+                            (click)="convertNotation(option.value)"
+                        >
+                            {{ option.label }}
+                        </button>
+                    }
+                </span>
+            }
             @if (writingMode && midi.supported && status === 'ready') {
                 <p-button
                     label="Tastiera MIDI"
@@ -728,6 +748,10 @@
             }
             @if (message) {
                 <span class="score-editor__message"><i class="pi pi-exclamation-triangle mr-1" aria-hidden="true"></i>{{ message }}</span>
+                @if (conversionBlock) {
+                    <!-- Si apre in un'altra scheda, per non lasciare la partitura che si sta scrivendo. -->
+                    <a class="text-sm text-primary" [routerLink]="['/instruments', conversionBlock.id]" target="_blank" rel="noopener">Configura {{ conversionBlock.name }}</a>
+                }
             } @else if (info) {
                 <span class="score-editor__info"><i class="pi pi-check mr-1" aria-hidden="true"></i>{{ info }}</span>
             }
@@ -801,6 +825,20 @@
                                             <span class="text-xs text-muted-color">{{ row.instruments }}</span>
                                         }
                                     </button>
+                                    <button
+                                        pButton
+                                        type="button"
+                                        size="small"
+                                        [iconOnly]="true"
+                                        [severity]="row.highlighted ? 'primary' : 'secondary'"
+                                        [text]="!row.highlighted"
+                                        [attr.aria-label]="'In evidenza nell\'ascolto: ' + row.name"
+                                        [attr.aria-pressed]="row.highlighted"
+                                        [pTooltip]="row.highlighted ? 'In evidenza: nell\'ascolto suona più forte degli altri righi' : 'In evidenza nell\'ascolto'"
+                                        (click)="toggleHighlight(row)"
+                                    >
+                                        <i class="pi pi-volume-up" aria-hidden="true"></i>
+                                    </button>
                                     <p-button
                                         [icon]="row.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'"
                                         size="small"
@@ -832,39 +870,83 @@
                     </div>
                 }
 
-                <div class="score-editor__panel">
-                    <h3 class="score-editor__panel-title">{{ data.arrangement ? 'Controlli del rigo' : 'Controlli' }}</h3>
-                    @if (wrongMeasures.length) {
-                        <p class="text-sm m-0">Durata diversa dal metro:</p>
-                        <div class="flex flex-wrap gap-1">
-                            @for (item of wrongMeasures; track item.index) {
-                                <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="'Vai alla battuta ' + item.number" (onClick)="selectMeasure(item.index)" />
-                            }
-                        </div>
-                    } @else {
-                        <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le battute hanno la durata del metro.</p>
-                    }
-                    @if (emptyMeasures.length) {
-                        <p class="text-sm m-0">{{ emptyMeasures.length === 1 ? 'Battuta vuota' : 'Battute vuote' }}:</p>
-                        <div class="flex flex-wrap gap-1">
-                            @for (item of emptyMeasures; track item.index) {
-                                <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="'Vai alla battuta vuota ' + item.number" (onClick)="selectMeasure(item.index)" />
-                            }
-                        </div>
-                    }
-                    @if (rangeText) {
-                        @if (rangeWarnings.length) {
-                            <p class="text-sm m-0">Note fuori estensione di {{ range?.instrumentName }} ({{ rangeText }}):</p>
+                @if (data.arrangement) {
+                    <div class="score-editor__panel">
+                        <h3 class="score-editor__panel-title">Controlli dei righi</h3>
+                        @for (check of rowIssues; track check.index) {
+                            <div class="score-editor__row-check">
+                                <span class="text-sm font-medium">{{ check.name }}</span>
+                                @if (check.wrongDuration.length) {
+                                    <span class="text-xs text-muted-color">Durata diversa dal metro:</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        @for (item of check.wrongDuration; track item.index) {
+                                            <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="check.name + ': vai alla battuta ' + item.number" (onClick)="showRowMeasure(check.index, item.index)" />
+                                        }
+                                    </div>
+                                }
+                                @if (check.empty.length) {
+                                    <span class="text-xs text-muted-color">{{ check.empty.length === 1 ? 'Battuta vuota' : 'Battute vuote' }}:</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        @for (item of check.empty; track item.index) {
+                                            <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="check.name + ': vai alla battuta vuota ' + item.number" (onClick)="showRowMeasure(check.index, item.index)" />
+                                        }
+                                    </div>
+                                }
+                                @if (check.outOfRange.length) {
+                                    <span class="text-xs text-muted-color">Note fuori estensione ({{ check.range }}):</span>
+                                    <div class="flex flex-wrap gap-1">
+                                        @for (item of check.outOfRange; track item.measureIndex) {
+                                            <p-button
+                                                [label]="item.measureNumber"
+                                                size="small"
+                                                severity="warn"
+                                                outlined
+                                                [ariaLabel]="check.name + ': vai alla nota fuori estensione della battuta ' + item.measureNumber"
+                                                (onClick)="showRowNote(check.index, item)"
+                                            />
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        } @empty {
+                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>In tutti i righi le battute hanno la durata del metro e le note stanno nell'estensione degli strumenti configurati.</p>
+                        }
+                    </div>
+                } @else {
+                    <div class="score-editor__panel">
+                        <h3 class="score-editor__panel-title">Controlli</h3>
+                        @if (wrongMeasures.length) {
+                            <p class="text-sm m-0">Durata diversa dal metro:</p>
                             <div class="flex flex-wrap gap-1">
-                                @for (item of rangeWarnings; track item.measureIndex) {
-                                    <p-button [label]="item.measureNumber" size="small" severity="warn" outlined [ariaLabel]="'Vai alla nota fuori estensione della battuta ' + item.measureNumber" (onClick)="selectOutOfRange(item)" />
+                                @for (item of wrongMeasures; track item.index) {
+                                    <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="'Vai alla battuta ' + item.number" (onClick)="selectMeasure(item.index)" />
                                 }
                             </div>
                         } @else {
-                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le note nell'estensione di {{ range?.instrumentName }} ({{ rangeText }}).</p>
+                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le battute hanno la durata del metro.</p>
                         }
-                    }
-                </div>
+                        @if (emptyMeasures.length) {
+                            <p class="text-sm m-0">{{ emptyMeasures.length === 1 ? 'Battuta vuota' : 'Battute vuote' }}:</p>
+                            <div class="flex flex-wrap gap-1">
+                                @for (item of emptyMeasures; track item.index) {
+                                    <p-button [label]="item.number" size="small" severity="warn" outlined [ariaLabel]="'Vai alla battuta vuota ' + item.number" (onClick)="selectMeasure(item.index)" />
+                                }
+                            </div>
+                        }
+                        @if (rangeText) {
+                            @if (rangeWarnings.length) {
+                                <p class="text-sm m-0">Note fuori estensione di {{ range?.instrumentName }} ({{ rangeText }}):</p>
+                                <div class="flex flex-wrap gap-1">
+                                    @for (item of rangeWarnings; track item.measureIndex) {
+                                        <p-button [label]="item.measureNumber" size="small" severity="warn" outlined [ariaLabel]="'Vai alla nota fuori estensione della battuta ' + item.measureNumber" (onClick)="selectOutOfRange(item)" />
+                                    }
+                                </div>
+                            } @else {
+                                <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le note nell'estensione di {{ range?.instrumentName }} ({{ rangeText }}).</p>
+                            }
+                        }
+                    </div>
+                }
 
                 @if (reports.length) {
                     <div class="score-editor__panel">

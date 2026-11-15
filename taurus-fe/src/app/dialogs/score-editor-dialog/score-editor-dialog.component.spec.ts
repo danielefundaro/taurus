@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
@@ -158,6 +159,7 @@ describe('ScoreEditorDialogComponent', () => {
             imports: [ScoreEditorDialogComponent],
             providers: [
                 ConfirmationService,
+                provideRouter([]),
                 { provide: DynamicDialogConfig, useValue: config },
                 { provide: DynamicDialogRef, useValue: dialogRef },
                 { provide: ScorePlaybackService, useValue: playbackService },
@@ -173,6 +175,23 @@ describe('ScoreEditorDialogComponent', () => {
             ]
         }).compileComponents();
         fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+    });
+
+    it('plays the selected measure of the part and stops', async () => {
+        audio.load.and.resolveTo();
+        audio.play.and.resolveTo();
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const component = fixture.componentInstance as unknown as { togglePlay(): Promise<void>; playing: boolean };
+
+        await component.togglePlay();
+        expect(audio.load).toHaveBeenCalledTimes(1);
+        expect(audio.setChannel.calls.allArgs().map(([channel]) => channel.key)).toEqual(['__metronome__']);
+        expect(component.playing).toBeTrue();
+
+        await component.togglePlay();
+        expect(audio.pause).toHaveBeenCalled();
+        expect(component.playing).toBeFalse();
     });
 
     it('opens the version and draws the notation inside the editor', async () => {
@@ -989,6 +1008,108 @@ describe('ScoreEditorDialogComponent', () => {
             expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: true, partNames: true });
         });
 
+        it('converts the whole score between transposed and concert pitch in one undo step', async () => {
+            const component = await openScore();
+            const notation = (): HTMLButtonElement[] => Array.from(fixture.nativeElement.querySelectorAll('[aria-label="Notazione della partitura"] button'));
+            expect(notation().map((button) => [button.textContent?.trim(), button.getAttribute('aria-pressed')])).toEqual([
+                ['Trasposta', 'true'],
+                ['Suoni reali', 'false']
+            ]);
+
+            notation()[1].click();
+            let xml = keeperOptions!.content();
+            expect(xml).toContain('<concert-score/>');
+            expect(fifths(xml)).toEqual(['0', '0']);
+            expect(component.concertPitch).toBeTrue();
+            expect(component.info).toBe('Partitura in suoni reali');
+            expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Do5 · minima');
+            expect(component.concertKey).toBe(0);
+            fixture.detectChanges();
+            expect(notation().map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+
+            component.undo();
+            xml = keeperOptions!.content();
+            expect(xml).not.toContain('concert-score');
+            expect(fifths(xml)).toEqual(['2', '0']);
+
+            component.redo();
+            component.convertNotation(false);
+            expect(fifths(keeperOptions!.content())).toEqual(['2', '0']);
+            expect(component.info).toBe('Partitura trasposta');
+        });
+
+        it('blocks the conversion for an instrument without transposition, with a link to configure it', async () => {
+            const horn: PlaybackInstrument = { id: 13, name: 'Corno', configured: false };
+            const component = await openScore({ arrangement: { version, rows: [{ id: 'P1', name: 'Corno', instruments: [horn] }, rows[1]] } });
+
+            component.convertNotation(true);
+            expect(component.message).toBe('Configura la trasposizione di Corno per convertire la partitura');
+            expect(component.concertPitch).toBeFalse();
+            fixture.detectChanges();
+            const link = fixture.nativeElement.querySelector('a[target="_blank"]') as HTMLAnchorElement;
+            expect(link.getAttribute('href')).toBe('/instruments/13');
+            expect(link.textContent).toContain('Configura Corno');
+
+            // La modifica successiva toglie il collegamento.
+            component.selectMeasure(1);
+            component.insertMeasure('after');
+            expect(component.conversionBlock).toBeNull();
+        });
+
+        it('plays every row of the selection, the highlighted one louder', async () => {
+            audio.load.and.resolveTo();
+            audio.play.and.resolveTo();
+            const component = await openScore();
+            component.selectMeasure(0);
+
+            await component.togglePlay();
+            const gains = (): (string | number | boolean)[][] =>
+                audio.setChannel.calls
+                    .allArgs()
+                    .filter(([channel]) => channel.key !== '__metronome__')
+                    .map(([channel, gain, muted]) => [channel.key, gain, muted]);
+            expect(audio.load).toHaveBeenCalledTimes(1);
+            expect(gains()).toEqual([
+                ['P1', 1, false],
+                ['P2', 1, false]
+            ]);
+
+            audio.setChannel.calls.reset();
+            component.toggleHighlight(component.rowViews[1]);
+            expect(component.rowViews.map((row) => row.highlighted)).toEqual([false, true]);
+            expect(gains()).toEqual([
+                ['P1', 0.35, false],
+                ['P2', 1, false]
+            ]);
+
+            await component.togglePlay();
+            expect(audio.pause).toHaveBeenCalled();
+            audio.setChannel.calls.reset();
+            component.toggleHighlight(component.rowViews[1]);
+            expect(component.rowViews.map((row) => row.highlighted)).toEqual([false, false]);
+            expect(audio.setChannel).not.toHaveBeenCalled();
+        });
+
+        it('lists the checks of every row and goes to the measure of a row', async () => {
+            arrangements.content.and.resolveTo(ARRANGEMENT.replace('<octave>3</octave></pitch><duration>2</duration><voice>1</voice><type>half</type>', '<octave>3</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type>'));
+            const clarinet = { ...CLARINET, lowestWrittenPitch: 52, highestWrittenPitch: 72 };
+            const component = await openScore({ arrangement: { version, rows: [{ id: 'P1', name: 'Clarinetto', instruments: [clarinet] }, rows[1]] } });
+
+            expect(component.rowIssues.map((check) => [check.name, check.wrongDuration.map((item) => item.number), check.outOfRange.map((item) => item.measureNumber), check.range])).toEqual([
+                ['Clarinetto', [], ['1'], 'Mi3–Do5'],
+                ['Tuba', ['1'], [], null]
+            ]);
+            expect(fixture.nativeElement.textContent).toContain('Controlli dei righi');
+
+            component.showRowMeasure(1, 0);
+            expect(component.rowViews[1].active).toBeTrue();
+            expect(component.selectionLabel).toBe('Tuba · Battuta 1 · Do3 · semiminima');
+
+            component.showRowNote(0, component.rowIssues[0].outOfRange[0]);
+            expect(component.rowViews[0].active).toBeTrue();
+            expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Re5 · minima');
+        });
+
         it('saves a version of the score with its rows', async () => {
             const saved: ArrangementVersion = { ...version, id: 22, versionNumber: 2 };
             arrangements.save.and.resolveTo(saved);
@@ -1125,7 +1246,11 @@ interface ScoreEditor {
     status: string;
     selectionLabel: string;
     message: string | null;
-    rowViews: { index: number; id: string; name: string; instruments: string; hidden: boolean; active: boolean }[];
+    info: string | null;
+    rowViews: { index: number; id: string; name: string; instruments: string; hidden: boolean; active: boolean; highlighted: boolean }[];
+    concertPitch: boolean;
+    conversionBlock: { id: number; name: string } | null;
+    rowIssues: { index: number; name: string; wrongDuration: { index: number; number: string }[]; outOfRange: { measureIndex: number; measureNumber: string; noteId: string }[]; range: string | null }[];
     rowsClip: { label: string } | null;
     newRowInstrumentId: number | null;
     concertKey: number | null;
@@ -1145,6 +1270,11 @@ interface ScoreEditor {
     toggleRow(view: ScoreEditor['rowViews'][number]): void;
     toggleCondense(): void;
     showAllRows(): void;
+    convertNotation(concertPitch: boolean): void;
+    toggleHighlight(view: ScoreEditor['rowViews'][number]): void;
+    togglePlay(): Promise<void>;
+    showRowMeasure(row: number, measureIndex: number): void;
+    showRowNote(row: number, warning: ScoreEditor['rowIssues'][number]['outOfRange'][number]): void;
     undo(): void;
     redo(): void;
     save(approve: boolean): Promise<void>;

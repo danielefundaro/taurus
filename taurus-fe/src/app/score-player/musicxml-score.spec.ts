@@ -1,4 +1,4 @@
-import { parseMusicXml } from './musicxml-score';
+import { parseMusicXml, parseMusicXmlParts } from './musicxml-score';
 import { musicXml } from './score-player.testing';
 
 const ATTRIBUTES = '<attributes><divisions>2</divisions><key><fifths>0</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>';
@@ -115,5 +115,15 @@ describe('parseMusicXml', () => {
         expect(parseMusicXml(xml, 1).id).toBe('P2');
         expect(() => parseMusicXml(xml, 2)).toThrowError('Parte non presente');
         expect(() => parseMusicXml('<score-partwise><part>')).toThrowError('MusicXML non leggibile');
+    });
+
+    it('reads all the parts of a file at once', () => {
+        const xml = musicXml([note('C', 4, 4)]).replace('</score-partwise>', '<part id="P2"><measure number="1"/></part></score-partwise>');
+
+        const parts = parseMusicXmlParts(xml);
+        expect(parts.map((part) => part.id)).toEqual(['P1', 'P2']);
+        expect(parts[0].measures[0].notes.length).toBe(1);
+        expect(parts[1].measures[0].notes.length).toBe(0);
+        expect(() => parseMusicXmlParts('<score-partwise><part>')).toThrowError('MusicXML non leggibile');
     });
 });

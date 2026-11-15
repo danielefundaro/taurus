@@ -33,7 +33,7 @@ import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
 import * as writing from '../../score-editor/score-writing';
 import { parseMusicXml } from '../../score-player/musicxml-score';
-import { buildPlayback } from '../../score-player/playback-builder';
+import { buildPlayback, BuiltPlayback, PlaybackPartInput } from '../../score-player/playback-builder';
 import { originLabel } from '../../score-player/playback-labels';
 import { partSound, secondsAt } from '../../score-player/timeline';
 import {
@@ -134,6 +134,8 @@ interface RowView {
     instruments: string;
     hidden: boolean;
     active: boolean;
+    /** Suona più forte degli altri righi nell'ascolto. */
+    highlighted: boolean;
 }
 
 /** Da dove parte la scrittura: la versione, la bozza sul server, la copia nel browser o una parte nuova. */
@@ -169,6 +171,15 @@ const EDITOR_SCALE = 50;
 
 /** Durata della nota suonata sulla tastiera MIDI o sul pianoforte a schermo, in secondi. */
 const AUDITION_SECONDS = 0.6;
+
+/** Partitura: volume degli altri righi mentre uno è in evidenza nell'ascolto. */
+const BACKGROUND_GAIN = 0.35;
+
+/** Partitura: le due notazioni, nella barra superiore. */
+const NOTATIONS = [
+    { label: 'Trasposta', value: false, tooltip: 'Converte tutta la partitura nella notazione trasposta, come le parti' },
+    { label: 'Suoni reali', value: true, tooltip: 'Converte tutta la partitura in suoni reali: ogni rigo si traspone per il suo strumento' }
+] as const;
 
 /**
  * Ultime note suonate: la prima del gruppo, a cui si aggiungono le note dell'accordo, e quelle di cui `+`, `-` e `=`
@@ -363,6 +374,13 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected newRowInstrumentId: number | null = null;
     /** Partitura: strumenti dell'associazione, per i righi da aggiungere. */
     protected catalog: PlaybackInstrument[] = [];
+    /** Partitura: rigo che nell'ascolto suona più forte degli altri, per `id` della parte. */
+    protected highlightedRow: string | null = null;
+    /** Partitura: controlli di tutti i righi. */
+    protected rowCheckList: arrangements.RowCheck[] = [];
+    /** Partitura: strumento senza trasposizione che ha bloccato la conversione, da configurare. */
+    protected conversionBlock: { id: number; name: string } | null = null;
+    protected readonly notations = NOTATIONS;
     /** Strumenti dei righi e del catalogo, per `id`. */
     private readonly instruments = new Map<number, PlaybackInstrument>();
     /** Suono della parte o del rigo attivo, per l'ascolto e le note suonate. */
@@ -390,6 +408,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     protected playing = false;
     protected preparingAudio = false;
+    /** Ascolto in corso, per cambiare il volume dei righi mentre suona. */
+    private playback: BuiltPlayback | null = null;
 
     /** Scrittura: pianoforte a schermo, mostrato da solo sui tablet. */
     protected showPiano = false;
@@ -655,6 +675,16 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     /** Partitura: si toglie un rigo quando ne resta almeno un altro. */
     protected get canRemoveRow(): boolean {
         return !this.readOnly && this.rowViews.length > 1;
+    }
+
+    /** Partitura: scritta in suoni reali. */
+    protected get concertPitch(): boolean {
+        return !!this.score && arrangements.isConcertScore(this.score);
+    }
+
+    /** Partitura: righi con battute di durata diversa dal metro, vuote o con note fuori estensione. */
+    protected get rowIssues(): arrangements.RowCheck[] {
+        return this.rowCheckList.filter((check) => check.wrongDuration.length || check.empty.length || check.outOfRange.length);
     }
 
     protected get emptyMeasures(): { index: number; number: string }[] {
@@ -1457,19 +1487,60 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     /** Rende attivo il rigo, sulla stessa battuta; un rigo nascosto torna visibile. */
     protected selectRow(index: number): void {
         const score = this.score;
-        const view = this.rowViews[index];
-        if (!score || !view) return;
+        if (!score || !this.rowViews[index]) return;
         const measureIndex = this.inserting ? this.cursor.measureIndex : (this.measure?.index ?? 0);
-        if (view.hidden) {
-            this.hiddenRows.delete(view.id);
-            this.scheduleRender();
-        }
-        if (index !== score.partIndex) this.switchRow(index);
+        this.activateRow(index);
         const at = Math.min(measureIndex, score.measures().length - 1);
         if (this.inserting) this.cursor = writing.clampCursor(score, { ...this.cursor, measureIndex: at });
         const id = (this.inserting ? writing.noteAtCursor(score, this.cursor) : null) ?? edits.firstNoteOf(score, at);
         if (id) this.select(id);
         else this.selectEmptyMeasure(at);
+    }
+
+    /** Controlli della partitura: rende attivo il rigo e seleziona la battuta. */
+    protected showRowMeasure(row: number, measureIndex: number): void {
+        this.activateRow(row);
+        this.selectMeasure(measureIndex);
+    }
+
+    /** Controlli della partitura: rende attivo il rigo e seleziona la prima nota fuori estensione della battuta. */
+    protected showRowNote(row: number, warning: RangeWarning): void {
+        this.activateRow(row);
+        this.selectOutOfRange(warning);
+    }
+
+    /** Mette in evidenza il rigo nell'ascolto, o lo toglie; vale subito anche mentre suona. */
+    protected toggleHighlight(view: RowView): void {
+        this.highlightedRow = this.highlightedRow === view.id ? null : view.id;
+        this.rowViews = this.rowViews.map((candidate) => ({ ...candidate, highlighted: candidate.id === this.highlightedRow }));
+        this.applyGains();
+        this.changeDetector.markForCheck();
+    }
+
+    /**
+     * Converte tutta la partitura in suoni reali o trasposta, in un solo passo di Annulla. Uno strumento senza
+     * trasposizione la blocca, con il collegamento alla sua configurazione.
+     */
+    protected convertNotation(concertPitch: boolean): void {
+        const score = this.score;
+        if (!score || !this.data.arrangement || concertPitch === arrangements.isConcertScore(score)) return;
+        const rows = this.editorRows(score);
+        const blocked = this.readOnly ? null : arrangements.unconfiguredInstrument(score, rows);
+        if (blocked) {
+            this.message = `Configura la trasposizione di ${blocked.name} per convertire la partitura`;
+            this.info = null;
+            this.conversionBlock = { id: blocked.id, name: blocked.name };
+            this.changeDetector.markForCheck();
+            return;
+        }
+        let enharmonic: string[] = [];
+        const converted = this.apply((current) => {
+            enharmonic = arrangements.convertNotation(current, rows, concertPitch);
+        });
+        if (!converted) return;
+        const notation = concertPitch ? 'Partitura in suoni reali' : 'Partitura trasposta';
+        this.info = enharmonic.length ? `${notation}; ${enharmonic.join(', ')} ${enharmonic.length === 1 ? 'usa' : 'usano'} l'intervallo enarmonico: tornando indietro la grafia può cambiare` : notation;
+        this.changeDetector.markForCheck();
     }
 
     /** Rigo visibile precedente o seguente (Alt+↑ ↓). */
@@ -1618,20 +1689,21 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.preparingAudio = true;
         this.changeDetector.markForCheck();
         try {
-            // Nella partitura si ascolta il rigo attivo.
-            const xml = this.data.arrangement ? arrangements.rowXml(this.score.cleanXml(), this.score.partIndex) : this.score.cleanXml();
-            const part = parseMusicXml(xml);
             const [from, to] = this.listenRange ?? [this.measure.index, this.measure.index];
-            const passage = excerpt(part, from, to);
-            const name = this.data.arrangement ? (this.rowViews.find((view) => view.active)?.name ?? this.data.partLabel) : this.data.partLabel;
-            const built = buildPlayback([{ key: 'part', name, part: passage, sound: partSound(this.sound, part.clefSign) }], passage, {
-                withRepeats: false,
-                tempoBpm: null,
-                countIn: false
-            });
+            // Nella partitura suonano tutti i righi, ognuno con il suono del suo strumento.
+            let inputs: PlaybackPartInput[];
+            if (this.data.arrangement) {
+                inputs = arrangements.playbackRows(this.score, this.editorRows(this.score), from, to);
+            } else {
+                const part = parseMusicXml(this.score.cleanXml());
+                inputs = [{ key: 'part', name: this.data.partLabel, part: excerpt(part, from, to), sound: partSound(this.sound, part.clefSign) }];
+            }
+            const built = buildPlayback(inputs, inputs[0].part, { withRepeats: false, tempoBpm: null, countIn: false });
             await this.audio.ready();
             await this.audio.load(built.midi);
             this.audio.setChannel(built.metronome, 0, true);
+            this.playback = built;
+            this.applyGains();
             await this.audio.play();
             this.playing = true;
             this.stopTimer = window.setTimeout(() => this.stop(), secondsAt(built.totalQuarters, built.tempo) * 1000 + 300);
@@ -1769,6 +1841,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.dirty = false;
         this.checks = this.score.checks();
         this.refreshRows();
+        this.refreshRowChecks();
         this.checkRange(this.score);
         this.selectedId = this.score.notes()[0]?.getAttribute('id') ?? null;
         this.emptyMeasureId = null;
@@ -2103,6 +2176,25 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.measureChange((score, index) => arrangements.onEveryRow(score, () => change(score, index)));
     }
 
+    /** Partitura: rende attivo il rigo, mostrandolo se è nascosto. */
+    private activateRow(index: number): void {
+        const score = this.score;
+        const view = this.rowViews[index];
+        if (!score || !view) return;
+        if (view.hidden) {
+            this.hiddenRows.delete(view.id);
+            this.scheduleRender();
+        }
+        if (index !== score.partIndex) this.switchRow(index);
+    }
+
+    /** Partitura: il rigo in evidenza suona a volume pieno e gli altri più piano; senza rigo in evidenza, tutti uguali. */
+    private applyGains(): void {
+        const built = this.playback;
+        if (!built || !this.data.arrangement) return;
+        for (const channel of built.channels) this.audio.setChannel(channel, this.highlightedRow === null || channel.key === this.highlightedRow ? 1 : BACKGROUND_GAIN, false);
+    }
+
     private async retakeLock(takeOver: boolean): Promise<void> {
         const acquired = await this.lock.acquire(takeOver);
         if (acquired && this.writingMode) {
@@ -2133,6 +2225,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         }
         this.stop();
         this.info = null;
+        this.conversionBlock = null;
         const before = this.score.snapshot();
         let applied = false;
         try {
@@ -2178,6 +2271,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.dirty = score.snapshot() !== this.initialSnapshot;
         this.checks = score.checks();
         this.refreshRows();
+        this.refreshRowChecks();
         this.checkRange(score);
         const selectionExists = this.selectedId ? !!score.find(this.selectedId) : !this.emptyMeasureId || !!score.find(this.emptyMeasureId);
         if (!selectionExists) {
@@ -2397,6 +2491,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const active = score.partIndex;
         const ids = new Set(score.parts().map((part) => part.getAttribute('id') ?? ''));
         for (const id of Array.from(this.hiddenRows)) if (!ids.has(id)) this.hiddenRows.delete(id);
+        if (this.highlightedRow !== null && !ids.has(this.highlightedRow)) this.highlightedRow = null;
         this.rowViews = score.parts().map((part, index) => {
             const id = part.getAttribute('id') ?? '';
             return {
@@ -2407,14 +2502,24 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
                     .map((instrument) => instrument.name)
                     .join(', '),
                 hidden: this.hiddenRows.has(id),
-                active: index === active
+                active: index === active,
+                highlighted: id === this.highlightedRow
             };
         });
+        // In suoni reali suono ed estensione seguono la notazione: della trasposizione restano le ottave.
+        const concertPitch = arrangements.isConcertScore(score);
         const instruments = this.rowInstruments(active);
-        this.sound = arrangements.rowSound(instruments);
-        const pitched = instruments.length === 1 && !arrangements.isPercussionRow(instruments) ? instruments[0] : null;
+        this.sound = arrangements.rowSound(instruments, concertPitch);
+        const pitched = arrangements.rowRangeInstrument(instruments, concertPitch);
         this.range = pitched ? { instrumentName: pitched.name, instrument: pitched } : null;
         this.applySound();
+    }
+
+    /** Partitura: controlli di tutti i righi, dopo ogni modifica. */
+    private refreshRowChecks(): void {
+        const score = this.score;
+        if (!this.data.arrangement || !score) return;
+        this.rowCheckList = arrangements.rowChecks(score, this.editorRows(score));
     }
 
     /** Voci, suoni di batteria e pulsanti a schermo dal suono della parte o del rigo attivo. */
@@ -2565,6 +2670,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.stopTimer = undefined;
         if (this.playing) this.audio.pause();
         this.playing = false;
+        this.playback = null;
         this.changeDetector.markForCheck();
     }
 }

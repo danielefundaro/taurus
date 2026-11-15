@@ -359,6 +359,19 @@
     outline-offset: -2px;
 }
 
+.score-editor__row-check {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.score-editor__row-check:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+
 .score-editor__report {
     display: flex;
     flex-direction: column;

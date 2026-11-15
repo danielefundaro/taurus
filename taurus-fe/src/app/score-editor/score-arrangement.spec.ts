@@ -6,8 +6,10 @@ import {
     byEnsembleOrder,
     clearRows,
     combineParts,
+    concertInstrument,
     concertPartXml,
     concertSemitones,
+    convertNotation,
     copyRows,
     displayedXml,
     emptyRow,
@@ -20,17 +22,22 @@ import {
     newArrangementXml,
     onEveryRow,
     pasteRows,
+    playbackRows,
     removeRow,
+    rowChecks,
     rowClefSign,
     rowInstrumentIds,
     rowName,
+    rowRangeInstrument,
     rowRequests,
     rowSetup,
     rowSound,
     rowTransposition,
     rowXml,
     setConcertKey,
-    staffRows
+    setConcertScore,
+    staffRows,
+    unconfiguredInstrument
 } from './score-arrangement';
 import { EditError, ScoreDocument } from './score-document';
 
@@ -46,7 +53,7 @@ const UNCONFIGURED: PlaybackInstrument = { id: 8, name: 'Corno', configured: fal
 const TREBLE = '<clef><sign>G</sign><line>2</line></clef>';
 const BASS = '<clef><sign>F</sign><line>4</line></clef>';
 const attributes = (fifths: number, clef = TREBLE, extra = ''): string => `<attributes><divisions>1</divisions><key><fifths>${fifths}</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time>${extra}${clef}</attributes>`;
-const half = (step: string, octave: number): string => `<note><pitch><step>${step}</step><octave>${octave}</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>`;
+const half = (step: string, octave: number, alter = 0): string => `<note><pitch><step>${step}</step>${alter ? `<alter>${alter}</alter>` : ''}<octave>${octave}</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>`;
 const REST = '<note><rest measure="yes"/><duration>2</duration><voice>1</voice></note>';
 const REHEARSAL = '<direction placement="above"><direction-type><rehearsal>A</rehearsal></direction-type></direction>';
 const REPEAT = '<barline location="right"><bar-style>light-heavy</bar-style><repeat direction="backward"/></barline>';
@@ -82,6 +89,11 @@ function openScore(): ScoreDocument {
 const xmlDocument = (xml: string): Document => new DOMParser().parseFromString(xml, 'application/xml');
 const partNames = (xml: string): string[] => Array.from(xmlDocument(xml).querySelectorAll('score-part > part-name')).map((name) => name.textContent ?? '');
 const steps = (score: ScoreDocument, index: number): string[] => Array.from(score.parts()[index].querySelectorAll('note')).map((note) => note.querySelector('step')?.textContent ?? 'rest');
+const pitches = (score: ScoreDocument, index: number): string[] =>
+    Array.from(score.parts()[index].querySelectorAll('note pitch')).map((pitch) => `${pitch.querySelector('step')?.textContent}${pitch.querySelector('alter')?.textContent ?? ''}${pitch.querySelector('octave')?.textContent}`);
+const keys = (score: ScoreDocument): number[] => score.everyPart(() => score.measureStates()[0].fifths);
+/** Righi della partitura di prova: clarinetto, tuba e percussioni. */
+const ROWS = [{ instruments: [CLARINET] }, { instruments: [TUBA] }, { instruments: [SNARE, BASS_DRUM] }];
 
 describe('score arrangement', () => {
     describe('rows and instruments', () => {
@@ -385,6 +397,48 @@ describe('score arrangement', () => {
             expect(displayedXml(snapshot, new Set(['P1', 'P2', 'P3']))).toBe(snapshot);
         });
 
+        it('lists every row to listen to, each with the sound of its instrument', () => {
+            const score = openScore();
+            const inputs = playbackRows(score, ROWS, 0, 0);
+            expect(inputs.map((item) => item.key)).toEqual(['P1', 'P2', 'P3']);
+            expect(inputs.map((item) => item.name)).toEqual(['Clarinetto', 'Tuba', 'Percussioni']);
+            expect(inputs[0].part.measures.length).toBe(1);
+            expect(inputs.map((item) => item.sound.transposition)).toEqual([-2, 0, 0]);
+            expect(inputs[2].sound.percussionKeys).toEqual([38, 36]);
+
+            // In suoni reali il clarinetto si scrive come suona.
+            convertNotation(score, ROWS, true);
+            const concert = playbackRows(score, ROWS, 0, 1);
+            expect(concert[0].sound.transposition).toBe(0);
+            expect(concert[0].part.measures.length).toBe(2);
+        });
+
+        it('checks durations, empty measures and range of every row', () => {
+            const clarinet = { ...CLARINET, lowestWrittenPitch: 52, highestWrittenPitch: 91 };
+            const score = ScoreDocument.open(
+                combineParts(
+                    [
+                        { xml: partXml('Clarinetto', [measure('1', attributes(2) + half('A', 6)), measure('2', half('D', 5) + half('E', 5))]), name: 'Clarinetto' },
+                        { xml: partXml('Tuba', [measure('1', attributes(0, BASS) + half('C', 3)), measure('2', '')]), name: 'Tuba' }
+                    ],
+                    false
+                )
+            );
+            const rows = [{ instruments: [clarinet] }, { instruments: [TUBA] }];
+            const checks = rowChecks(score, rows);
+            expect(checks.map((check) => check.name)).toEqual(['Clarinetto', 'Tuba']);
+            expect(checks[0].wrongDuration).toEqual([{ index: 1, number: '2' }]);
+            expect(checks[0].empty).toEqual([]);
+            expect(checks[0].range).toBe('Mi3–Sol6');
+            expect(checks[0].outOfRange.map((warning) => warning.measureNumber)).toEqual(['1']);
+            expect(checks[1]).toEqual(jasmine.objectContaining({ wrongDuration: [], empty: [{ index: 1, number: '2' }], range: null, outOfRange: [] }));
+            expect(score.partIndex).toBe(0);
+
+            // In suoni reali l'estensione scritta scende con le note.
+            setConcertScore(score, true);
+            expect(rowChecks(score, rows)[0].range).toBe('Re3–Fa6');
+        });
+
         it('recognizes the directions of the common structure', () => {
             const parse = (xml: string): Element => xmlDocument(xml).documentElement;
             expect(isStructureDirection(parse(REHEARSAL))).toBeTrue();
@@ -394,6 +448,110 @@ describe('score arrangement', () => {
             expect(isStructureDirection(parse('<sound dynamics="80"/>'))).toBeFalse();
             expect(isStructureDirection(parse('<direction><direction-type><dynamics><f/></dynamics></direction-type></direction>'))).toBeFalse();
             expect(isStructureDirection(parse('<note/>'))).toBeFalse();
+        });
+    });
+
+    describe('notation', () => {
+        it('marks the concert-pitch notation in the defaults, and removes the mark', () => {
+            const score = openScore();
+            const root = score.document.documentElement;
+            setConcertScore(score, true);
+            setConcertScore(score, true);
+            expect(isConcertScore(score)).toBeTrue();
+            expect(Array.from(root.children, (item) => item.tagName).slice(0, 2)).toEqual(['defaults', 'part-list']);
+            expect(root.querySelectorAll('concert-score').length).toBe(1);
+            setConcertScore(score, false);
+            expect(isConcertScore(score)).toBeFalse();
+            expect(root.querySelector('defaults')).toBeNull();
+
+            const scaled = ScoreDocument.open(scoreXml().replace('<part-list>', '<work><work-title>Marcia</work-title></work><defaults><scaling><millimeters>7</millimeters><tenths>40</tenths></scaling><page-layout/></defaults><part-list>'));
+            setConcertScore(scaled, true);
+            const defaults = scaled.document.documentElement.querySelector('defaults')!;
+            expect(Array.from(defaults.children, (item) => item.tagName)).toEqual(['scaling', 'concert-score', 'page-layout']);
+            setConcertScore(scaled, false);
+            expect(Array.from(defaults.children, (item) => item.tagName)).toEqual(['scaling', 'page-layout']);
+
+            const titled = ScoreDocument.open(scoreXml().replace('<part-list>', '<work><work-title>Marcia</work-title></work><part-list>'));
+            setConcertScore(titled, true);
+            expect(Array.from(titled.document.documentElement.children, (item) => item.tagName).slice(0, 3)).toEqual(['work', 'defaults', 'part-list']);
+        });
+
+        it('gives sound and written range of an instrument in a concert-pitch score', () => {
+            expect(concertInstrument({ ...TENOR_SAX, lowestWrittenPitch: 58, highestWrittenPitch: 89 })).toEqual(jasmine.objectContaining({ transpositionSemitones: -12, lowestWrittenPitch: 56, highestWrittenPitch: 87 }));
+            expect(concertInstrument(EUPHONIUM)).toEqual(jasmine.objectContaining({ transpositionSemitones: -12, bassClefTranspositionSemitones: 0, lowestWrittenPitch: undefined }));
+            expect(concertInstrument(UNCONFIGURED).transpositionSemitones).toBeUndefined();
+            expect(rowSound([TENOR_SAX], true).transpositionSemitones).toBe(-12);
+            expect(rowSound([CLARINET], true).transpositionSemitones).toBe(0);
+            expect(rowSound([SNARE], true).percussionKeys).toEqual([38]);
+
+            expect(rowRangeInstrument([CLARINET], false)).toBe(CLARINET);
+            expect(rowRangeInstrument([TENOR_SAX], true)?.transpositionSemitones).toBe(-12);
+            expect(rowRangeInstrument([SNARE], false)).toBeNull();
+            expect(rowRangeInstrument([CLARINET, FLUTE], false)).toBeNull();
+        });
+
+        it('converts the whole score to concert pitch and back', () => {
+            const score = openScore();
+            const original = score.cleanXml();
+            expect(convertNotation(score, ROWS, true)).toEqual([]);
+            expect(isConcertScore(score)).toBeTrue();
+            expect(keys(score)).toEqual([0, 0, 0]);
+            expect(pitches(score, 0)).toEqual(['C5']);
+            // Tuba e percussioni non cambiano.
+            expect(pitches(score, 1)).toEqual(['C3']);
+            expect(convertNotation(score, ROWS, true)).toEqual([]);
+
+            expect(convertNotation(score, ROWS, false)).toEqual([]);
+            expect(isConcertScore(score)).toBeFalse();
+            expect(keys(score)).toEqual([2, 0, 0]);
+            expect(score.cleanXml()).toBe(original);
+        });
+
+        it('keeps the octaves of the transposition and uses the bass-clef one', () => {
+            const score = ScoreDocument.open(
+                combineParts(
+                    [
+                        { xml: partXml('Sax tenore', [measure('1', attributes(2) + half('E', 5))]), name: 'Sax tenore' },
+                        { xml: partXml('Euphonium', [measure('1', attributes(0, BASS) + half('C', 3))]), name: 'Euphonium' }
+                    ],
+                    false
+                )
+            );
+            convertNotation(score, [{ instruments: [TENOR_SAX] }, { instruments: [EUPHONIUM] }], true);
+            expect(pitches(score, 0)).toEqual(['D5']);
+            expect(pitches(score, 1)).toEqual(['C3']);
+            expect(keys(score)).toEqual([0, 0]);
+        });
+
+        it('says which rows use the enharmonic interval', () => {
+            const score = ScoreDocument.open(combineParts([{ xml: partXml('Clarinetto', [measure('1', attributes(6) + half('F', 5, 1))]), name: 'Clarinetto' }], true));
+            // Fa♯ maggiore in suoni reali sarebbe Sol♯ maggiore per il clarinetto: si scrive in La♭ maggiore.
+            expect(convertNotation(score, [{ instruments: [CLARINET] }], false)).toEqual(['Clarinetto']);
+            expect(keys(score)).toEqual([-4]);
+            expect(pitches(score, 0)).toEqual(['A-15']);
+        });
+
+        it('leaves the score unchanged when a row cannot be converted', () => {
+            const score = openScore();
+            const before = score.snapshot();
+            const unconfigured = [{ instruments: [UNCONFIGURED] }, ROWS[1], ROWS[2]];
+            expect(unconfiguredInstrument(score, unconfigured)).toBe(UNCONFIGURED);
+            expect(unconfiguredInstrument(score, ROWS)).toBeNull();
+            expect(() => convertNotation(score, unconfigured, true)).toThrowError(EditError, 'Configura la trasposizione di Corno per convertire la partitura');
+            expect(score.snapshot()).toBe(before);
+
+            const low = ScoreDocument.open(
+                combineParts(
+                    [
+                        { xml: partXml('Tuba', [measure('1', attributes(0, BASS) + half('C', 3))]), name: 'Tuba' },
+                        { xml: partXml('Clarinetto', [measure('1', attributes(0) + half('C', 0))]), name: 'Clarinetto' }
+                    ],
+                    false
+                )
+            );
+            const lowBefore = low.snapshot();
+            expect(() => convertNotation(low, [{ instruments: [TUBA] }, { instruments: [CLARINET] }], true)).toThrowError(EditError, 'Le note di Clarinetto uscirebbero dalle altezze scrivibili');
+            expect(low.snapshot()).toBe(lowBefore);
         });
     });
 });

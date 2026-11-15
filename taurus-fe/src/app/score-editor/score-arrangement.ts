@@ -1,15 +1,19 @@
 /**
  * Partitura della traccia: un documento con una parte per rigo, creato dall'organico o dalle parti della traccia, con
  * la struttura comune a tutti i righi. Qui stanno la creazione, l'allineamento delle parti alla parte di riferimento, i
- * righi aggiunti e tolti nell'editor, l'armatura in suoni reali, i passaggi su tutti i righi e il disegno con i righi
- * nascosti.
+ * righi aggiunti e tolti nell'editor, l'armatura in suoni reali, la conversione tra suoni reali e trasposta, i passaggi su
+ * tutti i righi, l'ascolto, i controlli per rigo e il disegno con i righi nascosti.
  */
 
 import { ArrangementRowRequest, PlaybackInstrument, PlaybackSound } from '../module';
+import { parseMusicXmlParts } from '../score-player/musicxml-score';
+import { PlaybackPartInput } from '../score-player/playback-builder';
+import { partSound } from '../score-player/timeline';
+import { excerpt } from './excerpt';
 import { child, children, element, insertAtStart, integer } from './musicxml-dom';
 import { newPartXml, proposedClef, writtenFifths } from './new-part';
 import { CLEF_OPTIONS, fraction, NOTE_TYPES, toNumber } from './notation-rules';
-import { clefTransposition, derivedPartXml, initialClef, RangeInstrument } from './score-derivation';
+import { applyDerivation, clefTransposition, DerivationPlan, derivedPartXml, initialClef, planDerivation, RangeInstrument, rangeLabel, RangeWarning, rangeWarnings, writtenRange } from './score-derivation';
 import { EditError, ROW_INSTRUMENTS_ATTRIBUTE, ScoreDocument } from './score-document';
 import { insertAtEnd, leadingAttributes, setKey, setTime } from './score-edits';
 import { clearPassage, copyPassage, Passage, pastePassage, ScoreClip } from './score-passage';
@@ -79,6 +83,19 @@ export interface NewRow {
     clef: string;
     /** Armatura scritta del nuovo rigo, dall'armatura scritta del rigo di riferimento nello stesso punto. */
     fifths: (referenceFifths: number) => number;
+}
+
+/** Controlli di un rigo della partitura, nella notazione in cui è scritta. */
+export interface RowCheck {
+    index: number;
+    name: string;
+    /** Battute di durata diversa dal metro, levare escluse. */
+    wrongDuration: { index: number; number: string }[];
+    /** Battute senza note né pause. */
+    empty: { index: number; number: string }[];
+    /** Estensione scritta del rigo, «Si♭3–Fa6»; `null` senza estensione o per un rigo senza un solo strumento intonato. */
+    range: string | null;
+    outOfRange: RangeWarning[];
 }
 
 /** Elementi delle direzioni che fanno parte della struttura comune: segni, lettere di prova e tempo. */
@@ -334,11 +351,95 @@ export function isConcertScore(score: ScoreDocument): boolean {
     return !!child(child(score.document.documentElement, 'defaults'), 'concert-score');
 }
 
-/** Suono del rigo per l'ascolto e le note suonate: quello del suo strumento, o i suoni di batteria delle percussioni. */
-export function rowSound(instruments: readonly PlaybackInstrument[]): PlaybackSound {
+/** Segna la partitura in suoni reali con `<concert-score/>` di `<defaults>`, come MusicXML 4.0, o toglie il segno. */
+export function setConcertScore(score: ScoreDocument, concertPitch: boolean): void {
+    const owner = score.document;
+    const root = owner.documentElement;
+    let defaults = child(root, 'defaults');
+    const current = child(defaults, 'concert-score');
+    if (!concertPitch) {
+        current?.remove();
+        if (defaults && !defaults.children.length) defaults.remove();
+        return;
+    }
+    if (current) return;
+    if (!defaults) {
+        // Dopo titolo e identificazione, prima dei crediti e dell'elenco delle parti.
+        defaults = element(owner, 'defaults');
+        root.insertBefore(defaults, children(root).find((item) => !['work', 'movement-number', 'movement-title', 'identification'].includes(item.tagName)) ?? null);
+    }
+    // In <defaults> viene subito dopo <scaling>.
+    const scaling = child(defaults, 'scaling');
+    defaults.insertBefore(element(owner, 'concert-score'), scaling ? scaling.nextSibling : defaults.firstChild);
+}
+
+/**
+ * Lo strumento come si scrive in una partitura in suoni reali: delle trasposizioni restano le ottave, e l'estensione
+ * scritta si sposta dell'intervallo senza le ottave. Il sax tenore (−14) suona un'ottava sotto lo scritto (−12).
+ */
+export function concertInstrument<T extends RangeInstrument>(instrument: T): T {
+    const transposition = instrument.transpositionSemitones;
+    const bass = instrument.bassClefTranspositionSemitones;
+    const shift = transposition === null || transposition === undefined ? 0 : concertSemitones(transposition);
+    const moved = (pitch: number | null | undefined) => (pitch === null || pitch === undefined ? pitch : pitch + shift);
+    return {
+        ...instrument,
+        transpositionSemitones: transposition === null || transposition === undefined ? transposition : transposition - shift,
+        bassClefTranspositionSemitones: bass === null || bass === undefined ? bass : bass - concertSemitones(bass),
+        lowestWrittenPitch: moved(instrument.lowestWrittenPitch),
+        highestWrittenPitch: moved(instrument.highestWrittenPitch)
+    };
+}
+
+/** Il primo strumento senza trasposizione dei righi intonati, che blocca la conversione della notazione. */
+export function unconfiguredInstrument<T extends RowInstrument>(score: ScoreDocument, rows: readonly { instruments: readonly T[] }[]): T | null {
+    for (const [index, row] of rows.entries()) {
+        if (!row.instruments.length || isPercussionRow(row.instruments)) continue;
+        if (rowTransposition(row.instruments, rowClefSign(score, index)) === null) return row.instruments[0];
+    }
+    return null;
+}
+
+/**
+ * Converte tutta la partitura in suoni reali o trasposta: ogni rigo intonato si traspone della trasposizione del suo
+ * strumento senza le ottave, nella chiave iniziale del rigo, con armature e grafie calcolate come nella derivazione;
+ * percussioni e strumenti in Do non cambiano. Tutti i righi si controllano prima, così una conversione impossibile non
+ * cambia nulla. Restituisce i nomi dei righi scritti con l'intervallo enarmonico.
+ */
+export function convertNotation(score: ScoreDocument, rows: readonly { instruments: readonly RowInstrument[] }[], concertPitch: boolean): string[] {
+    if (isConcertScore(score) === concertPitch) return [];
+    const blocked = unconfiguredInstrument(score, rows);
+    if (blocked) throw new EditError(`Configura la trasposizione di ${blocked.name} per convertire la partitura`);
+    const plans = score.everyPart((index) => {
+        const instruments = rows[index]?.instruments ?? [];
+        const transposition = rowTransposition(instruments, rowClefSign(score, index)) ?? 0;
+        const semitones = concertSemitones(transposition);
+        if (semitones === 0) return null;
+        const name = rowName(score, index);
+        // In suoni reali il rigo si sposta della trasposizione senza le ottave; tornando alla trasposta, del contrario.
+        const clef = initialClef(score);
+        const plan = concertPitch ? planDerivation(score, transposition, { transpositionSemitones: 0 }, clef) : planDerivation(score, 0, { transpositionSemitones: transposition }, clef);
+        const octave = concertPitch ? (semitones - transposition) / 12 : (transposition - semitones) / 12;
+        if (plan.error) throw new EditError(`Le note o le armature di ${name} avrebbero troppe alterazioni anche con l'intervallo enarmonico`);
+        if (!plan.octaves.find((candidate) => candidate.octave === octave)?.possible) throw new EditError(`Le note di ${name} uscirebbero dalle altezze scrivibili`);
+        return { plan, octave, name };
+    });
+    score.everyPart((index) => {
+        const item = plans[index];
+        if (item) applyDerivation(score, item.plan, item.octave);
+    });
+    setConcertScore(score, concertPitch);
+    return plans.filter((item): item is { plan: DerivationPlan; octave: number; name: string } => !!item?.plan.enharmonic).map((item) => item.name);
+}
+
+/**
+ * Suono del rigo per l'ascolto e le note suonate: quello del suo strumento, o i suoni di batteria delle percussioni. In
+ * una partitura in suoni reali della trasposizione restano le ottave.
+ */
+export function rowSound(instruments: readonly PlaybackInstrument[], concertPitch = false): PlaybackSound {
     const drums = instruments.filter((instrument) => instrument.percussionKey !== null && instrument.percussionKey !== undefined);
     if (drums.length) return { percussionKeys: drums.map((instrument) => instrument.percussionKey!), configured: true, conflicting: false };
-    const instrument = instruments[0];
+    const instrument = instruments[0] && concertPitch ? concertInstrument(instruments[0]) : instruments[0];
     return {
         transpositionSemitones: instrument?.transpositionSemitones ?? null,
         bassClefTranspositionSemitones: instrument?.bassClefTranspositionSemitones ?? null,
@@ -350,7 +451,50 @@ export function rowSound(instruments: readonly PlaybackInstrument[]): PlaybackSo
     };
 }
 
-/** MusicXML di un solo rigo, per ascoltarlo. */
+/** Lo strumento di cui si controlla l'estensione: quello di un rigo con un solo strumento intonato, nella notazione della partitura. */
+export function rowRangeInstrument<T extends RowInstrument>(instruments: readonly T[], concertPitch: boolean): T | null {
+    if (instruments.length !== 1 || isPercussionRow(instruments)) return null;
+    return concertPitch ? concertInstrument(instruments[0]) : instruments[0];
+}
+
+/**
+ * Controlli di tutti i righi: battute di durata diversa dal metro o vuote e note fuori dall'estensione scritta del loro
+ * strumento, che segue la chiave iniziale del rigo e la notazione della partitura.
+ */
+export function rowChecks(score: ScoreDocument, rows: readonly { instruments: readonly RowInstrument[] }[]): RowCheck[] {
+    const concertPitch = isConcertScore(score);
+    return score.everyPart((index) => {
+        const measures = score.measures();
+        const numbered = (position: number) => ({ index: position, number: measures[position]?.getAttribute('number') ?? String(position + 1) });
+        const instrument = rowRangeInstrument(rows[index]?.instruments ?? [], concertPitch);
+        const range = instrument ? writtenRange(instrument, score.stateAt(0).clef.sign) : null;
+        const checks = score.checks();
+        return {
+            index,
+            name: rowName(score, index),
+            wrongDuration: checks.wrongDuration.map(numbered),
+            empty: checks.empty.map(numbered),
+            range: range ? rangeLabel(range) : null,
+            outOfRange: rangeWarnings(score, range)
+        };
+    });
+}
+
+/**
+ * Tutti i righi da ascoltare, dalla prima all'ultima battuta indicata, ognuno con il suono del suo strumento e la
+ * trasposizione della notazione della partitura; anche quelli nascosti nel disegno.
+ */
+export function playbackRows(score: ScoreDocument, rows: readonly { instruments: readonly PlaybackInstrument[] }[], from: number, to: number): PlaybackPartInput[] {
+    const concertPitch = isConcertScore(score);
+    return parseMusicXmlParts(score.cleanXml()).map((part, index) => ({
+        key: part.id || `P${index + 1}`,
+        name: rowName(score, index),
+        part: excerpt(part, from, to),
+        sound: partSound(rowSound(rows[index]?.instruments ?? [], concertPitch), part.clefSign)
+    }));
+}
+
+/** MusicXML di un solo rigo della partitura. */
 export function rowXml(xml: string, index: number): string {
     const document = new DOMParser().parseFromString(xml, 'application/xml');
     const root = document.documentElement;
