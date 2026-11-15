@@ -715,7 +715,7 @@ Le guide di pagina non salvano nulla. Le ragioni:
 - registrare le tappe viste farebbe crescere `seen_steps` oltre il limite di 100 per gli amministratori, che hanno molte pagine;
 - senza scritture il backend resta com'è e la guida non aggiunge dati personali.
 
-Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali e a 4 con la tappa Compensi della guida di Economia: sale a ogni tappa aggiunta o che cambia significato.
+Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali e a 4 con la tappa Compensi della guida di Economia e a 5 con la tappa Organico della guida degli strumenti: sale a ogni tappa aggiunta o che cambia significato.
 
 ### Catalogo, ancore e caricamento
 
@@ -840,8 +840,11 @@ Il Tesoriere apre solo il dettaglio, dalle notifiche economiche: la sua guida ha
 | --- | ---: | --- | --- | --- | --- |
 | elenco | 1 | `page.instruments.create` | — | `instruments.create` | «Aggiungi gli strumenti dell'organizzazione: servono ad abbinare le parti degli spartiti ai musicisti.» |
 | elenco | 2 | `page.instruments.playback` | `SCORE_PLAYBACK` | `instruments.unconfigured` | «Mostra solo gli strumenti ancora da configurare per l'ascolto e aprili per scegliere il suono.» |
+| elenco | 3 | `page.instruments.ensemble` | — | `instruments.ensemble` | «Nella scheda Organico metti in ordine gli strumenti che suonano nella banda: l'anteprima e la stampa seguono lo stesso ordine.» Punto: «Comincia da «Proponi l'ordine di riferimento»» |
 | dettaglio | 1 | `page.instrument.data` | — | `instrument.data` | «Nome e descrizione dello strumento: salva con «Salva strumento» in alto.» |
 | dettaglio | 2 | `page.instrument.sound` | `SCORE_PLAYBACK` | `instrument.sound` | «Scegli suono e trasposizione per l'ascolto: «Proponi dal nome» suggerisce un suono, «Prova» lo fa sentire.» |
+
+La tappa 3 dell'elenco è stata aggiunta il 2026-11-15 con la revisione 5 del catalogo (`introducedIn: 5`), insieme alla scheda dell'[organico della banda](music-writing-editor-spec.md#organico-della-banda). L'ancora è l'intestazione della scheda, visibile anche con l'elenco aperto; la tappa del filtro «Da configurare» si salta se è aperta la scheda Organico, perché la sua ancora non è visibile.
 
 #### Inventario — `/inventory`, tutti tranne TE; `INVENTORY`
 

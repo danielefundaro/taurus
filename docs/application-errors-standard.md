@@ -268,7 +268,7 @@ I componenti non mostrano un proprio toast per un errore HTTP: il titolo specifi
 
 Un componente che mostra l'errore accanto al campo dichiara le chiavi che gestisce con un secondo `HttpContextToken` (`HANDLED_ERRORS`, con `withHandledErrors`). Per quelle chiavi l'interceptor non mostra il toast, e il componente chiede il testo ad `ApiErrorService` e lo mostra sotto il campo.
 
-Lo usano la scadenza dell'assegnazione nel dettaglio inventario, con le chiavi `inventory.loanDuration.*` e i codici di scadenza di `inventory.loanSheet.*`, i dialoghi della firma elettronica per i codici di conferma, i dati del firmatario e il documento firmato con CieSign, e il pannello Strumenti da aggiungere della traccia, che per `version.conflict`, `instrument.name.exists` e `instrumentSuggestion.notOpen` mostra il messaggio nel pannello e rilegge i nomi.
+Lo usano la scadenza dell'assegnazione nel dettaglio inventario, con le chiavi `inventory.loanDuration.*` e i codici di scadenza di `inventory.loanSheet.*`, i dialoghi della firma elettronica per i codici di conferma, i dati del firmatario e il documento firmato con CieSign, il pannello Strumenti da aggiungere della traccia, che per `version.conflict`, `instrument.name.exists` e `instrumentSuggestion.notOpen` mostra il messaggio nel pannello e rilegge i nomi, e la scheda Organico della pagina degli strumenti, che per `version.conflict` e `instrument.ensemble.invalid` mostra il messaggio nella scheda con **Ricarica l'organico**.
 
 ### Registro dei comportamenti
 
@@ -911,6 +911,7 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | --- | --- | --- | --- | --- |
 | `instrument.name.exists` | 409 | Creazione o rinomina di uno strumento, a mano o dal pannello Strumenti da aggiungere, con il nome di un altro strumento del tenant, confrontato senza maiuscole, accenti, punteggiatura e spazi ripetuti | — | «Esiste già uno strumento con questo nome» |
 | `instrumentSuggestion.notOpen` | 409 | Decisione su un nome da aggiungere che non è più aperto per la traccia o per una delle parti indicate | — | «Uno dei nomi è già stato deciso da un'altra richiesta» |
+| `instrument.ensemble.invalid` | 400 | Salvataggio dell'organico della banda con un elenco mancante o di oltre 500 strumenti, con uno strumento ripetuto, o con uno strumento inesistente o eliminato | — | «Uno degli strumenti dell'organico non esiste più o compare due volte» |
 
 ### Brani, upload e immagini delle pagine
 
