@@ -343,6 +343,15 @@ describe('ScoreDraftService', () => {
         flushMicrotasks();
         expect(created).toEqual({ scoreId: 15, trackVersion: 7 });
 
+        let derived: unknown;
+        void service.derivePart(4, 9, { versionId: 21, instrumentId: 5, description: 'Sax contralto', content: '<b/>', trackVersion: 7 }).then((value) => (derived = value));
+        const derive = http.expectOne(`${environment.baseUrl}/tracks/4/scores/9/derive`);
+        expect(derive.request.method).toBe('POST');
+        expect(derive.request.body).toEqual({ versionId: 21, instrumentId: 5, description: 'Sax contralto', content: '<b/>', trackVersion: 7 });
+        derive.flush({ scoreId: 16, trackVersion: 8 });
+        flushMicrotasks();
+        expect(derived).toEqual({ scoreId: 16, trackVersion: 8 });
+
         void store.put({ key, content: '<a/>', baseVersionId: null, entityVersion: null, changedFrom: '2026-11-14T09:00:00Z', changedAt: '2026-11-14T09:01:00Z' });
         let copy: LocalDraftCopy | null = null;
         void service.localCopy(4, 9).then((value) => (copy = value));

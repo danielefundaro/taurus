@@ -63,6 +63,12 @@
                         } @else if (canManage && engravingOutdated(part)) {
                             <p-tag severity="secondary" icon="pi pi-file-pdf" value="Pagine non aggiornate" pTooltip="Le pagine sono impaginate da una versione precedente a quella ascoltata" />
                         }
+                        @if (canManage && derivedLabel(part); as derived) {
+                            <p-tag severity="secondary" icon="pi pi-share-alt" [value]="derived" />
+                        }
+                        @if (canManage && sourceChanged(part); as changed) {
+                            <p-tag severity="warn" icon="pi pi-exclamation-triangle" value="La parte di origine è cambiata" [pTooltip]="changed" />
+                        }
                         @if (canManage && part.editing; as editing) {
                             <p-tag severity="info" icon="pi pi-pencil" [value]="editingLabel(editing)" />
                         }
@@ -164,6 +170,11 @@
                                     (onClick)="write(part)"
                                 />
                             }
+                        }
+                        @if (canWrite && part.version) {
+                            <span [pTooltip]="deriveBlocker(part) ?? 'Trasporta la versione ascoltata per un altro strumento, in una parte nuova da scrivere'">
+                                <p-button label="Ricava una parte" icon="pi pi-share-alt" size="small" severity="secondary" outlined [disabled]="trackDirty || !!deriveBlocker(part)" (onClick)="derive(part)" />
+                            </span>
                         }
                         @if (canEngrave && part.version) {
                             <p-button

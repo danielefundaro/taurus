@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpErrorResponse, HttpParams, HttpResponse } 
 import { Injectable, signal } from '@angular/core';
 import { firstValueFrom, map } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { DraftSaved, NewWrittenPart, ScoreDraft, WrittenPart } from '../module';
+import { DerivedPart, DraftSaved, NewWrittenPart, ScoreDraft, WrittenPart } from '../module';
 import { ApiErrorService } from './api-error.service';
 import { withHandledErrors } from './api-error-context';
 import { KeycloakService } from './keycloak.service';
@@ -459,6 +459,11 @@ export class ScoreDraftService {
     /** Aggiunge in fondo alla traccia una parte scritta da zero, senza pagine, con la sua prima bozza. */
     createWrittenPart(trackId: number, part: NewWrittenPart, context?: HttpContext): Promise<WrittenPart> {
         return firstValueFrom(this.http.post<WrittenPart>(`${environment.baseUrl}/tracks/${trackId}/written-parts`, part, { context }));
+    }
+
+    /** Aggiunge in fondo alla traccia una parte ricavata da una versione di un'altra parte, con il risultato come prima bozza. */
+    derivePart(trackId: number, scoreId: number, part: DerivedPart, context?: HttpContext): Promise<WrittenPart> {
+        return firstValueFrom(this.http.post<WrittenPart>(`${environment.baseUrl}/tracks/${trackId}/scores/${scoreId}/derive`, part, { context }));
     }
 
     /** Copia nel browser delle modifiche di questo utente alla parte, se c'è. */

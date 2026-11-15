@@ -1,0 +1,89 @@
+<app-dialog-shell #shell [heading]="heading" [subtitle]="subtitle" confirmLabel="Crea e scrivi" [saving]="saving" [invalidCount]="errors.length" [dirty]="dirty" (cancel)="cancel()" (confirm)="save()">
+    @if (loading) {
+        <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Lettura della parte e degli strumenti…</span>
+    } @else if (loadError) {
+        <app-inline-alert severity="error" heading="Parte non leggibile" detail="La versione ascoltata della parte non si legge: riprova più tardi." />
+    } @else {
+        <div class="flex flex-col gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <app-form-field
+                    class="sm:col-span-2"
+                    label="Strumento"
+                    forId="deriveInstrument"
+                    required
+                    hint="Sarà l'unico strumento della parte nuova. Gli strumenti senza trasposizione vanno prima configurati."
+                    [error]="shell.validationAttempted && !target ? 'Scegli lo strumento.' : undefined"
+                >
+                    <p-select
+                        inputId="deriveInstrument"
+                        class="w-full"
+                        [options]="instruments"
+                        [(ngModel)]="instrumentId"
+                        (ngModelChange)="changedInstrument()"
+                        optionLabel="label"
+                        optionValue="id"
+                        optionDisabled="disabled"
+                        [filter]="true"
+                        filterBy="name"
+                        filterPlaceHolder="Cerca uno strumento"
+                        emptyFilterMessage="Nessuno strumento trovato"
+                        emptyMessage="Nessun altro strumento intonato"
+                        placeholder="Scegli uno strumento"
+                        appendTo="body"
+                    />
+                </app-form-field>
+                <app-form-field label="Nome della parte" forId="deriveDescription" hint="Vuoto: la parte prende il nome dello strumento.">
+                    <input pInputText id="deriveDescription" class="w-full" [(ngModel)]="description" (ngModelChange)="changedDescription()" maxlength="255" autocomplete="off" />
+                </app-form-field>
+                <app-form-field label="Chiave" forId="deriveClef" required hint="Una chiave diversa da quella della parte di origine le sostituisce tutte.">
+                    <p-select inputId="deriveClef" class="w-full" [options]="clefs" [(ngModel)]="clef" (ngModelChange)="changedClef()" optionLabel="label" optionValue="value" appendTo="body" />
+                </app-form-field>
+                @if (plan && !plan.error) {
+                    <app-form-field
+                        class="sm:col-span-2"
+                        label="Ottava"
+                        forId="deriveOctave"
+                        required
+                        [hint]="rangeText ? 'Proposta l\'ottava con meno note fuori estensione.' : 'Senza estensione configurata si propone lo stesso suono dell\'originale.'"
+                        [error]="shell.validationAttempted && !chosen ? errors[0] : undefined"
+                    >
+                        <p-select inputId="deriveOctave" class="w-full" [options]="octaves" [(ngModel)]="octave" (ngModelChange)="changedOctave()" optionLabel="label" optionValue="value" appendTo="body" />
+                    </app-form-field>
+                }
+            </div>
+
+            @if (plan?.error; as error) {
+                <app-inline-alert severity="error" heading="Parte non ricavabile" [detail]="error + ': la parte non si può creare.'" />
+            } @else if (plan && target) {
+                <ul class="m-0 pl-5 text-sm flex flex-col gap-1" aria-label="Risultato della derivazione">
+                    <li>{{ keyLabel }}</li>
+                    @if (chosen; as octaveChoice) {
+                        <li>Intervallo scritto: {{ octaveChoice.label }}</li>
+                    }
+                </ul>
+                @if (plan.enharmonic) {
+                    <app-inline-alert severity="info" heading="Intervallo enarmonico" detail="L'intervallo diretto darebbe un'armatura o note con troppe alterazioni: si usa il suo enarmonico, che suona uguale." />
+                }
+                @if (rangeText) {
+                    @if (chosen?.measures?.length) {
+                        <app-inline-alert
+                            severity="warn"
+                            heading="Note fuori estensione"
+                            [detail]="'Note fuori dall\'estensione di ' + target.name + ' (' + rangeText + ') nelle battute ' + chosen!.measures.join(', ') + '. Si correggono nell\'editor.'"
+                        />
+                    } @else {
+                        <span class="text-sm text-muted-color">Tutte le note sono nell'estensione di {{ target.name }} ({{ rangeText }}).</span>
+                    }
+                } @else {
+                    <app-inline-alert
+                        severity="info"
+                        heading="Estensione non configurata"
+                        [detail]="target.name + ' non ha l\'estensione configurata: le note fuori estensione non si possono segnalare.'"
+                        actionLabel="Configura lo strumento"
+                        (action)="configure()"
+                    />
+                }
+            }
+        </div>
+    }
+</app-dialog-shell>

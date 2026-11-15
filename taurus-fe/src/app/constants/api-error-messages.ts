@@ -140,6 +140,13 @@ const ENGRAVING_OPTIONS: Readonly<Record<string, string>> = {
     target: 'Scegliere se sostituire le pagine della parte o aggiungerle in una parte nuova'
 };
 
+/** Texts of the `reason` of `scoreWriting.derivationUnavailable`. */
+const DERIVATION_PROBLEMS: Readonly<Record<string, string>> = {
+    notSingleInstrument: 'Si può ricavare una parte solo da una parte di un solo strumento',
+    percussion: 'Non si può ricavare una parte da una parte di percussioni',
+    targetPercussion: 'Non si può ricavare una parte per uno strumento a percussione'
+};
+
 /** Time of day of an ISO instant, as HH:mm in the time zone of the browser; empty when unreadable. */
 const timeOfDay = (value: ApiErrorArgValue): string => {
     const date = typeof value === 'string' ? new Date(value) : null;
@@ -652,6 +659,7 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'scoreWriting.draftConflict': "La bozza è stata modificata altrove: riaprire l'editor",
     'scoreWriting.draftOutdated': "Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla",
     'scoreWriting.instrumentNotFound': 'Uno degli strumenti scelti non esiste più: ricaricare la pagina',
+    'scoreWriting.derivationUnavailable': (args) => DERIVATION_PROBLEMS[formatApiErrorValue(args['reason'])] ?? 'Non si può ricavare una parte da questa parte',
     'scoreWriting.engravingUnavailable': 'Impaginazione non disponibile: il servizio musicale non è configurato',
     'scoreWriting.engravingOptionsInvalid': (args) => ENGRAVING_OPTIONS[formatApiErrorValue(args['field'])] ?? 'Opzioni di impaginazione non valide',
     'scoreWriting.engravingRunning': 'La parte è già in impaginazione: attendere che finisca',
