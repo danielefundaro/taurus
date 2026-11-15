@@ -35,7 +35,8 @@ record PreparationSnapshot(
     }
 
     /** A part of a track with its instruments, by id and name, and its ready files. */
-    record Score(Long id, String description, boolean needsReview, Map<Long, String> instruments, List<File> readyFiles) {
+    /** {@code unengraved}: a part with a version and without pages, written or derived and still to engrave. */
+    record Score(Long id, String description, boolean needsReview, boolean unengraved, Map<Long, String> instruments, List<File> readyFiles) {
         boolean ready() {
             return !needsReview && !instruments.isEmpty() && !readyFiles.isEmpty();
         }

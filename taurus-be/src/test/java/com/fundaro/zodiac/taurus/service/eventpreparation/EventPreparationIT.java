@@ -3,6 +3,7 @@ package com.fundaro.zodiac.taurus.service.eventpreparation;
 import static com.fundaro.zodiac.taurus.service.dto.eventpreparation.EventPreparationDtos.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -200,6 +201,33 @@ class EventPreparationIT {
         assertThat(current.configuration().version()).isEqualTo(configured.configuration().version());
         View reconfigured = call(tenant, () -> preparationService.configure(eventId, configuration(current.configuration().version()), admin));
         assertThat(reconfigured.programVersion()).isEqualTo(current.programVersion());
+    }
+
+    @Test
+    void aWrittenPartWithoutPagesIsToEngrave() {
+        enableFeatures(ALL_FEATURES);
+        String tenant = tenant("prep-engrave");
+        JwtAuthenticationToken admin = token(tenant, users(tenant, "admin", 1, "ROLE_ADMIN", null).get(0), AuthoritiesConstants.ADMIN);
+        Long instrument = instrument(tenant, "Tromba");
+        Long trackId = tracks(tenant, "Marcia", 1, instrument).get(0);
+        // A part written in the editor: a version saved as MusicXML, no pages until it is engraved.
+        sql(tenant, "INSERT INTO sheet_music (track_id, description, display_order) VALUES (" + trackId + ", 'Parte scritta', 1)");
+        Long written = id(tenant, "SELECT MAX(id) FROM sheet_music");
+        sql(tenant, "INSERT INTO sheet_music_instrument (sheet_music_id, instrument_id, display_order) VALUES (" + written + ", " + instrument + ", 0)");
+        sql(tenant, "INSERT INTO media_asset (name, storage_key, original_filename, mime_type, file_extension, file_size, sha256, status, insert_by, edit_by)"
+            + " VALUES ('Versione', 'scores/prep/written.musicxml', 'parte.musicxml', 'application/vnd.recordare.musicxml+xml', 'musicxml', 1, lpad('ab', 64, '0'), 'READY', 'test', 'test')");
+        sql(tenant, "INSERT INTO score_version (sheet_music_id, version_number, origin, status, media_asset_id, measure_count, checks_json, insert_date, insert_by, edit_date, edit_by)"
+            + " SELECT " + written + ", 1, 'WRITING', 'UNVERIFIED', MAX(id), 8, '[]', now(), 'test', now(), 'test' FROM media_asset");
+        sql(tenant, "UPDATE sheet_music SET current_score_version_id = (SELECT MAX(id) FROM score_version) WHERE id = " + written);
+        Long eventId = createEvent(tenant, "Sfilata", "COMPLETE", 48);
+        View configured = call(tenant, () -> preparationService.configure(eventId, configuration(0), admin));
+        call(tenant, () -> preparationService.replaceProgram(eventId, new ProgramRequest(List.of(new ProgramEntryRequest(trackId, false, null, null)), configured.programVersion()), admin));
+
+        View view = call(tenant, () -> preparationService.get(eventId));
+
+        assertThat(view.program()).singleElement().satisfies(entry -> assertThat(entry.scores())
+            .extracting(ProgramScore::description, ProgramScore::unengraved, ProgramScore::ready, ProgramScore::instrumentIds)
+            .containsExactly(tuple("Parte", false, true, List.of(instrument)), tuple("Parte scritta", true, false, List.of(instrument))));
     }
 
     @Test

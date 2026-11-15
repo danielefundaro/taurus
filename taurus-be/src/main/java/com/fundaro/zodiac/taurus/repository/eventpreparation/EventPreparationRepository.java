@@ -75,11 +75,13 @@ public interface EventPreparationRepository extends JpaRepository<CalendarEventP
     List<Object[]> findPresences(@Param("eventIds") Collection<Long> eventIds);
 
     /**
-     * Track id, score id, description, review flag, instrument id and name, ready media id and file name of the parts
-     * of the tracks: one row per instrument and ready file, in the order of the track.
+     * Track id, score id, description, review flag, instrument id and name, ready media id and file name, current
+     * version and number of pages of any status of the parts of the tracks: one row per instrument and ready file, in
+     * the order of the track.
      */
     @Query("""
-        select track.id, score.id, score.description, score.needsReview, instrument.id, instrument.name, media.id, media.originalFilename
+        select track.id, score.id, score.description, score.needsReview, instrument.id, instrument.name, media.id, media.originalFilename,
+            score.currentScoreVersionId, size(score.media)
         from Tracks track
         join track.scores score
         left join score.instruments instrument
