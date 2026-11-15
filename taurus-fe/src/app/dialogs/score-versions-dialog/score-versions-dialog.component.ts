@@ -1,9 +1,12 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { MenuItem } from 'primeng/api';
+import { Menu, MenuModule } from 'primeng/menu';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { finalize, first } from 'rxjs';
+import { finalize, first, firstValueFrom } from 'rxjs';
 import { ImportsModule } from '../../imports';
-import { PartPlaybackSettings, PlaybackInstrument, ScoreVersion } from '../../module';
+import { PartPlaybackSettings, PlaybackInstrument, PlaybackSound, ScoreVersion } from '../../module';
 import { GENERAL_MIDI_FAMILIES, programName } from '../../score-player/general-midi';
+import { fileName, saveFile, versionMidi } from '../../score-player/midi-download';
 import { checkIssues, originLabel } from '../../score-player/playback-labels';
 import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
 
@@ -14,6 +17,12 @@ export interface ScoreVersionsDialogData {
     settings: PartPlaybackSettings;
     /** Primo strumento della parte: con i campi vuoti la parte usa il suo suono e la sua trasposizione. */
     instrument?: PlaybackInstrument | null;
+    /** Suono salvato della parte, per scaricare le versioni in MIDI come si ascoltano. */
+    sound?: PlaybackSound;
+    /** Tempo della partitura scelto per la traccia, in semiminime al minuto. */
+    tempoBpm?: number | null;
+    /** Con la scrittura attiva, la versione da cui sono impaginate le pagine: se ne scarica il PDF. */
+    engravedFromVersionId?: number | null;
 }
 
 /** Esito del dialogo: versioni o suono cambiati e, se richiesta, la versione da aprire nell'editor di correzione. */
@@ -26,7 +35,7 @@ export interface ScoreVersionsDialogResult {
 @Component({
     selector: 'app-score-versions-dialog',
     standalone: true,
-    imports: [ImportsModule],
+    imports: [ImportsModule, MenuModule],
     changeDetection: ChangeDetectionStrategy.Eager,
     templateUrl: './score-versions-dialog.component.html'
 })
@@ -34,6 +43,8 @@ export class ScoreVersionsDialogComponent implements OnInit {
     protected readonly data: ScoreVersionsDialogData;
     protected readonly soundGroups = GENERAL_MIDI_FAMILIES.map((family) => ({ label: family.label, items: family.sounds.map((sound) => ({ label: `${sound.program} · ${sound.name}`, value: sound.program })) }));
     protected versions: ScoreVersion[] = [];
+    /** Formati della versione per cui si è aperto il menu «Scarica». */
+    protected downloads: MenuItem[] = [];
     protected loading = true;
     protected busy = false;
     protected transpositionOverride: number | null;
@@ -108,18 +119,40 @@ export class ScoreVersionsDialogComponent implements OnInit {
         this.run(this.playbackService.approve(this.data.trackId, this.data.scoreId, version.id), 'Versione approvata', `La versione ${version.versionNumber} è approvata e ascoltata per la parte.`);
     }
 
+    /** Apre il menu dei formati della versione: MusicXML, MIDI e, se ne derivano le pagine, il PDF. */
+    protected openDownloads(event: Event, menu: Menu, version: ScoreVersion): void {
+        this.downloads = [
+            { label: 'MusicXML per MuseScore (.mxl)', icon: 'pi pi-file', command: () => this.download(version) },
+            { label: 'MIDI (.mid)', icon: 'pi pi-volume-up', disabled: !this.data.sound, command: () => void this.downloadMidi(version) }
+        ];
+        if (this.data.engravedFromVersionId === version.id) this.downloads.push({ label: 'PDF delle pagine', icon: 'pi pi-file-pdf', command: () => this.downloadPdf(version) });
+        menu.toggle(event);
+    }
+
     protected download(version: ScoreVersion): void {
         this.playbackService
             .versionFile(this.data.trackId, this.data.scoreId, version.id)
             .pipe(first())
-            .subscribe((blob) => {
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${this.data.partLabel.replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'parte'} - versione ${version.versionNumber}.mxl`;
-                link.click();
-                URL.revokeObjectURL(url);
-            });
+            .subscribe((blob) => saveFile(blob, `${this.fileName(version)}.mxl`));
+    }
+
+    /** MIDI della versione dallo stesso generatore dell'ascolto, in suoni reali, con ritornelli e salti eseguiti. */
+    protected async downloadMidi(version: ScoreVersion): Promise<void> {
+        const sound = this.data.sound;
+        if (!sound) return;
+        try {
+            const editor = await firstValueFrom(this.playbackService.editor(this.data.trackId, this.data.scoreId, version.id));
+            saveFile(versionMidi(editor.musicXml, this.data.partLabel, sound, this.data.tempoBpm ?? null), `${this.fileName(version)}.mid`);
+        } catch {
+            this.toastService.warn('MIDI non scaricato', 'Impossibile leggere la versione: riprovare più tardi.');
+        }
+    }
+
+    /** PDF dell'ultima impaginazione della versione, come «Scarica il PDF» nell'impaginazione. */
+    protected downloadPdf(version: ScoreVersion): void {
+        firstValueFrom(this.playbackService.engravingPdf(this.data.trackId, this.data.scoreId, version.id))
+            .then((blob) => saveFile(blob, `${this.fileName(version)}.pdf`))
+            .catch(() => this.toastService.warn('PDF non scaricato', 'Il PDF di questa impaginazione non è più disponibile: impagina di nuovo la versione.'));
     }
 
     protected saveSound(): void {
@@ -162,6 +195,10 @@ export class ScoreVersionsDialogComponent implements OnInit {
 
     protected close(): void {
         this.dialogRef.close({ changed: this.changed } satisfies ScoreVersionsDialogResult);
+    }
+
+    private fileName(version: ScoreVersion): string {
+        return `${fileName(this.data.partLabel)} - versione ${version.versionNumber}`;
     }
 
     private soundSettings(): PartPlaybackSettings {

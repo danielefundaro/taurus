@@ -3,7 +3,7 @@ import { DynamicDialogConfig } from 'primeng/dynamicdialog';
 import { of, throwError } from 'rxjs';
 import { PartPlayback, TrackPlayback } from '../../module';
 import { ScoreAudioService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
-import { musicXml } from '../../score-player/score-player.testing';
+import { musicXml, readMidi } from '../../score-player/score-player.testing';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from './score-player-dialog.component';
 
 const XML = musicXml(['<attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>']);
@@ -148,6 +148,44 @@ describe('ScorePlayerDialogComponent in the page', () => {
         return { fixture, renderer };
     }
 
+    it('lets the managers download in MIDI the parts they hear, at the chosen tempo, without metronome', async () => {
+        const { component, playbackService, toast } = setup('score', [part(1), part(2, { ownPart: true })]);
+        await component.ngOnInit();
+        const click = spyOn(HTMLAnchorElement.prototype, 'click');
+        const blobs: Blob[] = [];
+        const createObjectURL = spyOn(URL, 'createObjectURL').and.callFake((blob: Blob | MediaSource) => {
+            blobs.push(blob as Blob);
+            return 'blob:midi';
+        });
+        spyOn(URL, 'revokeObjectURL');
+
+        expect(component.canDownload).toBeFalse();
+        playbackService.canManage = true;
+        expect(component.canDownload).toBeTrue();
+
+        component.changeTempo(120);
+        component.listen('mine');
+        component.downloadMidi();
+        expect(createObjectURL).toHaveBeenCalledTimes(1);
+        expect((click.calls.mostRecent().object as HTMLAnchorElement).download).toBe('Marcia.mid');
+        const tracks = readMidi(new Uint8Array(await blobs[0].arrayBuffer())).tracks;
+        // Tempo e la sola parte che si sente: niente metronomo.
+        expect(tracks.length).toBe(2);
+        const tempo = tracks[0].find((event) => event.data[0] === 0x51)!.data;
+        expect(Math.round(60_000_000 / ((tempo[1] << 16) | (tempo[2] << 8) | tempo[3]))).toBe(120);
+
+        component.rows.forEach((row: { muted: boolean }) => (row.muted = true));
+        component.downloadMidi();
+        expect(createObjectURL).toHaveBeenCalledTimes(1);
+        expect(toast.warn).toHaveBeenCalledWith('MIDI non scaricato', jasmine.any(String));
+
+        const single = setup('part', [part(1), part(2)], 2);
+        single.playbackService.canManage = true;
+        await single.component.ngOnInit();
+        single.component.downloadMidi();
+        expect((click.calls.mostRecent().object as HTMLAnchorElement).download).toBe('Marcia - Parte 2.mid');
+    });
+
     it('starts with the parts of the mixer closed on a phone, behind a toggle', async () => {
         spyOn(window, 'matchMedia').and.returnValue({ matches: true } as MediaQueryList);
         const { fixture } = await create('score');
@@ -184,7 +222,7 @@ function mutedByPart(calls: readonly unknown[][]): boolean[] {
 function setup(mode: 'part' | 'score', parts: PartPlayback[], scoreId?: number) {
     const playback: TrackPlayback = { trackId: 5, trackName: 'Marcia', version: 3, parts, recognitionAvailable: false };
     const data: ScorePlayerDialogData = { trackId: 5, playback, mode, scoreId };
-    const playbackService = { playbackFile: jasmine.createSpy().and.returnValue(of(XML)) };
+    const playbackService = { playbackFile: jasmine.createSpy().and.returnValue(of(XML)), canManage: false };
     const audio = {
         ready: jasmine.createSpy().and.resolveTo(),
         load: jasmine.createSpy().and.resolveTo(),
@@ -198,7 +236,7 @@ function setup(mode: 'part' | 'score', parts: PartPlayback[], scoreId?: number) 
     const zone = { run: (callback: () => void) => callback(), runOutsideAngular: (callback: () => void) => callback() };
     const changeDetector = { markForCheck: jasmine.createSpy() };
     const dialogService = { open: jasmine.createSpy().and.returnValue({ onClose: of(true) }) };
-    const toast = jasmine.createSpyObj('ToastService', ['success']);
+    const toast = jasmine.createSpyObj('ToastService', ['success', 'warn']);
     const component: any = new ScorePlayerDialogComponent({ data } as never, playbackService as never, audio as never, renderer as never, zone as never, changeDetector as never, dialogService as never, toast);
     component.notation = { nativeElement: document.createElement('div') };
     return { component, playbackService, audio, renderer, dialogService, toast };

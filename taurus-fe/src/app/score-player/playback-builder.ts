@@ -23,6 +23,8 @@ export interface PlaybackOptions {
     /** Tempo iniziale in semiminime al minuto; se assente si usa l'indicazione della partitura o 100. */
     tempoBpm: number | null;
     countIn: boolean;
+    /** Traccia del metronomo, da silenziare o attivare nell'ascolto; `false` per un file con le sole parti. Di norma presente. */
+    metronome?: boolean;
 }
 
 /** Una battuta eseguita: indice nella parte di riferimento, inizio e durata in semiminime (attacco escluso). */
@@ -100,7 +102,7 @@ export function buildPlayback(parts: PlaybackPartInput[], reference: ScorePart, 
         };
     });
     const metronome = channels[channels.length - 1];
-    tracks.push({ name: 'Metronomo', port: metronome.port, channel: metronome.channel, notes: clicks(reference, segments, countIn) });
+    if (options.metronome !== false) tracks.push({ name: 'Metronomo', port: metronome.port, channel: metronome.channel, notes: clicks(reference, segments, countIn) });
 
     return {
         midi: writeMidiFile(tempo, tracks),

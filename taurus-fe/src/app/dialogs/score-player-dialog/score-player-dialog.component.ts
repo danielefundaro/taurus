@@ -3,7 +3,8 @@ import { DialogService, DynamicDialogConfig } from 'primeng/dynamicdialog';
 import { first, firstValueFrom } from 'rxjs';
 import { ImportsModule } from '../../imports';
 import { PartPlayback, TrackPlayback } from '../../module';
-import { BuiltPlayback, buildPlayback, PlaybackChannel } from '../../score-player/playback-builder';
+import { fileName, midiFile, saveFile } from '../../score-player/midi-download';
+import { BuiltPlayback, buildPlayback, PlaybackChannel, PlaybackPartInput } from '../../score-player/playback-builder';
 import { parseMusicXml, ScorePart } from '../../score-player/musicxml-score';
 import { measureElements } from '../../score-player/notation';
 import { partSound, quartersAt, secondsAt, segmentIndexAt } from '../../score-player/timeline';
@@ -152,6 +153,29 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
         return (referenceId !== null && referenceId !== undefined ? this.scores.get(referenceId) : undefined) ?? this.scores.get(automatic?.part.scoreId);
     }
 
+    /** Chi gestisce la traccia scarica in MIDI ciò che si ascolta; soci ed esterni ascoltano soltanto. */
+    protected get canDownload(): boolean {
+        return this.playbackService.canManage;
+    }
+
+    /**
+     * Salva in MIDI ciò che si ascolta: le parti che si sentono, con il tempo scelto e con o senza ritornelli, senza
+     * metronomo né battuta di attacco.
+     */
+    protected downloadMidi(): void {
+        const reference = this.reference;
+        if (this.status !== 'ready' || !reference) return;
+        const soloing = this.rows.some((row) => row.solo);
+        const audible = this.rows.filter((row) => !row.muted && (!soloing || row.solo));
+        if (!audible.length) {
+            this.toastService.warn('MIDI non scaricato', 'Tutte le parti sono silenziate: attivane almeno una.');
+            return;
+        }
+        const track = this.data.playback.trackName ?? '';
+        const name = this.data.mode === 'part' ? [track, audible[0].label].filter(Boolean).join(' - ') : track;
+        saveFile(midiFile(this.inputs(audible), reference, this.withRepeats, this.tempo), `${fileName(name, 'traccia')}.mid`);
+    }
+
     protected get notationPart(): PartPlayback | undefined {
         return this.notationParts.find((part) => part.scoreId === this.notationScoreId);
     }
@@ -261,11 +285,7 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
     private async rebuild(): Promise<void> {
         const reference = this.reference;
         if (!reference) return;
-        const inputs = this.rows.map((row) => {
-            const score = this.scores.get(row.part.scoreId)!;
-            return { key: String(row.part.scoreId), name: row.label, part: score, sound: partSound(row.part.sound, score.clefSign) };
-        });
-        this.built = buildPlayback(inputs, reference, { withRepeats: this.withRepeats, tempoBpm: this.data.playback.tempoBpm ?? null, countIn: this.countIn });
+        this.built = buildPlayback(this.inputs(this.rows), reference, { withRepeats: this.withRepeats, tempoBpm: this.data.playback.tempoBpm ?? null, countIn: this.countIn });
         this.channels = new Map(this.built.channels.map((channel) => [channel.key, channel]));
         await this.audio.load(this.built.midi);
         this.tempo = Math.round(this.built.initialTempo);
@@ -274,6 +294,13 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
         this.applyMixer();
         this.lastSegment = -2;
         this.refreshPosition(true);
+    }
+
+    private inputs(rows: MixerRow[]): PlaybackPartInput[] {
+        return rows.map((row) => {
+            const score = this.scores.get(row.part.scoreId)!;
+            return { key: String(row.part.scoreId), name: row.label, part: score, sound: partSound(row.part.sound, score.clefSign) };
+        });
     }
 
     private async renderNotation(): Promise<void> {
