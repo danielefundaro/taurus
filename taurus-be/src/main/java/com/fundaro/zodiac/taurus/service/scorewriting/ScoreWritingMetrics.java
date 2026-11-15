@@ -46,7 +46,7 @@ public class ScoreWritingMetrics {
         registry.timer("taurus.score.engraving.duration").record(duration);
     }
 
-    /** Engraved pages assigned to a part: target {@code replace} or {@code newPart}. */
+    /** Engraved pages assigned to a part: target {@code replace}, {@code newPart} or {@code emptyPart}, when the job assigns them. */
     public void engravingApplied(String target) {
         registry.counter("taurus.score.engravings.applied", "target", target).increment();
     }

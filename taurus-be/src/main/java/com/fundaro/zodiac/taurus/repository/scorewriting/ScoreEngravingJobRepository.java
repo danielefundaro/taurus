@@ -24,6 +24,9 @@ public interface ScoreEngravingJobRepository extends JpaRepository<ScoreEngravin
 
     boolean existsBySheetMusicIdAndStatusInAndDeletedFalse(Long sheetMusicId, Collection<ScoreEngravingJobStatus> statuses);
 
+    /** Finished jobs of the parts of a track never assigned: those still with their pages wait for the archivist. */
+    List<ScoreEngravingJob> findAllByTrackIdAndStatusAndAppliedAtIsNullAndDeletedFalse(Long trackId, ScoreEngravingJobStatus status);
+
     /** Finished jobs of a part whose pages were never assigned, to release when a newer engraving supersedes them. */
     List<ScoreEngravingJob> findAllBySheetMusicIdAndStatusAndAppliedAtIsNullAndDeletedFalse(Long sheetMusicId, ScoreEngravingJobStatus status);
 

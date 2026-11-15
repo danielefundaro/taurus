@@ -127,14 +127,17 @@ public final class ArrangementDtos {
     /**
      * A row of the score with the state of its part.
      *
-     * @param scoreId part of the track linked to the row, {@code null} without one
+     * @param scoreId       part of the track linked to the row, {@code null} without one
+     * @param extractedFrom number of the version of the score the latest extracted version of the part comes from,
+     *                      {@code null} when the part was never extracted
      */
     public record ArrangementRowStateDTO(
         String id,
         String name,
         List<PlaybackInstrumentDTO> instruments,
         Long scoreId,
-        ArrangementRowStatus status
+        ArrangementRowStatus status,
+        Integer extractedFrom
     ) {}
 
     /**

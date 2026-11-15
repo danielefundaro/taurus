@@ -72,6 +72,14 @@ public final class ScorePlaybackDtos {
     public record DerivedFromDTO(Long scoreId, Long versionId, int versionNumber) {}
 
     /**
+     * Engraved pages of a part that wait to be assigned, in place of its pages or to a new part.
+     *
+     * @param versionId     version of the part the pages were engraved from
+     * @param versionNumber number of the version in its part
+     */
+    public record PendingPagesDTO(Long jobId, Long versionId, int versionNumber, int pageCount) {}
+
+    /**
      * Sound and transposition resolved for a part: part overrides first, then the first assigned instrument.
      *
      * @param percussionKeys drum keys of the assigned percussion instruments, in order: voice 1 uses the first one
@@ -141,6 +149,8 @@ public final class ScorePlaybackDtos {
      * @param engravedFromVersionId version the pages were engraved from, while they still derive from it; returned to
      *                              archivists and administrators only
      * @param derivedFrom           version the part was derived from, returned to archivists and administrators only
+     * @param pendingPages          engraved pages that wait to be assigned, returned to archivists and administrators
+     *                              only
      */
     public record PartPlaybackDTO(
         Long scoreId,
@@ -158,7 +168,8 @@ public final class ScorePlaybackDtos {
         EditLockDTO editing,
         DraftSummaryDTO draft,
         Long engravedFromVersionId,
-        DerivedFromDTO derivedFrom
+        DerivedFromDTO derivedFrom,
+        PendingPagesDTO pendingPages
     ) {}
 
     /**

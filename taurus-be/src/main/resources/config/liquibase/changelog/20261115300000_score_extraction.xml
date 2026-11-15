@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261115300000-1" author="taurus">
+    <comment>
+      Engravings of the parts extracted from a score: the pages of a part without pages are assigned to it when the job
+      ends, the others wait for the archivist as before.
+    </comment>
+    <addColumn tableName="score_engraving_job">
+      <column name="assign_to_empty_part" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+    </addColumn>
+    <rollback>
+      <dropColumn tableName="score_engraving_job" columnName="assign_to_empty_part"/>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

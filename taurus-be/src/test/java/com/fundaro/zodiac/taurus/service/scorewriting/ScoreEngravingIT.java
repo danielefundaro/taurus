@@ -18,6 +18,7 @@ import com.fundaro.zodiac.taurus.repository.scorewriting.ScoreEngravingJobReposi
 import com.fundaro.zodiac.taurus.security.AuthoritiesConstants;
 import com.fundaro.zodiac.taurus.service.MediaService;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PendingPagesDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.ApplyEngravingDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EngravingAppliedDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EngravingFormat;
@@ -292,6 +293,47 @@ class ScoreEngravingIT {
     }
 
     @Test
+    void assignsThePagesToAPartWithoutPagesWhenTheJobEndsAndLeavesTheOthersWaiting() {
+        OMR.answer("/v1/engravings", 200, "application/json", engraving(2));
+
+        // The part has its scanned page: the engraved pages wait for the archivist.
+        Long waiting = engrave(true);
+        assertThat(job(waiting).getAppliedAt()).isNull();
+        assertThat(pages(partId)).containsExactly(scanId);
+        assertThat(inTenant(() -> playbackService.overview(trackId, archivist())).parts().get(0).pendingPages())
+            .isEqualTo(new PendingPagesDTO(waiting, versionId, 1, 2));
+
+        // Without pages, as a part just extracted from the score, the pages go to the part when the job ends.
+        inTenant(() -> {
+            tracksRepository.findByIdAndDeletedFalse(trackId).orElseThrow().getScores().get(0).getMedia().clear();
+            tracksRepository.flush();
+            return null;
+        });
+        Long before = trackVersion();
+        Long assigned = engrave(true);
+
+        ScoreEngravingJob job = job(assigned);
+        assertThat(job.getStatus()).isEqualTo(ScoreEngravingJobStatus.DONE);
+        assertThat(job.getAppliedAt()).isNotNull();
+        assertThat(job.getAppliedSheetMusicId()).isEqualTo(partId);
+        assertThat(job.getPageMediaIds()).isEmpty();
+        assertThat(job.getPdfMediaAssetId()).isNotNull();
+        assertThat(pages(partId)).hasSize(2).doesNotContain(scanId);
+        assertThat(trackVersion()).isGreaterThan(before);
+        // The pages that were waiting are superseded by the new ones.
+        assertThat(job(waiting).getPageMediaIds()).isEmpty();
+        PartPlaybackDTO part = inTenant(() -> playbackService.overview(trackId, archivist())).parts().get(0);
+        assertThat(part.engravedFromVersionId()).isEqualTo(versionId);
+        assertThat(part.pendingPages()).isNull();
+        assertThat(part.hasPages()).isTrue();
+
+        // An engraving without the flag leaves the pages waiting, as before.
+        Long manual = engrave();
+        assertThat(job(manual).getAppliedAt()).isNull();
+        assertThat(inTenant(() -> playbackService.overview(trackId, archivist())).parts().get(0).pendingPages().jobId()).isEqualTo(manual);
+    }
+
+    @Test
     void endsTheJobWithTheReasonOfTheService() {
         OMR.answer("/v1/engravings", 422, "application/json", "{\"code\":\"unreadableScore\"}");
         Long unreadable = engrave();
@@ -382,7 +424,11 @@ class ScoreEngravingIT {
     }
 
     private Long engrave() {
-        Long id = inTenant(() -> engravingService.start(trackId, partId, versionId, null, archivist())).id();
+        return engrave(false);
+    }
+
+    private Long engrave(boolean assignToEmptyPart) {
+        Long id = inTenant(() -> engravingService.start(trackId, partId, versionId, null, assignToEmptyPart, archivist())).id();
         worker.run(tenantCode, id);
         return id;
     }

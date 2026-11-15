@@ -105,14 +105,28 @@ public class ScoreEngravingService {
         this.objectMapper = objectMapper;
     }
 
+    /** Queues the engraving of a version of a part, whose pages wait for the archivist. */
+    public EngravingJobDTO start(Long trackId, Long scoreId, Long versionId, EngravingOptionsDTO options, AbstractAuthenticationToken token) {
+        return start(trackId, scoreId, versionId, options, false, token);
+    }
+
     /**
      * Queues the engraving of a version of a part.
      *
+     * @param assignToEmptyPart the pages go to the part when the job ends, if the part has no pages then, as for the
+     *                          parts extracted from a score; otherwise they wait for the archivist
      * @throws RequestAlertException {@code scoreWriting.engravingUnavailable} without the music service,
      *                               {@code scoreWriting.engravingOptionsInvalid} for an option out of range,
      *                               {@code scoreWriting.engravingRunning} when the part is already being engraved
      */
-    public EngravingJobDTO start(Long trackId, Long scoreId, Long versionId, EngravingOptionsDTO options, AbstractAuthenticationToken token) {
+    public EngravingJobDTO start(
+        Long trackId,
+        Long scoreId,
+        Long versionId,
+        EngravingOptionsDTO options,
+        boolean assignToEmptyPart,
+        AbstractAuthenticationToken token
+    ) {
         if (!omrClient.isConfigured()) {
             throw new RequestAlertException(HttpStatus.SERVICE_UNAVAILABLE, "Music service not configured", ENTITY, "scoreWriting.engravingUnavailable");
         }
@@ -130,6 +144,7 @@ public class ScoreEngravingService {
         job.setOptionsJson(json(normalized));
         job.setStatus(ScoreEngravingJobStatus.QUEUED);
         job.setRequestedBy(actor);
+        job.setAssignToEmptyPart(assignToEmptyPart);
         try {
             jobRepository.saveAndFlush(job);
         } catch (DataIntegrityViolationException exception) {

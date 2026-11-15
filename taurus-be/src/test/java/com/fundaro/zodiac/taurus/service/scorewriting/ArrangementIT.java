@@ -20,6 +20,7 @@ import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.Arrang
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementDraftRequestDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementRowDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementRowRequestDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementRowStateDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementVersionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ArrangementVersionRequestDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ArrangementDtos.ExtractedRowDTO;
@@ -300,6 +301,7 @@ class ArrangementIT {
         )).containsEntry("origin", "ARRANGEMENT").containsEntry("status", "APPROVED").containsEntry("arrangement_version_id", first.id())
             .containsEntry("description", "Clarinetto 1°").containsEntry("arrangement_row", "P2").containsEntry("current", true);
         assertThat(statuses()).containsExactly("P1 UP_TO_DATE", "P2 UP_TO_DATE", "P3 UP_TO_DATE");
+        assertThat(extractedFrom()).containsExactly(1, 1, 1);
         assertThatThrownBy(() -> jdbcTemplate.update("UPDATE " + schema() + ".score_version SET arrangement_version_id = NULL WHERE sheet_music_id = ?", clarinetPartId))
             .isInstanceOf(DataIntegrityViolationException.class);
 
@@ -313,6 +315,7 @@ class ArrangementIT {
         assertThat(statuses()).containsExactly("P1 MODIFIED", "P2 UP_TO_DATE", "P3 UP_TO_DATE");
         ArrangementVersionDTO second = saveVersion(score(false, 1), first.id(), false, false);
         assertThat(statuses()).containsExactly("P1 MODIFIED", "P2 TO_EXTRACT", "P3 TO_EXTRACT");
+        assertThat(extractedFrom()).containsExactly(1, 1, 1);
 
         Long current = trackVersion();
         assertError(() -> extract(first.id(), current, extracted("P3", percussionPartId)), "scoreWriting.arrangementOutdated");
@@ -333,12 +336,14 @@ class ArrangementIT {
         // The part of a row is removed: the next extraction creates another one for the row.
         jdbcTemplate.update("UPDATE " + schema() + ".sheet_music SET deleted = true WHERE id = ?", clarinetPartId);
         assertThat(statuses()).containsExactly("P1 MODIFIED", "P2 PART_DELETED", "P3 TO_EXTRACT");
+        assertThat(extractedFrom()).containsExactly(1, null, 1);
         ExtractionResultDTO again = extract(second.id(), trackVersion(), extracted("P2", null), extracted("P3", percussionPartId));
         assertThat(again.parts()).extracting(part -> part.row() + " " + part.created()).containsExactly("P2 true", "P3 false");
         assertThat(again.parts().get(1).versionId()).isNotNull();
         assertThat(arrangementRow(clarinetPartId)).isNull();
         assertThat(arrangementRow(again.parts().get(0).scoreId())).isEqualTo("P2");
         assertThat(statuses()).containsExactly("P1 MODIFIED", "P2 UP_TO_DATE", "P3 UP_TO_DATE");
+        assertThat(extractedFrom()).containsExactly(1, 2, 2);
         // The version of the score was not approved: neither are the extracted ones.
         assertThat(jdbcTemplate.queryForObject("SELECT status FROM " + schema() + ".score_version WHERE id = ?", String.class, again.parts().get(1).versionId()))
             .isEqualTo("UNVERIFIED");
@@ -429,6 +434,11 @@ class ArrangementIT {
 
     private List<String> statuses() {
         return inTenant(() -> arrangementService.get(trackId)).orElseThrow().rows().stream().map(row -> row.id() + " " + row.status()).toList();
+    }
+
+    /** The version of the score each part was extracted from, by row. */
+    private List<Integer> extractedFrom() {
+        return inTenant(() -> arrangementService.get(trackId)).orElseThrow().rows().stream().map(ArrangementRowStateDTO::extractedFrom).toList();
     }
 
     private List<ArrangementRowRequestDTO> rows() {

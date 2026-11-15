@@ -152,17 +152,21 @@ public class ScoreWritingResource {
         return ResponseEntity.noContent().build();
     }
 
-    /** Queues the engraving of a version into pages and a PDF; the options left out take the defaults of the service. */
+    /**
+     * Queues the engraving of a version into pages and a PDF; the options left out take the defaults of the service. With
+     * {@code assign} the pages go to the part when the job ends, if the part has no pages then.
+     */
     @PostMapping("/scores/{scoreId}/score-versions/{versionId}/engravings")
     @RequiresTenantFeature(TenantFeature.SCORE_WRITING)
     public ResponseEntity<EngravingJobDTO> startEngraving(
         @PathVariable Long trackId,
         @PathVariable Long scoreId,
         @PathVariable Long versionId,
+        @RequestParam(defaultValue = "false") boolean assign,
         @RequestBody(required = false) EngravingOptionsDTO options,
         AbstractAuthenticationToken token
     ) {
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(engravingService.start(trackId, scoreId, versionId, options, token));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(engravingService.start(trackId, scoreId, versionId, options, assign, token));
     }
 
     /** The latest engraving of the version, or no content when there is none. */

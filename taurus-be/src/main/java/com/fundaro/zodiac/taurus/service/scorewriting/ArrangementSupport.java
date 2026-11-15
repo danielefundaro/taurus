@@ -138,22 +138,29 @@ public class ArrangementSupport {
         Map<Long, ScoreVersion> current = currentIds.isEmpty()
             ? Map.of()
             : scoreVersionRepository.findAllByIdInAndDeletedFalse(currentIds).stream().collect(Collectors.toMap(ScoreVersion::getId, Function.identity()));
+        // Also the removed versions of the score tell where a part comes from.
+        Set<Long> sourceIds = extracted.values().stream().map(ScoreVersion::getArrangementVersionId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Integer> sourceNumbers = sourceIds.isEmpty()
+            ? Map.of()
+            : versionRepository.findAllById(sourceIds).stream().collect(Collectors.toMap(ArrangementVersion::getId, ArrangementVersion::getVersionNumber));
 
         return rows.stream().map(row -> {
             Long partId = linked.get(row.id());
             ArrangementRowStatus status;
+            ScoreVersion source = partId == null ? null : extracted.get(partId);
             if (partId == null) {
                 status = lost.contains(row.id()) ? ArrangementRowStatus.PART_DELETED : ArrangementRowStatus.NEW;
             } else {
                 Long currentId = parts.get(partId).getCurrentScoreVersionId();
-                status = status(extracted.get(partId), currentId == null ? null : current.get(currentId), arrangement);
+                status = status(source, currentId == null ? null : current.get(currentId), arrangement);
             }
             return new ArrangementRowStateDTO(
                 row.id(),
                 row.name(),
                 row.instrumentIds().stream().map(instruments::get).filter(Objects::nonNull).toList(),
                 partId,
-                status
+                status,
+                source == null ? null : sourceNumbers.get(source.getArrangementVersionId())
             );
         }).toList();
     }

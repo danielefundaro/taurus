@@ -1,14 +1,17 @@
 package com.fundaro.zodiac.taurus.service.scorewriting;
 
 import com.fundaro.zodiac.taurus.domain.SheetsMusic;
+import com.fundaro.zodiac.taurus.domain.Tracks;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersion;
 import com.fundaro.zodiac.taurus.domain.scorewriting.ScoreEngravingJob;
 import com.fundaro.zodiac.taurus.domain.scorewriting.ScoreEngravingJobStatus;
 import com.fundaro.zodiac.taurus.multitenancy.TenantTransactionExecutor;
+import com.fundaro.zodiac.taurus.repository.MediaRepository;
 import com.fundaro.zodiac.taurus.repository.TracksRepository;
 import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
 import com.fundaro.zodiac.taurus.repository.scorewriting.ScoreEngravingJobRepository;
 import com.fundaro.zodiac.taurus.service.MediaService;
+import com.fundaro.zodiac.taurus.service.scoreplayback.ScorePlaybackSupport;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrClient;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrDtos.EngravingResponse;
 import com.fundaro.zodiac.taurus.service.scoreplayback.omr.OmrException;
@@ -19,15 +22,16 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
  * Runs an engraving job: takes it, reads the version, waits for the music service outside any transaction, then stores
- * the pages and the PDF with the job. The pages wait there until the archivist assigns them; a newer engraving of the
- * same part releases the pages never assigned. A job is taken by one worker only; a result that arrives after the job
- * was handed to another attempt is discarded.
+ * the pages and the PDF with the job. The pages wait there until the archivist assigns them, or go at once to a part
+ * without pages when the job asks so; a newer engraving of the same part releases the pages never assigned. A job is
+ * taken by one worker only; a result that arrives after the job was handed to another attempt is discarded.
  */
 @Service
 public class ScoreEngravingWorker {
@@ -44,6 +48,7 @@ public class ScoreEngravingWorker {
     private final ScoreEngravingJobRepository jobRepository;
     private final ScoreVersionRepository versionRepository;
     private final TracksRepository tracksRepository;
+    private final MediaRepository mediaRepository;
     private final MediaService mediaService;
     private final OmrClient omrClient;
     private final ScoreEngravingFiles files;
@@ -54,6 +59,7 @@ public class ScoreEngravingWorker {
         ScoreEngravingJobRepository jobRepository,
         ScoreVersionRepository versionRepository,
         TracksRepository tracksRepository,
+        MediaRepository mediaRepository,
         MediaService mediaService,
         OmrClient omrClient,
         ScoreEngravingFiles files,
@@ -63,6 +69,7 @@ public class ScoreEngravingWorker {
         this.jobRepository = jobRepository;
         this.versionRepository = versionRepository;
         this.tracksRepository = tracksRepository;
+        this.mediaRepository = mediaRepository;
         this.mediaService = mediaService;
         this.omrClient = omrClient;
         this.files = files;
@@ -150,6 +157,8 @@ public class ScoreEngravingWorker {
     private boolean complete(String tenant, Long jobId, int attempt, Output output) {
         ScoreEngravingJob job = current(jobId, attempt);
         if (job == null) return false;
+        // As for an assignment by the archivist, the lock on the track serializes it with the saves of the track.
+        Tracks locked = job.isAssignToEmptyPart() ? tracksRepository.findByIdForUpdate(job.getTrackId()).orElse(null) : null;
         Optional<SheetsMusic> found = part(job);
         if (found.isEmpty()) {
             markFailed(job, VERSION_NOT_FOUND);
@@ -187,8 +196,22 @@ public class ScoreEngravingWorker {
             .filter(other -> !Objects.equals(other.getId(), job.getId()))
             .toList();
         files.release(superseded, tenant, SYSTEM);
+        if (locked != null && found.orElseThrow().getMedia().isEmpty()) assign(locked, found.orElseThrow(), job);
         metrics.engraving(DONE);
         return true;
+    }
+
+    /** Gives the pages of the job to a part without pages, as the archivist would. */
+    private void assign(Tracks track, SheetsMusic part, ScoreEngravingJob job) {
+        job.getPageMediaIds().forEach(id -> part.getMedia().add(mediaRepository.getReferenceById(id)));
+        part.setEngravedFromVersionId(job.getScoreVersionId());
+        part.setEngravedPagesFingerprint(ScorePlaybackSupport.pagesFingerprint(part));
+        track.setEditDate(new Date());
+        tracksRepository.saveAndFlush(track);
+        job.setAppliedAt(ZonedDateTime.now());
+        job.setAppliedSheetMusicId(part.getId());
+        job.getPageMediaIds().clear();
+        metrics.engravingApplied("emptyPart");
     }
 
     /** The job, if it is still the active attempt that took it. */
