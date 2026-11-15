@@ -32,6 +32,9 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
 
     private Integer highestWrittenPitch;
 
+    /** Position in the ensemble of the band, from 1; {@code null} outside the ensemble. Read only: the ensemble has its own endpoint. */
+    private Integer ensemblePosition;
+
     public Long getUsersCount() {
         return usersCount;
     }
@@ -96,6 +99,14 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
         this.highestWrittenPitch = highestWrittenPitch;
     }
 
+    public Integer getEnsemblePosition() {
+        return ensemblePosition;
+    }
+
+    public void setEnsemblePosition(Integer ensemblePosition) {
+        this.ensemblePosition = ensemblePosition;
+    }
+
     /** Whether parts of this instrument play with their own sound and transposition. */
     public boolean isPlaybackConfigured() {
         return percussionKey != null || (soundProgram != null && transpositionSemitones != null);
@@ -128,6 +139,7 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
             ", percussionKey=" + getPercussionKey() +
             ", lowestWrittenPitch=" + getLowestWrittenPitch() +
             ", highestWrittenPitch=" + getHighestWrittenPitch() +
+            ", ensemblePosition=" + getEnsemblePosition() +
             "}";
     }
 }
