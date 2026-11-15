@@ -715,7 +715,7 @@ Le guide di pagina non salvano nulla. Le ragioni:
 - registrare le tappe viste farebbe crescere `seen_steps` oltre il limite di 100 per gli amministratori, che hanno molte pagine;
 - senza scritture il backend resta com'è e la guida non aggiunge dati personali.
 
-Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali e a 4 con la tappa Compensi della guida di Economia e a 5 con la tappa Organico della guida degli strumenti: sale a ogni tappa aggiunta o che cambia significato.
+Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali e a 4 con la tappa Compensi della guida di Economia a 5 con la tappa Organico della guida degli strumenti e a 6 con la tappa Partitura della guida della traccia: sale a ogni tappa aggiunta o che cambia significato.
 
 ### Catalogo, ancore e caricamento
 
@@ -809,7 +809,10 @@ Il Tesoriere apre solo il dettaglio, dalle notifiche economiche: la sua guida ha
 | 2 | `page.track.details` | tutti | — | `track.tabDetails` | Catalogo: «Nella scheda Dettagli trovi titolo, autori, tempo, tonalità e stato: salva con «Salva traccia» in alto.» Variante UT e UE: «Nella scheda Dettagli trovi titolo, autori, tempo e tonalità del brano.» |
 | 3 | `page.track.parts` | tutti | — | `track.tabParts` | Catalogo: «Nella scheda Parti ogni parte raccoglie pagine e strumenti: puoi dividerle, unirle e segnarle come verificate.» Variante UT e UE: «Nella scheda Parti trovi le parti del brano e gli strumenti che le suonano.» Punto per Catalogo: «Applica gli strumenti proposti dai nomi delle parti» |
 | 4 | `page.track.playback` | tutti | `SCORE_PLAYBACK` | `track.tabPlayback` | Catalogo: «Nella scheda Ascolto riconosci le note dalle pagine, ascolti le parti e correggi gli errori accanto all'originale.» Variante UT e UE: «Nella scheda Ascolto senti la partitura o una sola parte mentre leggi.» |
-| 5 | `page.track.pdf` | Catalogo | — | `track.tabPdf` | «Nella scheda File PDF carichi uno spartito e premi «Analizza PDF»: le pagine diventano parti da controllare.» |
+| 5 | `page.track.arrangement` | Catalogo | `SCORE_PLAYBACK`, `SCORE_WRITING` | `track.tabArrangement` | «Nella scheda Partitura crei la partitura del brano dall'organico o dalle parti e scrivi tutti i righi insieme.» |
+| 6 | `page.track.pdf` | Catalogo | — | `track.tabPdf` | «Nella scheda File PDF carichi uno spartito e premi «Analizza PDF»: le pagine diventano parti da controllare.» |
+
+La tappa 5 è stata aggiunta il 2026-11-15 con la revisione 6 del catalogo (`introducedIn: 6`), insieme alla scheda della [partitura](music-writing-editor-spec.md#partitura-e-arrangiamento).
 
 #### Album — `/albums`, SA, AD, DI, AR, UT, UE
 
