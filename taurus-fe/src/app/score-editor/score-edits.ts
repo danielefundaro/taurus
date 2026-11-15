@@ -127,7 +127,7 @@ const MAX_MULTI_REST = 200;
 /** Apre il MusicXML di una versione per la correzione. */
 export function openScore(xml: string, prefix?: string): ScoreDocument {
     const score = ScoreDocument.open(xml, prefix);
-    makeAccidentalsExplicit(score);
+    score.everyPart(() => makeAccidentalsExplicit(score));
     return score;
 }
 

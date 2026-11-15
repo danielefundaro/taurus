@@ -2,7 +2,7 @@ import { HttpClient, HttpContext, HttpErrorResponse, HttpParams, HttpResponse } 
 import { Injectable, signal } from '@angular/core';
 import { firstValueFrom, map } from 'rxjs';
 import { environment } from '../../environments/environment';
-import { DerivedPart, DraftSaved, NewWrittenPart, ScoreDraft, WrittenPart } from '../module';
+import { ArrangementRowRequest, DerivedPart, DraftSaved, NewWrittenPart, ScoreDraft, WrittenPart } from '../module';
 import { ApiErrorService } from './api-error.service';
 import { withHandledErrors } from './api-error-context';
 import { KeycloakService } from './keycloak.service';
@@ -20,14 +20,18 @@ export const DRAFT_OFFLINE_RETRY_MS = 30_000;
 export const LOCAL_COPY_DELAY_MS = 500;
 
 const LOCKED = 'scoreWriting.locked';
+/** Al posto della parte, nella chiave della copia nel browser della partitura. */
+const ARRANGEMENT_KEY = 'arrangement';
 const CONFLICT = 'scoreWriting.draftConflict';
 const TOO_FREQUENT = 'scoreWriting.draftTooFrequent';
 
 /** Copia nel browser delle modifiche non ancora accettate dal server. */
 export interface LocalDraftCopy {
-    /** Tenant, utente, traccia e parte. */
+    /** Tenant, utente, traccia e parte, oppure la partitura. */
     key: string;
     content: string;
+    /** Righi della partitura; assenti per una parte. */
+    rows?: ArrangementRowRequest[] | null;
     baseVersionId: number | null;
     /** Versione della bozza sul server da cui partono le modifiche; `null` se non c'era una bozza. */
     entityVersion: number | null;
@@ -137,11 +141,13 @@ export interface DraftState {
     message: string | null;
 }
 
-/** Ciò che serve a una finestra dell'editor per tenere la bozza di una parte. */
+/** Ciò che serve a una finestra dell'editor per tenere la bozza di una parte o della partitura. */
 export interface DraftKeeperOptions {
     lock: PartEditLock;
     /** MusicXML attuale dell'editor, letto a ogni salvataggio. */
     content: () => string;
+    /** Partitura: righi attuali dell'editor, salvati con il contenuto. */
+    rows?: () => ArrangementRowRequest[];
     baseVersionId: number | null;
     /** Versione della bozza sul server da cui parte l'editor; `null` senza bozza. */
     entityVersion: number | null;
@@ -149,8 +155,8 @@ export interface DraftKeeperOptions {
 }
 
 /**
- * Bozza di una parte per una finestra dell'editor di scrittura: si salva da sola poco dopo le modifiche, ne tiene una
- * copia nel browser finché il server non la accetta, e dice all'editor quando il server la rifiuta.
+ * Bozza di una parte, o della partitura, per una finestra dell'editor di scrittura: si salva da sola poco dopo le
+ * modifiche, ne tiene una copia nel browser finché il server non la accetta, e dice all'editor quando il server la rifiuta.
  */
 export class PartDraftKeeper {
     private readonly current = signal<DraftState>({ status: 'clean', savedAt: null, message: null });
@@ -311,7 +317,7 @@ export class PartDraftKeeper {
             return Promise.resolve(true);
         }
         const revision = this.revision;
-        const body = { editSession: this.options.lock.session, content: this.options.content(), baseVersionId: this.baseVersionId, entityVersion: this.version };
+        const body = { editSession: this.options.lock.session, content: this.options.content(), ...this.rows(), baseVersionId: this.baseVersionId, entityVersion: this.version };
         this.current.update((state) => ({ ...state, status: 'saving', message: null }));
         this.inFlight = firstValueFrom(this.http.put<DraftSaved>(this.url, body, { context: withHandledErrors(['*']) }))
             .then((saved) => {
@@ -417,12 +423,18 @@ export class PartDraftKeeper {
             return this.store.put({
                 key: this.key,
                 content: this.options.content(),
+                ...this.rows(),
                 baseVersionId: this.baseVersionId,
                 entityVersion: this.version,
                 changedFrom: this.changedFrom,
                 changedAt: this.changedAt
             });
         });
+    }
+
+    /** I righi della partitura, da aggiungere al contenuto; niente per una parte. */
+    private rows(): { rows?: ArrangementRowRequest[] } {
+        return this.options.rows ? { rows: this.options.rows() } : {};
     }
 
     /** Le operazioni sulla copia nel browser si eseguono in ordine: l'eliminazione non precede una scrittura. */
@@ -481,13 +493,27 @@ export class ScoreDraftService {
         return new PartDraftKeeper(this.http, this.apiErrors, this.store, this.url(trackId, scoreId), this.key(trackId, scoreId), options);
     }
 
+    /** Copia nel browser delle modifiche di questo utente alla partitura della traccia, se c'è. */
+    arrangementLocalCopy(trackId: number): Promise<LocalDraftCopy | null> {
+        return this.store.get(this.key(trackId, ARRANGEMENT_KEY));
+    }
+
+    forgetArrangementLocalCopy(trackId: number): Promise<void> {
+        return this.store.delete(this.key(trackId, ARRANGEMENT_KEY));
+    }
+
+    /** Bozza della partitura per una finestra dell'editor, che possiede il blocco della partitura; `rows` è obbligatorio. */
+    arrangementKeeper(trackId: number, options: DraftKeeperOptions & { rows: () => ArrangementRowRequest[] }): PartDraftKeeper {
+        return new PartDraftKeeper(this.http, this.apiErrors, this.store, `${environment.baseUrl}/tracks/${trackId}/arrangement/draft`, this.key(trackId, ARRANGEMENT_KEY), options);
+    }
+
     private url(trackId: number, scoreId: number): string {
         return `${environment.baseUrl}/tracks/${trackId}/scores/${scoreId}/score-draft`;
     }
 
     /** La copia è di un utente di un tenant: un altro utente dello stesso browser non la vede. */
-    private key(trackId: number, scoreId: number): string {
-        return [this.keycloak.currentUserTenantCode ?? '', this.keycloak.currentUserId ?? '', trackId, scoreId].join(':');
+    private key(trackId: number, target: number | string): string {
+        return [this.keycloak.currentUserTenantCode ?? '', this.keycloak.currentUserId ?? '', trackId, target].join(':');
     }
 }
 

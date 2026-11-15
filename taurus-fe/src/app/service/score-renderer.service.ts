@@ -45,9 +45,10 @@ export class ScoreRendererService {
     /**
      * Pagine SVG della parte, adattate alla larghezza indicata in pixel; `scale` è la dimensione in percentuale. Con
      * `encodedBreaks` le righe vanno a capo anche dove la parte ha un'interruzione di riga o di pagina, come nella
-     * scrittura; altrimenti seguono solo la larghezza.
+     * scrittura; altrimenti seguono solo la larghezza. Con `condense` una partitura nasconde i righi che in una riga hanno
+     * solo pause, come una partitura stampata; con `partNames` restano i nomi dei righi.
      */
-    async render(musicXml: string, width: number, scale = 40, options: { encodedBreaks?: boolean } = {}): Promise<string[]> {
+    async render(musicXml: string, width: number, scale = 40, options: { encodedBreaks?: boolean; condense?: boolean; partNames?: boolean } = {}): Promise<string[]> {
         const toolkit = await this.ready();
         toolkit.setOptions({
             pageWidth: Math.max(600, Math.round((width * 100) / scale)),
@@ -56,12 +57,15 @@ export class ScoreRendererService {
             adjustPageHeight: true,
             // Con «smart» e soglia 0 Verovio rispetta tutte le interruzioni di riga e va a capo anche dove la riga è piena.
             ...(options.encodedBreaks ? { breaks: 'smart', breaksSmartSb: 0 } : { breaks: 'auto' }),
+            // Le opzioni restano nel toolkit: la compressione si imposta sempre, anche per le parti singole.
+            condense: options.condense ? 'auto' : 'none',
+            condenseFirstPage: !!options.condense,
             header: 'none',
             footer: 'none',
             svgViewBox: true,
-            svgAdditionalAttribute: ['measure@n']
+            svgAdditionalAttribute: ['measure@n', 'staff@n']
         });
-        if (!toolkit.loadData(forDisplay(musicXml, !!options.encodedBreaks))) throw new Error('Spartito non leggibile');
+        if (!toolkit.loadData(forDisplay(musicXml, !!options.encodedBreaks, !!options.partNames))) throw new Error('Spartito non leggibile');
         const pages: string[] = [];
         for (let page = 1; page <= toolkit.getPageCount(); page++) pages.push(toolkit.renderToSVG(page));
         return pages;
@@ -161,17 +165,20 @@ export function withoutPartNames(musicXml: string): string {
 }
 
 /**
- * Il MusicXML da disegnare: senza i nomi della parte e, con `pageBreaksAsSystems`, con le interruzioni di pagina mostrate
- * come interruzioni di riga, perché lo spartito scorre in una sola pagina.
+ * Il MusicXML da disegnare: senza i nomi della parte, tranne che con `partNames` per i righi di una partitura, e, con
+ * `pageBreaksAsSystems`, con le interruzioni di pagina mostrate come interruzioni di riga, perché lo spartito scorre in
+ * una sola pagina.
  */
-export function forDisplay(musicXml: string, pageBreaksAsSystems: boolean): string {
+export function forDisplay(musicXml: string, pageBreaksAsSystems: boolean, partNames = false): string {
     const document = new DOMParser().parseFromString(musicXml, 'application/xml');
     if (document.getElementsByTagName('parsererror').length > 0) return musicXml;
-    for (const name of ['part-name', 'part-abbreviation']) {
-        for (const element of Array.from(document.getElementsByTagName(name))) element.textContent = '';
-    }
-    for (const name of ['part-name-display', 'part-abbreviation-display']) {
-        for (const element of Array.from(document.getElementsByTagName(name))) element.remove();
+    if (!partNames) {
+        for (const name of ['part-name', 'part-abbreviation']) {
+            for (const element of Array.from(document.getElementsByTagName(name))) element.textContent = '';
+        }
+        for (const name of ['part-name-display', 'part-abbreviation-display']) {
+            for (const element of Array.from(document.getElementsByTagName(name))) element.remove();
+        }
     }
     if (pageBreaksAsSystems) {
         for (const print of Array.from(document.getElementsByTagName('print'))) {

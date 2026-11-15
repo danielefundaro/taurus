@@ -5,6 +5,8 @@ import { ClefSpec, Fraction, divisionsFactor, Step, STEPS } from './notation-rul
 export const SOURCE_ATTRIBUTE = 'taurus-source';
 /** Attributo di lavoro sulla parte: i numeri di battuta erano consecutivi e vanno tenuti tali. */
 const SEQUENTIAL_ATTRIBUTE = 'taurus-sequential';
+/** Attributo di lavoro sul `<score-part>` di una partitura: gli strumenti del rigo, che cambiano con la cronologia. */
+export const ROW_INSTRUMENTS_ATTRIBUTE = 'taurus-instruments';
 
 /** Stato musicale in un punto della parte. */
 export interface MusicalState {
@@ -38,41 +40,107 @@ export class EditError extends Error {}
 const DEFAULT_STATE: MusicalState = { divisions: 1, beats: 4, beatType: 4, fifths: 0, clef: { sign: 'G', line: 2, octaveChange: 0 } };
 
 /**
- * Parte MusicXML aperta nell'editor. Battute e note ricevono un `id`, che Verovio conserva nello spartito disegnato:
- * così un clic sullo spartito individua il nodo MusicXML da modificare. Gli `id` aggiunti e gli attributi di lavoro sono
- * tolti dal file salvato.
+ * Parte MusicXML aperta nell'editor, o partitura con una parte per rigo. Battute e note ricevono un `id`, che Verovio
+ * conserva nello spartito disegnato: così un clic sullo spartito individua il nodo MusicXML da modificare. Gli `id`
+ * aggiunti e gli attributi di lavoro sono tolti dal file salvato.
+ *
+ * In una partitura le operazioni lavorano sul rigo attivo, `part`; quelle sulla struttura si ripetono per ogni rigo con
+ * `everyPart`.
  */
 export class ScoreDocument {
     private counter: number;
+    private active: Element;
 
     private constructor(
         readonly document: Document,
-        readonly part: Element,
+        part: Element,
         readonly prefix: string,
         counter: number
     ) {
+        this.active = part;
         this.counter = counter;
     }
 
-    /** Apre il MusicXML di una versione. */
+    /** Apre il MusicXML di una versione: tutti i righi, con il primo attivo. */
     static open(xml: string, prefix = `te${Math.random().toString(36).slice(2, 7)}-`): ScoreDocument {
         const document = parse(xml);
         const score = new ScoreDocument(document, firstPart(document), prefix, 0);
-        score.measures().forEach((measure, index) => measure.setAttribute(SOURCE_ATTRIBUTE, String(index)));
-        if (sequentialNumbers(score.measures())) score.part.setAttribute(SEQUENTIAL_ATTRIBUTE, 'yes');
-        score.assignIds();
+        score.everyPart(() => {
+            score.measures().forEach((measure, index) => measure.setAttribute(SOURCE_ATTRIBUTE, String(index)));
+            if (sequentialNumbers(score.measures())) score.part.setAttribute(SEQUENTIAL_ATTRIBUTE, 'yes');
+        });
+        score.assignAllIds();
         return score;
     }
 
-    /** Ricostruisce il documento da un'istantanea della cronologia delle modifiche. */
-    static restore(snapshot: string, prefix: string): ScoreDocument {
+    /** Ricostruisce il documento da un'istantanea della cronologia delle modifiche, con il rigo attivo indicato. */
+    static restore(snapshot: string, prefix: string, partIndex = 0): ScoreDocument {
         const document = parse(snapshot);
         let counter = 0;
         for (const item of Array.from(document.querySelectorAll('[id]'))) {
             const id = item.getAttribute('id') ?? '';
             if (id.startsWith(prefix)) counter = Math.max(counter, Number(id.slice(prefix.length + 1)) || 0);
         }
-        return new ScoreDocument(document, firstPart(document), prefix, counter);
+        const parts = children(document.documentElement, 'part');
+        return new ScoreDocument(document, parts[partIndex] ?? firstPart(document), prefix, counter);
+    }
+
+    /** Il rigo attivo: l'unica parte di una parte singola. */
+    get part(): Element {
+        return this.active;
+    }
+
+    /** Le parti del documento, una per rigo nella partitura. */
+    parts(): Element[] {
+        return children(this.document.documentElement, 'part');
+    }
+
+    /** Posizione del rigo attivo, da 0. */
+    get partIndex(): number {
+        return this.parts().indexOf(this.active);
+    }
+
+    /** Rende attivo il rigo indicato. */
+    selectPart(index: number): void {
+        const part = this.parts()[index];
+        if (!part) throw new EditError('Rigo non trovato');
+        this.active = part;
+    }
+
+    /** Posizione del rigo che contiene l'elemento; -1 se è fuori dalle parti. */
+    partIndexOf(node: Element): number {
+        let current: Element | null = node;
+        while (current && current.tagName !== 'part') current = current.parentElement;
+        return current ? this.parts().indexOf(current) : -1;
+    }
+
+    /** Elemento con l'`id` indicato in qualsiasi rigo, per esempio la nota cliccata su un altro rigo. */
+    findInScore(id: string): Element | null {
+        const safe = id.replace(/"/g, '');
+        for (const part of this.parts()) {
+            const found = part.querySelector(`[id="${safe}"]`);
+            if (found) return found;
+        }
+        return null;
+    }
+
+    /** Esegue l'operazione su ogni rigo, attivo a turno, e torna al rigo attivo di prima. */
+    everyPart<T>(change: (index: number) => T): T[] {
+        const previous = this.active;
+        try {
+            return this.parts().map((part, index) => {
+                this.active = part;
+                return change(index);
+            });
+        } finally {
+            this.active = previous.parentNode ? previous : (this.parts()[0] ?? previous);
+        }
+    }
+
+    /** Assegna gli `id` mancanti, o ripetuti in un altro rigo, alle battute e alle note di tutti i righi. */
+    assignAllIds(): void {
+        const seen = new Set<string>();
+        this.everyPart(() => this.assignIds(seen));
     }
 
     /** Documento completo, con gli `id` di lavoro: per disegnarlo e per la cronologia. */
@@ -86,9 +154,10 @@ export class ScoreDocument {
         for (const item of Array.from(copy.querySelectorAll('[id]'))) {
             if ((item.getAttribute('id') ?? '').startsWith(this.prefix)) item.removeAttribute('id');
         }
-        for (const item of Array.from(copy.querySelectorAll(`[${SOURCE_ATTRIBUTE}], [${SEQUENTIAL_ATTRIBUTE}]`))) {
+        for (const item of Array.from(copy.querySelectorAll(`[${SOURCE_ATTRIBUTE}], [${SEQUENTIAL_ATTRIBUTE}], [${ROW_INSTRUMENTS_ATTRIBUTE}]`))) {
             item.removeAttribute(SOURCE_ATTRIBUTE);
             item.removeAttribute(SEQUENTIAL_ATTRIBUTE);
+            item.removeAttribute(ROW_INSTRUMENTS_ATTRIBUTE);
         }
         const xml = new XMLSerializer().serializeToString(copy);
         return xml.startsWith('<?xml') ? xml : `<?xml version="1.0" encoding="UTF-8"?>\n${xml}`;
@@ -142,9 +211,8 @@ export class ScoreDocument {
         return `${this.prefix}${kind}${this.counter}`;
     }
 
-    /** Assegna un `id` univoco a battute e note che non lo hanno. */
-    assignIds(): void {
-        const seen = new Set<string>();
+    /** Assegna un `id` univoco a battute e note del rigo attivo che non lo hanno. */
+    assignIds(seen = new Set<string>()): void {
         for (const measure of this.measures()) {
             this.assignId(measure, 'm', seen);
             for (const note of children(measure, 'note')) this.assignId(note, 'n', seen);

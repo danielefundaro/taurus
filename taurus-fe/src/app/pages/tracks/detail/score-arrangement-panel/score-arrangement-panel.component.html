@@ -1,0 +1,96 @@
+@if (loading && !arrangement) {
+    <app-list-loading-skeleton />
+} @else if (failed) {
+    <app-inline-alert severity="warn" heading="Partitura non disponibile" detail="La partitura della traccia non si può leggere: riprovare più tardi." />
+} @else if (!arrangement) {
+    <app-empty-state icon="pi pi-th-large" heading="Nessuna partitura" message="La partitura riunisce tutti i righi della traccia: si crea dall'organico, con righi di pause, o dalle parti che hanno già le note." />
+    @if (!phone) {
+        <div class="flex justify-center mt-3">
+            <p-button label="Nuova partitura" icon="pi pi-plus" [loading]="opening" [disabled]="trackDirty" [pTooltip]="trackDirty ? 'Salva la traccia prima di creare la partitura' : ''" (onClick)="create()" />
+        </div>
+    }
+} @else {
+    <div class="flex flex-col gap-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex flex-col gap-1 min-w-0">
+                <div class="flex flex-wrap items-center gap-2">
+                    <strong>Partitura</strong>
+                    @if (arrangement.currentVersion; as version) {
+                        <p-tag [severity]="version.status === 'APPROVED' ? 'success' : 'warn'" [value]="version.status === 'APPROVED' ? 'Approvata' : 'Non verificata'" />
+                        <span class="text-sm text-muted-color">versione {{ version.versionNumber }} · {{ version.concertPitch ? 'in suoni reali' : 'trasposta' }} · {{ version.measureCount }} battute · {{ moment(version.createdAt) }}</span>
+                    } @else {
+                        <p-tag severity="secondary" value="Mai salvata" />
+                    }
+                </div>
+                @if (arrangement.draft; as draft) {
+                    <span class="text-sm"><i class="pi pi-pencil mr-1" aria-hidden="true"></i>{{ draftLabel(draft) }}</span>
+                }
+                @if (arrangement.editing; as editing) {
+                    <span class="text-sm text-muted-color"><i class="pi pi-lock mr-1" aria-hidden="true"></i>{{ editingLabel(editing) }}</span>
+                }
+            </div>
+            @if (!phone) {
+                <div class="flex flex-wrap gap-2">
+                    @if (arrangement.draft) {
+                        <p-button label="Riprendi la bozza" icon="pi pi-pencil" (onClick)="write(true)" />
+                        <p-button label="Scarta la bozza" severity="danger" text [disabled]="editedElsewhere" [pTooltip]="editedElsewhere ? 'Qualcuno sta scrivendo la partitura' : ''" (onClick)="discardDraft()" />
+                    } @else {
+                        <p-button label="Scrivi" icon="pi pi-pencil" [disabled]="!arrangement.currentVersion" (onClick)="write()" />
+                    }
+                    <p-button [label]="versions ? 'Nascondi le versioni' : 'Versioni'" icon="pi pi-history" severity="secondary" outlined (onClick)="toggleVersions()" />
+                    <p-button label="Elimina la partitura" icon="pi pi-trash" severity="danger" outlined [disabled]="editedElsewhere" [pTooltip]="editedElsewhere ? 'Qualcuno sta scrivendo la partitura' : ''" (onClick)="remove()" />
+                </div>
+            }
+        </div>
+
+        @if (phone) {
+            <app-inline-alert severity="info" heading="Scrittura da computer o tablet" detail="Sul telefono la scheda mostra solo lo stato della partitura e dei suoi righi." />
+        }
+
+        @if (versions) {
+            <section class="flex flex-col gap-2" aria-label="Versioni della partitura">
+                <h3 class="m-0 text-base font-semibold">Versioni</h3>
+                @if (!versions.length) {
+                    <p class="text-sm text-muted-color m-0">La partitura non ha ancora versioni salvate: le crea «Salva» nell'editor.</p>
+                }
+                @for (version of versions; track version.id) {
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface px-3 py-2">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-medium">Versione {{ version.versionNumber }}</span>
+                            <p-tag [severity]="version.status === 'APPROVED' ? 'success' : 'warn'" [value]="version.status === 'APPROVED' ? 'Approvata' : 'Non verificata'" />
+                            @if (version.current) {
+                                <p-tag severity="info" value="Corrente" />
+                            }
+                            <span class="text-sm text-muted-color">{{ version.measureCount }} battute · {{ moment(version.createdAt) }}</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            @if (version.status !== 'APPROVED') {
+                                <p-button label="Approva" icon="pi pi-check" size="small" severity="secondary" outlined (onClick)="approve(version)" />
+                            }
+                            <p-button label="Scarica MusicXML" icon="pi pi-download" size="small" severity="secondary" text pTooltip="File da aprire in MuseScore" (onClick)="download(version)" />
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+
+        <section class="flex flex-col gap-2" aria-label="Righi della partitura">
+            <h3 class="m-0 text-base font-semibold">
+                Righi <span class="text-sm text-muted-color font-normal">{{ arrangement.rows.length }}</span>
+            </h3>
+            <ul class="flex flex-col gap-1 list-none p-0 m-0">
+                @for (row of arrangement.rows; track row.id) {
+                    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface px-3 py-2">
+                        <div class="flex flex-col min-w-0">
+                            <span class="font-medium truncate">{{ row.name || instrumentsLabel(row) }}</span>
+                            @if (row.name && instrumentsLabel(row) !== row.name) {
+                                <span class="text-sm text-muted-color truncate">{{ instrumentsLabel(row) }}</span>
+                            }
+                        </div>
+                        <p-tag [severity]="rowStatus[row.status].severity" [value]="rowStatus[row.status].label" />
+                    </li>
+                }
+            </ul>
+        </section>
+    </div>
+}

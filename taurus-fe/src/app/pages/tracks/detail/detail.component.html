@@ -33,6 +33,9 @@
                 @if (scorePlaybackEnabled) {
                 <p-tab value="playback" appTourAnchor="track.tabPlayback">Ascolto</p-tab>
                 }
+                @if (canEngrave) {
+                <p-tab value="arrangement" appTourAnchor="track.tabArrangement">Partitura</p-tab>
+                }
                 @if (canManagePdf) {
                 <p-tab value="pdf" appTourAnchor="track.tabPdf">File PDF</p-tab>
                 }
@@ -106,6 +109,17 @@
                         <app-score-playback-panel [trackId]="track.id" [trackDirty]="isDirty"
                             [composer]="track.composer" [arranger]="track.arranger"
                             (trackVersionChange)="onTrackVersionChange($event)" (partsChange)="reloadTrack()" />
+                        }
+                    </app-detail-section>
+                </p-tabpanel>
+                }
+
+                @if (canEngrave) {
+                <p-tabpanel value="arrangement">
+                    <app-detail-section heading="Partitura"
+                        description="Tutti i righi della traccia in un unico documento, da scrivere insieme. Le parti della traccia restano separate.">
+                        @if (activeTab === 'arrangement' && track.id) {
+                        <app-score-arrangement-panel [trackId]="track.id" [trackDirty]="isDirty" />
                         }
                     </app-detail-section>
                 </p-tabpanel>

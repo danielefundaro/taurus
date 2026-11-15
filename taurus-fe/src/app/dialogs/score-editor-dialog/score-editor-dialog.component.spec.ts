@@ -4,12 +4,14 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ConfirmationService } from 'primeng/api';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
-import { ScoreDraft, ScoreEditorData } from '../../module';
+import { ArrangementDraft, ArrangementVersion, PlaybackInstrument, ScoreDraft, ScoreEditorData } from '../../module';
 import {
+    ArrangementService,
     ConfirmService,
     DraftKeeperOptions,
     DraftState,
     EditLockState,
+    InstrumentsService,
     LocalDraftCopy,
     MediaService,
     MidiInputService,
@@ -37,6 +39,20 @@ const DRUMS = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.
 <measure number="2"><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure>
 </part></score-partwise>`;
 
+/** Strumenti della partitura: clarinetto in Si♭, tuba in Do e, nel catalogo, un sax contralto in Mi♭. */
+const CLARINET: PlaybackInstrument = { id: 10, name: 'Clarinetto', transpositionSemitones: -2, soundProgram: 71, configured: true };
+const TUBA: PlaybackInstrument = { id: 11, name: 'Tuba', transpositionSemitones: 0, soundProgram: 58, configured: true };
+const ALTO_SAX: PlaybackInstrument = { id: 12, name: 'Sax contralto', transpositionSemitones: -9, soundProgram: 65, configured: true };
+
+/** Partitura trasposta in 2/4: clarinetto in Re maggiore scritto, tuba in Do, due battute. */
+const ARRANGEMENT = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Clarinetto</part-name></score-part><score-part id="P2"><part-name>Tuba</part-name></score-part></part-list>
+<part id="P1"><measure number="1"><attributes><divisions>1</divisions><key><fifths>2</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes>
+<note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note></measure>
+<measure number="2"><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure></part>
+<part id="P2"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>
+<note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note></measure>
+<measure number="2"><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure></part></score-partwise>`;
+
 describe('ScoreEditorDialogComponent', () => {
     let fixture: ComponentFixture<ScoreEditorDialogComponent>;
     let renderer: jasmine.SpyObj<ScoreRendererService>;
@@ -51,6 +67,9 @@ describe('ScoreEditorDialogComponent', () => {
     let keeperOptions: DraftKeeperOptions | undefined;
     let audio: jasmine.SpyObj<ScoreAudioService>;
     let midi: FakeMidi;
+    let arrangements: jasmine.SpyObj<ArrangementService>;
+    let lockService: { forPart: jasmine.Spy; forArrangement: jasmine.Spy };
+    let confirm: jasmine.SpyObj<ConfirmService>;
 
     beforeEach(async () => {
         lockState = signal<EditLockState>({ status: 'acquiring', message: null });
@@ -91,7 +110,19 @@ describe('ScoreEditorDialogComponent', () => {
             content: () => keeperOptions!.content()
         };
         keeperOptions = undefined;
-        drafts = jasmine.createSpyObj<ScoreDraftService>('ScoreDraftService', ['draft', 'discard', 'localCopy', 'forgetLocalCopy', 'keeper']);
+        drafts = jasmine.createSpyObj<ScoreDraftService>('ScoreDraftService', ['draft', 'discard', 'localCopy', 'forgetLocalCopy', 'keeper', 'arrangementLocalCopy', 'forgetArrangementLocalCopy', 'arrangementKeeper']);
+        drafts.arrangementLocalCopy.and.resolveTo(null);
+        drafts.forgetArrangementLocalCopy.and.resolveTo();
+        drafts.arrangementKeeper.and.callFake((_trackId: number, options: DraftKeeperOptions) => {
+            keeperOptions = options;
+            return keeper as never;
+        });
+        arrangements = jasmine.createSpyObj<ArrangementService>('ArrangementService', ['content', 'draft', 'discardDraft', 'save']);
+        arrangements.content.and.resolveTo(ARRANGEMENT);
+        arrangements.draft.and.resolveTo(null);
+        arrangements.discardDraft.and.resolveTo();
+        lockService = { forPart: jasmine.createSpy('forPart').and.callFake(() => lock), forArrangement: jasmine.createSpy('forArrangement').and.callFake(() => lock) };
+        confirm = jasmine.createSpyObj('ConfirmService', ['confirmDiscard', 'confirmReversible', 'confirmDestructive']);
         drafts.draft.and.resolveTo(null);
         drafts.discard.and.resolveTo();
         drafts.localCopy.and.resolveTo(null);
@@ -134,9 +165,11 @@ describe('ScoreEditorDialogComponent', () => {
                 { provide: MediaService, useValue: jasmine.createSpyObj('MediaService', ['streamImage']) },
                 { provide: ScoreAudioService, useValue: audio },
                 { provide: MidiInputService, useValue: midi },
-                { provide: ConfirmService, useValue: jasmine.createSpyObj('ConfirmService', ['confirmDiscard', 'confirmReversible', 'confirmDestructive']) },
-                { provide: ScoreEditLockService, useValue: { forPart: () => lock } },
-                { provide: ScoreDraftService, useValue: drafts }
+                { provide: ConfirmService, useValue: confirm },
+                { provide: ScoreEditLockService, useValue: lockService },
+                { provide: ScoreDraftService, useValue: drafts },
+                { provide: ArrangementService, useValue: arrangements },
+                { provide: InstrumentsService, useValue: { getAll: () => of({ content: [CLARINET, TUBA, ALTO_SAX], totalElements: 3 }) } }
             ]
         }).compileComponents();
         fixture = TestBed.createComponent(ScoreEditorDialogComponent);
@@ -467,7 +500,7 @@ describe('ScoreEditorDialogComponent', () => {
         it('writes slurs, hairpins, grace notes, text and line breaks, keeping slurs whole', async () => {
             const component = await openWriting();
             const content = (): string => keeperOptions!.content();
-            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true });
+            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: false, partNames: false });
 
             key(component, { key: 's' });
             expect(content()).toContain('<slur type="start" number="1"/>');
@@ -812,6 +845,213 @@ describe('ScoreEditorDialogComponent', () => {
             expect(keeperOptions!.content()).toContain('<step>G</step>');
         });
     });
+
+    describe('score', () => {
+        const version: ArrangementVersion = { id: 21, versionNumber: 1, status: 'UNVERIFIED', concertPitch: false, measureCount: 2, checks: [], createdAt: '2026-11-15T09:00:00Z', current: true };
+        const rows = [
+            { id: 'P1', name: 'Clarinetto', instruments: [CLARINET] },
+            { id: 'P2', name: 'Tuba', instruments: [TUBA] }
+        ];
+        const parts = (xml: string): string[] => Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('score-part > part-name')).map((name) => name.textContent ?? '');
+        const measures = (xml: string): number[] => Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('part')).map((part) => part.querySelectorAll('measure').length);
+        const fifths = (xml: string): string[] =>
+            Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('part')).map((part) =>
+                Array.from(part.querySelectorAll('fifths'))
+                    .map((item) => item.textContent)
+                    .join(',')
+            );
+
+        /** Editor della partitura, aperto e disegnato. */
+        async function openScore(overrides: Partial<ScoreEditorDialogData> = {}): Promise<ScoreEditor> {
+            fixture.destroy();
+            lockService.forPart.calls.reset();
+            config.data = { trackId: 4, scoreId: 0, versionId: 21, partLabel: 'Partitura', sound: { percussionKeys: [], configured: false, conflicting: false }, mode: 'writing', arrangement: { version, rows }, ...overrides };
+            fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            return fixture.componentInstance as unknown as ScoreEditor;
+        }
+
+        const nextFrame = async (): Promise<void> => {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            await fixture.whenStable();
+        };
+
+        it('opens the current version with a row per part, takes the score lock and moves between the rows', async () => {
+            const component = await openScore();
+
+            expect(lockService.forArrangement).toHaveBeenCalledWith(4);
+            expect(lockService.forPart).not.toHaveBeenCalled();
+            expect(arrangements.content).toHaveBeenCalledWith(4, 21);
+            expect(component.status).toBe('ready');
+            expect(component.rowViews.map((row) => [row.name, row.active])).toEqual([
+                ['Clarinetto', true],
+                ['Tuba', false]
+            ]);
+            expect(renderer.render).toHaveBeenCalledWith(jasmine.any(String), jasmine.any(Number), jasmine.any(Number), { encodedBreaks: true, condense: false, partNames: true });
+            expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Re5 · minima');
+            expect(component.concertKey).toBe(0);
+            expect(component.range?.instrumentName).toBe('Clarinetto');
+            expect(component.canEngrave).toBeFalse();
+
+            component.onKey(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true }));
+            expect(component.rowViews[1].active).toBeTrue();
+            expect(component.selectionLabel).toBe('Tuba · Battuta 1 · Do3 · minima');
+            expect(component.range?.instrumentName).toBe('Tuba');
+            component.onKey(new KeyboardEvent('keydown', { key: 'ArrowDown', altKey: true }));
+            expect(component.rowViews[1].active).toBeTrue();
+            component.onKey(new KeyboardEvent('keydown', { key: 'ArrowUp', altKey: true }));
+            expect(component.rowViews[0].active).toBeTrue();
+        });
+
+        it('changes the structure of every row and undoes it in one step', async () => {
+            const component = await openScore();
+            component.selectRow(1);
+            component.selectMeasure(0);
+
+            component.insertMeasure('after');
+            expect(measures(keeperOptions!.content())).toEqual([3, 3]);
+            expect(keeper.changed).toHaveBeenCalled();
+            expect(component.rowViews[1].active).toBeTrue();
+
+            component.undo();
+            expect(measures(keeperOptions!.content())).toEqual([2, 2]);
+            component.redo();
+            expect(measures(keeperOptions!.content())).toEqual([3, 3]);
+
+            // La tonalità in suoni reali scrive l'armatura di ogni rigo per il suo strumento.
+            component.selectMeasure(0);
+            component.applyConcertKey(-1);
+            expect(fifths(keeperOptions!.content())).toEqual(['1', '-1']);
+        });
+
+        it('adds a row below the active one with the key of its instrument and removes it after a confirmation', async () => {
+            const component = await openScore();
+            confirm.confirmReversible.and.callFake((request) => request.accept?.());
+
+            component.newRowInstrumentId = ALTO_SAX.id;
+            component.addRowBelow();
+            const xml = keeperOptions!.content();
+            expect(parts(xml)).toEqual(['Clarinetto', 'Sax contralto', 'Tuba']);
+            expect(fifths(xml)).toEqual(['2', '3', '0']);
+            expect(measures(xml)).toEqual([2, 2, 2]);
+            expect(component.rowViews.map((row) => row.name)).toEqual(['Clarinetto', 'Sax contralto', 'Tuba']);
+            expect(component.rowViews[1].active).toBeTrue();
+            expect((keeperOptions as unknown as { rows: () => { id: string; instrumentIds: number[] }[] }).rows().map((row) => row.instrumentIds)).toEqual([[10], [12], [11]]);
+            expect(component.newRowInstrumentId).toBeNull();
+
+            expect(component.canRemoveRow).toBeTrue();
+            component.removeActiveRow();
+            expect(parts(keeperOptions!.content())).toEqual(['Clarinetto', 'Tuba']);
+
+            component.undo();
+            expect(parts(keeperOptions!.content())).toEqual(['Clarinetto', 'Sax contralto', 'Tuba']);
+            expect(component.rowViews.map((row) => row.instruments)).toEqual(['Clarinetto', 'Sax contralto', 'Tuba']);
+        });
+
+        it('copies, pastes and clears measures of every row', async () => {
+            const component = await openScore();
+            component.selectMeasure(0);
+
+            component.copyAllRows();
+            expect(component.rowsClip?.label).toBe('1 battuta di tutti i righi');
+            component.selectMeasure(1);
+            component.pasteAllRows();
+            let xml = keeperOptions!.content();
+            expect(xml.split('<step>D</step>').length - 1).toBe(2);
+            expect(xml.split('<step>C</step>').length - 1).toBe(2);
+
+            component.selectMeasure(0);
+            component.clearAllRows();
+            xml = keeperOptions!.content();
+            expect(xml.split('<step>D</step>').length - 1).toBe(1);
+            expect(xml.split('<step>C</step>').length - 1).toBe(1);
+        });
+
+        it('hides a row from the drawing, keeping at least one visible', async () => {
+            const component = await openScore();
+            renderer.render.calls.reset();
+
+            component.toggleRow(component.rowViews[0]);
+            await nextFrame();
+            expect(component.rowViews[0].hidden).toBeTrue();
+            expect(component.rowViews[1].active).toBeTrue();
+            expect(parts(renderer.render.calls.mostRecent().args[0])).toEqual(['Tuba']);
+
+            component.toggleRow(component.rowViews[1]);
+            expect(component.message).toBe('Almeno un rigo resta visibile');
+
+            component.toggleCondense();
+            component.showAllRows();
+            await nextFrame();
+            expect(parts(renderer.render.calls.mostRecent().args[0])).toEqual(['Clarinetto', 'Tuba']);
+            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: true, partNames: true });
+        });
+
+        it('saves a version of the score with its rows', async () => {
+            const saved: ArrangementVersion = { ...version, id: 22, versionNumber: 2 };
+            arrangements.save.and.resolveTo(saved);
+            const component = await openScore();
+            component.selectMeasure(1);
+            component.insertMeasure('after');
+
+            await component.save(true);
+
+            expect(keeper.hold).toHaveBeenCalled();
+            expect(arrangements.save).toHaveBeenCalledWith(
+                4,
+                jasmine.objectContaining({
+                    editSession: 'editor-window-1',
+                    rows: [
+                        { id: 'P1', instrumentIds: [10] },
+                        { id: 'P2', instrumentIds: [11] }
+                    ],
+                    parentVersionId: 21,
+                    approve: true,
+                    confirmOutdated: false
+                }),
+                jasmine.anything()
+            );
+            expect(measures(arrangements.save.calls.mostRecent().args[1].content)).toEqual([3, 3]);
+            expect(keeper.completed).toHaveBeenCalled();
+            expect(dialogRef.close).toHaveBeenCalledWith(saved);
+        });
+
+        it('resumes the draft of the score with the rows it records', async () => {
+            const draft: ArrangementDraft = {
+                content: ARRANGEMENT.replace('<step>D</step><octave>5</octave>', '<step>E</step><octave>5</octave>'),
+                rows,
+                baseVersionId: 21,
+                measureCount: 2,
+                savedBy: 'Mario Rossi',
+                savedAt: '2026-11-15T10:00:00Z',
+                entityVersion: 2,
+                outdated: false
+            };
+            arrangements.draft.and.resolveTo(draft);
+
+            const component = await openScore({ resume: true });
+
+            expect(component.status).toBe('ready');
+            expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Mi5 · minima');
+            expect(keeperOptions).toEqual(jasmine.objectContaining({ baseVersionId: 21, entityVersion: 2 }));
+        });
+
+        it('offers the draft of the score before opening the version', async () => {
+            arrangements.draft.and.resolveTo({ content: ARRANGEMENT, rows, baseVersionId: 21, measureCount: 2, savedBy: 'Mario Rossi', savedAt: '2026-11-15T10:00:00Z', entityVersion: 2, outdated: false });
+
+            const component = await openScore();
+
+            expect(component.status).toBe('choosing');
+            expect(fixture.nativeElement.textContent).toContain('Scarta e apri la versione 1');
+            confirm.confirmDestructive.and.callFake((request) => request.accept?.());
+            await component.discardChoice();
+            expect(arrangements.discardDraft).toHaveBeenCalledWith(4, 'editor-window-1');
+            expect(component.status).toBe('ready');
+            expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Re5 · minima');
+        });
+    });
 });
 
 interface FakeKeeper {
@@ -879,4 +1119,34 @@ interface WritingEditor {
     keepCopy(): void;
     keepMine(): Promise<void>;
     loadOther(): Promise<void>;
+}
+
+interface ScoreEditor {
+    status: string;
+    selectionLabel: string;
+    message: string | null;
+    rowViews: { index: number; id: string; name: string; instruments: string; hidden: boolean; active: boolean }[];
+    rowsClip: { label: string } | null;
+    newRowInstrumentId: number | null;
+    concertKey: number | null;
+    canRemoveRow: boolean;
+    canEngrave: boolean;
+    range: { instrumentName: string } | null;
+    onKey(event: KeyboardEvent): void;
+    selectRow(index: number): void;
+    selectMeasure(index: number): void;
+    insertMeasure(where: 'before' | 'after'): void;
+    applyConcertKey(fifths: number | null): void;
+    addRowBelow(): void;
+    removeActiveRow(): void;
+    copyAllRows(): void;
+    pasteAllRows(): void;
+    clearAllRows(): void;
+    toggleRow(view: ScoreEditor['rowViews'][number]): void;
+    toggleCondense(): void;
+    showAllRows(): void;
+    undo(): void;
+    redo(): void;
+    save(approve: boolean): Promise<void>;
+    discardChoice(): Promise<void>;
 }

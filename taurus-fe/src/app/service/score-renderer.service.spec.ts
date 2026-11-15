@@ -104,6 +104,36 @@ describe('ScoreRendererService.engrave', () => {
     });
 });
 
+describe('ScoreRendererService.render', () => {
+    function renderer(toolkit: FakeToolkit): ScoreRendererService {
+        const service = new ScoreRendererService();
+        spyOn(service as unknown as { ready: () => Promise<FakeToolkit> }, 'ready').and.resolveTo(toolkit);
+        return service;
+    }
+    const score = `<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Flauto</part-name></score-part></part-list><part id="P1"><measure number="1"/></part></score-partwise>`;
+
+    it('condenses the empty rows of a score and keeps their names', async () => {
+        const toolkit = new FakeToolkit(mei(1));
+
+        const pages = await renderer(toolkit).render(score, 1000, 50, { condense: true, partNames: true });
+
+        expect(pages.length).toBe(1);
+        expect(toolkit.options['condense']).toBe('auto');
+        expect(toolkit.options['condenseFirstPage']).toBeTrue();
+        expect(toolkit.loaded[0]).toContain('<part-name>Flauto</part-name>');
+    });
+
+    it('resets the compression and drops the names for a single part', async () => {
+        const toolkit = new FakeToolkit(mei(1));
+
+        await renderer(toolkit).render(score, 1000);
+
+        expect(toolkit.options['condense']).toBe('none');
+        expect(toolkit.options['condenseFirstPage']).toBeFalse();
+        expect(toolkit.loaded[0]).not.toContain('Flauto');
+    });
+});
+
 describe('withoutPartNames', () => {
     it('drops the names written beside the staves and keeps the notes and their ids', () => {
         const xml = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Flicorno tenore in Sib</part-name><part-name-display><display-text>Flic. ten.</display-text></part-name-display><part-abbreviation>Flic.</part-abbreviation></score-part></part-list><part id="P1"><measure number="1" id="te1-m1"><note id="te1-n1"><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><type>whole</type></note></measure></part></score-partwise>`;

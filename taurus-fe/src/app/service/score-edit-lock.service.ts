@@ -140,6 +140,11 @@ export class ScoreEditLockService {
     forPart(trackId: number, scoreId: number): PartEditLock {
         return new PartEditLock(this.http, this.apiErrors, `${environment.baseUrl}/tracks/${trackId}/scores/${scoreId}/edit-lock`);
     }
+
+    /** Blocco della partitura della traccia per una finestra dell'editor, come quello di una parte. */
+    forArrangement(trackId: number): PartEditLock {
+        return new PartEditLock(this.http, this.apiErrors, `${environment.baseUrl}/tracks/${trackId}/arrangement/edit-lock`);
+    }
 }
 
 /** Identificativo casuale della finestra, come lo accetta il server: da 8 a 64 lettere, cifre e trattini. */

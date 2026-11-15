@@ -120,4 +120,21 @@ describe('ScoreEditLockService', () => {
         http.expectOne((request) => request.method === 'DELETE').flush(null);
         expect(closed.state().status).toBe('released');
     }));
+
+    it('takes the lock of the score of the track, apart from the locks of its parts', fakeAsync(() => {
+        const scoreUrl = `${environment.baseUrl}/tracks/4/arrangement/edit-lock`;
+        const lock = service.forArrangement(4);
+        let held: boolean | undefined;
+        void lock.acquire().then((result) => (held = result));
+        const acquire = http.expectOne((request) => request.url === scoreUrl && request.method === 'POST');
+        expect(acquire.request.body).toEqual({ session: lock.session });
+        acquire.flush({ ownerName: 'Mario Rossi', since: '2026-11-15T09:32:00Z', expiresAt: '2026-11-15T09:34:00Z', mine: true });
+        flushMicrotasks();
+        expect(held).toBeTrue();
+
+        lock.release();
+        http.expectOne((request) => request.url === scoreUrl && request.method === 'DELETE').flush(null);
+        tick(EDIT_LOCK_RENEWAL_MS);
+        http.expectNone(url);
+    }));
 });

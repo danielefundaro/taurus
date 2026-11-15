@@ -141,6 +141,9 @@
                 @if (writingMode) {
                     <p-tab value="passage">Passaggio</p-tab>
                 }
+                @if (data.arrangement) {
+                    <p-tab value="rows">Righi</p-tab>
+                }
                 <p-tab value="measure">Battuta</p-tab>
                 <p-tab value="structure">Struttura</p-tab>
                 <p-tab value="expression">Espressione</p-tab>
@@ -326,7 +329,7 @@
                             <div class="score-editor__group" role="group" aria-label="Selezione">
                                 <span class="score-editor__label">Selezione</span>
                                 <span class="score-editor__hint">{{ passage ? 'Passaggio selezionato' : 'Maiusc+clic o Maiusc+← → dalla nota selezionata' }}</span>
-                                <p-button label="Tutta la parte" size="small" severity="secondary" outlined pTooltip="Seleziona tutte le battute, con tutte le voci (Ctrl+A)" (onClick)="selectWholePart()" />
+                                <p-button [label]="data.arrangement ? 'Tutto il rigo' : 'Tutta la parte'" size="small" severity="secondary" outlined pTooltip="Seleziona tutte le battute, con tutte le voci (Ctrl+A)" (onClick)="selectWholePart()" />
                                 <p-button label="Togli la selezione" size="small" severity="secondary" text [disabled]="!passage" pTooltip="Resta selezionata la prima nota (Esc)" (onClick)="clearRange()" />
                             </div>
                             <div class="score-editor__group" role="group" aria-label="Appunti">
@@ -364,6 +367,55 @@
                     </p-tabpanel>
                 }
 
+                @if (data.arrangement) {
+                    <p-tabpanel value="rows">
+                        <div class="score-editor__group-row">
+                            <div class="score-editor__group" role="group" aria-label="Aggiungi un rigo">
+                                <span class="score-editor__label">Rigo nuovo</span>
+                                <p-select
+                                    [options]="catalog"
+                                    [(ngModel)]="newRowInstrumentId"
+                                    optionLabel="name"
+                                    optionValue="id"
+                                    [filter]="true"
+                                    filterBy="name"
+                                    placeholder="Strumento"
+                                    size="small"
+                                    ariaLabel="Strumento del rigo nuovo"
+                                    appendTo="body"
+                                    [disabled]="readOnly"
+                                />
+                                <p-button
+                                    label="Aggiungi sotto"
+                                    icon="pi pi-plus"
+                                    size="small"
+                                    severity="secondary"
+                                    pTooltip="Un rigo di pause sotto quello attivo, con la struttura della partitura e l'armatura per lo strumento"
+                                    [disabled]="readOnly || newRowInstrumentId === null"
+                                    (onClick)="addRowBelow()"
+                                />
+                                <p-button label="Togli il rigo attivo" icon="pi pi-trash" size="small" severity="danger" outlined [disabled]="!canRemoveRow" (onClick)="removeActiveRow()" />
+                            </div>
+                            <div class="score-editor__group" role="group" aria-label="Tutti i righi">
+                                <span class="score-editor__label">Tutti i righi · {{ rowsRangeLabel }}</span>
+                                <p-button label="Copia" icon="pi pi-copy" size="small" severity="secondary" outlined pTooltip="Copia le battute di tutti i righi" [disabled]="!measure" (onClick)="copyAllRows()" />
+                                <p-button
+                                    label="Incolla"
+                                    icon="pi pi-clipboard"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    pTooltip="Incolla in tutti i righi dalla battuta selezionata, al posto di ciò che c'è"
+                                    [disabled]="!rowsClip || !measure || readOnly"
+                                    (onClick)="pasteAllRows()"
+                                />
+                                <p-button label="Cancella" size="small" severity="danger" outlined pTooltip="Le battute di tutti i righi tornano pause" [disabled]="!measure || readOnly" (onClick)="clearAllRows()" />
+                                <span class="score-editor__hint">{{ rowsClip ? 'Copiate: ' + rowsClip.label : "Maiusc+clic su un'altra battuta sceglie l'ultima" }}</span>
+                            </div>
+                        </div>
+                    </p-tabpanel>
+                }
+
                 <p-tabpanel value="measure">
                     <div class="score-editor__group-row">
                         <div class="score-editor__group" role="group" aria-label="Metro">
@@ -373,8 +425,26 @@
                             <p-select [options]="beatTypes" [(ngModel)]="timeBeatType" optionLabel="label" optionValue="value" size="small" ariaLabel="Denominatore del metro" appendTo="body" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure" (onClick)="applyTime()" />
                         </div>
+                        @if (data.arrangement) {
+                            <div class="score-editor__group" role="group" aria-label="Tonalità di tutti i righi">
+                                <span class="score-editor__label">Tonalità in suoni reali</span>
+                                <p-select
+                                    [options]="keys"
+                                    [ngModel]="concertKey"
+                                    (ngModelChange)="applyConcertKey($event)"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    size="small"
+                                    ariaLabel="Tonalità in suoni reali di tutti i righi"
+                                    placeholder="Rigo di percussione"
+                                    appendTo="body"
+                                    [disabled]="!measure || readOnly"
+                                    pTooltip="Dalla battuta selezionata, per tutti i righi: ogni rigo trasposto ne scrive l'armatura per il suo strumento"
+                                />
+                            </div>
+                        }
                         <div class="score-editor__group" role="group" aria-label="Armatura">
-                            <span class="score-editor__label">Armatura{{ measure?.keyChange ? ' (cambia qui)' : '' }}</span>
+                            <span class="score-editor__label">Armatura{{ data.arrangement ? ' del rigo' : '' }}{{ measure?.keyChange ? ' (cambia qui)' : '' }}</span>
                             <p-select [options]="keys" [ngModel]="measure?.fifths" (ngModelChange)="applyKey($event)" optionLabel="label" optionValue="value" size="small" ariaLabel="Armatura" appendTo="body" [disabled]="!measure" />
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Chiave">
@@ -410,15 +480,17 @@
                                 [disabled]="!measure"
                                 (onClick)="addMeasures()"
                             />
-                            <p-button
-                                label="Pausa di più battute da qui"
-                                size="small"
-                                severity="secondary"
-                                outlined
-                                pTooltip="La battuta selezionata diventa una pausa che dura il numero di battute indicato"
-                                [disabled]="!measure"
-                                (onClick)="applyMultiRest()"
-                            />
+                            @if (!data.arrangement) {
+                                <p-button
+                                    label="Pausa di più battute da qui"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    pTooltip="La battuta selezionata diventa una pausa che dura il numero di battute indicato"
+                                    [disabled]="!measure"
+                                    (onClick)="applyMultiRest()"
+                                />
+                            }
                         </div>
                     </div>
                 </p-tabpanel>
@@ -613,6 +685,9 @@
                             <li><kbd>Maiusc</kbd>+clic o <kbd>Maiusc</kbd>+<kbd>←</kbd> <kbd>→</kbd> seleziona un passaggio dalla nota selezionata; <kbd>Ctrl</kbd>+<kbd>A</kbd> tutta la parte; <kbd>Esc</kbd> toglie la selezione</li>
                             <li><kbd>Ctrl</kbd>+<kbd>C</kbd> copia, <kbd>Ctrl</kbd>+<kbd>X</kbd> taglia, <kbd>Ctrl</kbd>+<kbd>V</kbd> incolla al cursore o all'inizio della selezione, anche in un'altra parte</li>
                             <li><kbd>R</kbd> ripete il passaggio o la nota subito dopo di lei</li>
+                            @if (data.arrangement) {
+                                <li><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd> rigo precedente o seguente; un clic su un rigo lo rende attivo</li>
+                            }
                             <li><kbd>↑</kbd> <kbd>↓</kbd> spostano il passaggio di un grado, con <kbd>Ctrl</kbd> di un'ottava; <kbd>Canc</kbd> lo trasforma in pause</li>
                         </ul>
                         <h3 class="score-editor__panel-title mb-2">Selezione</h3>
@@ -667,7 +742,7 @@
                 @if (status === 'loading' || rendering) {
                     <div class="score-editor__loading" role="status">
                         <i class="pi pi-spin pi-spinner" aria-hidden="true"></i>
-                        <span>{{ status === 'loading' ? (writingMode ? 'Apertura della parte…' : 'Apertura della versione…') : 'Disegno dello spartito…' }}</span>
+                        <span>{{ status === 'loading' ? (writingMode ? 'Apertura della ' + subject + '…' : 'Apertura della versione…') : 'Disegno dello spartito…' }}</span>
                     </div>
                 }
                 <div #notation class="score-editor__notation" [class.score-editor__notation--inserting]="inserting" (click)="onNotationClick($event)"></div>
@@ -714,8 +789,51 @@
                     </div>
                 }
 
+                @if (data.arrangement) {
+                    <div class="score-editor__panel">
+                        <h3 class="score-editor__panel-title">Righi</h3>
+                        <ul class="score-editor__rows">
+                            @for (row of rowViews; track row.id) {
+                                <li class="score-editor__row" [class.score-editor__row--active]="row.active" [class.score-editor__row--hidden]="row.hidden">
+                                    <button type="button" class="score-editor__row-name" [attr.aria-current]="row.active ? 'true' : null" [title]="row.instruments" (click)="selectRow(row.index)">
+                                        <span class="text-sm font-medium">{{ row.name }}</span>
+                                        @if (row.instruments && row.instruments !== row.name) {
+                                            <span class="text-xs text-muted-color">{{ row.instruments }}</span>
+                                        }
+                                    </button>
+                                    <p-button
+                                        [icon]="row.hidden ? 'pi pi-eye-slash' : 'pi pi-eye'"
+                                        size="small"
+                                        severity="secondary"
+                                        text
+                                        [ariaLabel]="(row.hidden ? 'Mostra il rigo ' : 'Nascondi il rigo ') + row.name"
+                                        [pTooltip]="row.hidden ? 'Mostra il rigo' : 'Nascondi il rigo: resta nella partitura'"
+                                        (onClick)="toggleRow(row)"
+                                    />
+                                </li>
+                            }
+                        </ul>
+                        <div class="flex flex-wrap gap-2">
+                            <p-togglebutton
+                                [ngModel]="condense"
+                                (ngModelChange)="toggleCondense()"
+                                onLabel="Comprimi i righi vuoti"
+                                offLabel="Comprimi i righi vuoti"
+                                onIcon="pi pi-check-square"
+                                offIcon="pi pi-stop"
+                                size="small"
+                                ariaLabel="Comprimi i righi vuoti"
+                                pTooltip="Nelle righe dello spartito non si disegnano i righi che hanno solo pause"
+                            />
+                            @if (hiddenRows.size) {
+                                <p-button label="Mostra tutti" size="small" severity="secondary" text (onClick)="showAllRows()" />
+                            }
+                        </div>
+                    </div>
+                }
+
                 <div class="score-editor__panel">
-                    <h3 class="score-editor__panel-title">Controlli</h3>
+                    <h3 class="score-editor__panel-title">{{ data.arrangement ? 'Controlli del rigo' : 'Controlli' }}</h3>
                     @if (wrongMeasures.length) {
                         <p class="text-sm m-0">Durata diversa dal metro:</p>
                         <div class="flex flex-wrap gap-1">
@@ -736,14 +854,14 @@
                     }
                     @if (rangeText) {
                         @if (rangeWarnings.length) {
-                            <p class="text-sm m-0">Note fuori estensione di {{ data.range?.instrumentName }} ({{ rangeText }}):</p>
+                            <p class="text-sm m-0">Note fuori estensione di {{ range?.instrumentName }} ({{ rangeText }}):</p>
                             <div class="flex flex-wrap gap-1">
                                 @for (item of rangeWarnings; track item.measureIndex) {
                                     <p-button [label]="item.measureNumber" size="small" severity="warn" outlined [ariaLabel]="'Vai alla nota fuori estensione della battuta ' + item.measureNumber" (onClick)="selectOutOfRange(item)" />
                                 }
                             </div>
                         } @else {
-                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le note nell'estensione di {{ data.range?.instrumentName }} ({{ rangeText }}).</p>
+                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le note nell'estensione di {{ range?.instrumentName }} ({{ rangeText }}).</p>
                         }
                     }
                 </div>

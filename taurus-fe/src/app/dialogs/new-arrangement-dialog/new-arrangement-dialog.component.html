@@ -1,0 +1,133 @@
+<app-dialog-shell #shell heading="Nuova partitura" [subtitle]="subtitle" confirmLabel="Crea e scrivi" [saving]="saving" [invalidCount]="loading ? 1 : errors.length" [dirty]="dirty" (cancel)="cancel()" (confirm)="save()">
+    @if (loading) {
+        <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Lettura degli strumenti e delle parti della traccia…</span>
+    } @else {
+        <div class="flex flex-col gap-4">
+            @if (sources.length > 1) {
+                <p-selectbutton [options]="sources" [(ngModel)]="source" (ngModelChange)="changed()" optionLabel="label" optionValue="value" [allowEmpty]="false" aria-label="Origine della partitura" />
+            }
+            <app-form-field label="Notazione" forId="newArrangementNotation" hint="Trasposta: ogni rigo è scritto come lo legge il suo strumento. In suoni reali: tutti i righi sono scritti come suonano.">
+                <p-selectbutton id="newArrangementNotation" [options]="notations" [(ngModel)]="concertPitch" (ngModelChange)="changed()" optionLabel="label" optionValue="value" [allowEmpty]="false" aria-label="Notazione della partitura" />
+            </app-form-field>
+
+            @if (source === 'ensemble') {
+                @if (!ensemble.length) {
+                    <app-inline-alert
+                        severity="info"
+                        heading="Organico vuoto"
+                        detail="Scegli gli strumenti uno per uno, oppure metti in ordine l'organico della banda: le partiture nuove lo propongono già ordinato."
+                        actionLabel="Apri l'organico"
+                        (action)="openEnsemble()"
+                    />
+                }
+                <app-form-field
+                    label="Strumenti"
+                    forId="newArrangementInstruments"
+                    required
+                    [hint]="plannedRows.length + (plannedRows.length === 1 ? ' rigo' : ' righi') + ', nell\'ordine dell\'organico.'"
+                    [error]="shell.validationAttempted ? (error('Scegli almeno uno') ?? error('La partitura ha')) : undefined"
+                >
+                    <p-multiselect
+                        inputId="newArrangementInstruments"
+                        class="w-full"
+                        [options]="catalog"
+                        [(ngModel)]="instrumentIds"
+                        (ngModelChange)="changed()"
+                        optionLabel="name"
+                        optionValue="id"
+                        display="chip"
+                        [filter]="true"
+                        filterBy="name"
+                        filterPlaceHolder="Cerca uno strumento"
+                        emptyFilterMessage="Nessuno strumento trovato"
+                        placeholder="Nessuno strumento"
+                        ariaLabel="Strumenti della partitura"
+                        appendTo="body"
+                    />
+                </app-form-field>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <app-form-field label="Tonalità in suoni reali" forId="newArrangementKey" required hint="Ogni rigo trasposto ne scrive l'armatura per il suo strumento.">
+                        <p-select inputId="newArrangementKey" class="w-full" [options]="keys" [(ngModel)]="concertKey" (ngModelChange)="changed()" optionLabel="label" optionValue="value" appendTo="body" />
+                    </app-form-field>
+                    <app-form-field label="Metro" forId="newArrangementBeats" required [error]="shell.validationAttempted ? (error('Il numeratore') ?? error('Il denominatore')) : undefined">
+                        <div class="flex items-center gap-2">
+                            <p-inputnumber inputId="newArrangementBeats" [(ngModel)]="beats" (ngModelChange)="changed()" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-14" ariaLabel="Numeratore del metro" />
+                            <span aria-hidden="true">/</span>
+                            <p-select [options]="beatTypes" [(ngModel)]="beatType" (ngModelChange)="changed()" optionLabel="label" optionValue="value" ariaLabel="Denominatore del metro" appendTo="body" />
+                        </div>
+                    </app-form-field>
+                    <app-form-field label="Tempo" forId="newArrangementTempo" hint="Semiminime al minuto. Vuoto: nessuna indicazione di tempo." [error]="shell.validationAttempted ? error('Il tempo') : undefined">
+                        <p-inputnumber inputId="newArrangementTempo" class="w-full" [(ngModel)]="tempo" (ngModelChange)="changed()" [min]="20" [max]="400" [showButtons]="true" [step]="5" />
+                    </app-form-field>
+                    <app-form-field label="Battute" forId="newArrangementMeasures" required hint="Battute intere, levare esclusa." [error]="shell.validationAttempted ? error('Le battute') : undefined">
+                        <p-inputnumber inputId="newArrangementMeasures" class="w-full" [(ngModel)]="measures" (ngModelChange)="changed()" [min]="1" [max]="maxMeasures" [showButtons]="true" />
+                    </app-form-field>
+                    <app-form-field [label]="pickupLabel" forId="newArrangementPickup" hint="0 se la partitura non inizia in levare." [error]="shell.validationAttempted ? error('La levare') : undefined">
+                        <p-inputnumber inputId="newArrangementPickup" class="w-full" [(ngModel)]="pickupBeats" (ngModelChange)="changed()" [min]="0" [max]="beats - 1" [showButtons]="true" />
+                    </app-form-field>
+                </div>
+            } @else {
+                <app-form-field
+                    label="Parte di riferimento"
+                    forId="newArrangementReference"
+                    required
+                    hint="Battute, ritornelli, segni, metro, tempo e lettere di prova della partitura sono i suoi."
+                    [error]="shell.validationAttempted ? error('Scegli la parte di riferimento') : undefined"
+                >
+                    <p-select inputId="newArrangementReference" class="w-full" [options]="referenceOptions" [(ngModel)]="referenceId" (ngModelChange)="changedReference()" optionLabel="label" optionValue="value" appendTo="body" />
+                </app-form-field>
+                <fieldset class="flex flex-col gap-2">
+                    <legend class="font-medium mb-1">Parti</legend>
+                    @if (partsWithoutNotes) {
+                        <span class="text-sm text-muted-color">{{ partsWithoutNotes === 1 ? '1 parte senza note non diventa un rigo.' : partsWithoutNotes + ' parti senza note non diventano righi.' }}</span>
+                    }
+                    <ul class="flex flex-col gap-2 list-none p-0 m-0">
+                        @for (choice of parts; track choice.part.scoreId) {
+                            <li class="flex flex-col gap-1 border border-surface rounded p-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <p-checkbox [binary]="true" [inputId]="'newArrangementPart' + choice.part.scoreId" [(ngModel)]="choice.selected" (ngModelChange)="changedParts()" />
+                                    <label class="grow" [for]="'newArrangementPart' + choice.part.scoreId">{{ choice.label }}</label>
+                                    @if (choice.part.scoreId === referenceId) {
+                                        <p-tag value="Riferimento" severity="info" />
+                                    }
+                                    @if (choice.options.length && choice.selected) {
+                                        <p-select
+                                            class="w-full sm:w-56"
+                                            [options]="choice.options"
+                                            [(ngModel)]="choice.instrumentId"
+                                            (ngModelChange)="changed()"
+                                            optionLabel="name"
+                                            optionValue="id"
+                                            [filter]="choice.options.length > 8"
+                                            filterBy="name"
+                                            placeholder="Strumento del rigo"
+                                            [ariaLabel]="'Strumento del rigo ' + choice.label"
+                                            appendTo="body"
+                                        />
+                                    }
+                                </div>
+                                @if (choice.selected && choice.changes.length) {
+                                    <ul class="text-sm text-muted-color ml-8 my-0">
+                                        @for (change of choice.changes; track change) {
+                                            <li>{{ change }}</li>
+                                        }
+                                    </ul>
+                                }
+                            </li>
+                        }
+                    </ul>
+                </fieldset>
+                @if (shell.validationAttempted && error('Scegli lo strumento')) {
+                    <p-message severity="error">{{ error('Scegli lo strumento') }}</p-message>
+                }
+                @if (partsError) {
+                    <p-message severity="error">{{ partsError }}</p-message>
+                }
+            }
+
+            @if (unconfigured.length) {
+                <p-message severity="warn">Senza trasposizione configurata, si scrivono come strumenti in Do: {{ unconfigured.join(', ') }}.</p-message>
+            }
+        </div>
+    }
+</app-dialog-shell>

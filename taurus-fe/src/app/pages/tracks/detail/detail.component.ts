@@ -9,6 +9,7 @@ import { TypeHandlerComponent } from '../../../components/type-handler/type-hand
 import { InstrumentSuggestionsPanelComponent } from './instrument-suggestions-panel/instrument-suggestions-panel.component';
 import { ScoreWorkspaceComponent } from './score-workspace/score-workspace.component';
 import { compareScores, DraftComparison, mergeServerScores } from './score-workspace/score-workspace.operations';
+import { ScoreArrangementPanelComponent } from './score-arrangement-panel/score-arrangement-panel.component';
 import { ScorePlaybackPanelComponent } from './score-playback-panel/score-playback-panel.component';
 import { RoleEnums, StateEnums, StateLabel, StateLabelsMap } from '../../../constants';
 import { PdfManipulatorDialogComponent } from '../../../dialogs/pdf-manipulator-dialog/pdf-manipulator-dialog.component';
@@ -22,7 +23,7 @@ import { ConfirmService, InstrumentsService, KeycloakService, PrinterService, Te
 
 @Component({
     selector: 'app-track-detail',
-    imports: [ImportsModule, TypeHandlerComponent, ScoreWorkspaceComponent, ScorePlaybackPanelComponent, InstrumentSuggestionsPanelComponent],
+    imports: [ImportsModule, TypeHandlerComponent, ScoreWorkspaceComponent, ScorePlaybackPanelComponent, ScoreArrangementPanelComponent, InstrumentSuggestionsPanelComponent],
     templateUrl: './detail.component.html',
     styleUrl: './detail.component.scss',
     providers: [TracksService, InstrumentsService, KeycloakService, DialogService],
@@ -135,7 +136,7 @@ export class DetailComponent extends DetailPageBase implements OnInit, OnDestroy
     }
 
     private openRequestedTab(tab: string | null | undefined): void {
-        const availableTabs = ['details', 'parts', ...(this.scorePlaybackEnabled ? ['playback'] : []), ...(this.canManagePdf ? ['pdf'] : [])];
+        const availableTabs = ['details', 'parts', ...(this.scorePlaybackEnabled ? ['playback'] : []), ...(this.canEngrave ? ['arrangement'] : []), ...(this.canManagePdf ? ['pdf'] : [])];
         if (tab && availableTabs.includes(tab)) this.activeTab = tab;
     }
 

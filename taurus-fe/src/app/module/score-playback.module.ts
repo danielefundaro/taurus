@@ -1,6 +1,6 @@
 /** Ascolto e correzione delle parti: dati scambiati con il backend. */
 
-export type ScoreVersionOrigin = 'OMR_AUDIVERIS' | 'OMR_HOMR' | 'UPLOAD_MUSICXML' | 'UPLOAD_MIDI' | 'CORRECTION' | 'WRITING';
+export type ScoreVersionOrigin = 'OMR_AUDIVERIS' | 'OMR_HOMR' | 'UPLOAD_MUSICXML' | 'UPLOAD_MIDI' | 'CORRECTION' | 'WRITING' | 'ARRANGEMENT';
 export type ScoreVersionStatus = 'UNVERIFIED' | 'APPROVED';
 export type PlaybackAvailability = 'AVAILABLE' | 'NOT_AVAILABLE';
 export type RecognitionJobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';

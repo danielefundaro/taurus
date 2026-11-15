@@ -361,6 +361,39 @@ describe('ScoreDraftService', () => {
         flushMicrotasks();
         expect(store.copies.size).toBe(0);
     }));
+
+    it('keeps the draft of the score with its rows, in its own copy in the browser', fakeAsync(() => {
+        const arrangementUrl = `${environment.baseUrl}/tracks/4/arrangement/draft`;
+        const arrangementKey = 'banda:mario:4:arrangement';
+        let rows = [{ id: 'P1', instrumentIds: [2] }];
+        const scoreLock = TestBed.inject(ScoreEditLockService).forArrangement(4);
+        const scoreKeeper = service.arrangementKeeper(4, { lock: scoreLock, content: () => content, baseVersionId: 21, entityVersion: null, savedAt: null, rows: () => rows });
+        expect(scoreKeeper.key).toBe(arrangementKey);
+
+        content = '<score/>';
+        scoreKeeper.changed();
+        tick(LOCAL_COPY_DELAY_MS);
+        flushMicrotasks();
+        expect(store.copies.get(arrangementKey)).toEqual(jasmine.objectContaining({ content: '<score/>', rows: [{ id: 'P1', instrumentIds: [2] }], baseVersionId: 21 }));
+
+        rows = [...rows, { id: 'P2', instrumentIds: [5, 6] }];
+        tick(DRAFT_DELAY_MS - LOCAL_COPY_DELAY_MS);
+        const request = http.expectOne((candidate) => candidate.url === arrangementUrl && candidate.method === 'PUT');
+        expect(request.request.body).toEqual({ editSession: scoreLock.session, content: '<score/>', rows, baseVersionId: 21, entityVersion: null });
+        request.flush({ entityVersion: 1, savedAt: '2026-11-15T10:00:00Z' });
+        flushMicrotasks();
+        expect(store.copies.has(arrangementKey)).toBeFalse();
+        scoreKeeper.stop();
+
+        void store.put({ key: arrangementKey, content: '<a/>', rows, baseVersionId: 21, entityVersion: 1, changedFrom: '2026-11-15T10:01:00Z', changedAt: '2026-11-15T10:02:00Z' });
+        let copy: LocalDraftCopy | null = null;
+        void service.arrangementLocalCopy(4).then((value) => (copy = value));
+        flushMicrotasks();
+        expect(copy).toEqual(jasmine.objectContaining({ content: '<a/>', rows }));
+        void service.forgetArrangementLocalCopy(4);
+        flushMicrotasks();
+        expect(store.copies.has(arrangementKey)).toBeFalse();
+    }));
 });
 
 describe('IndexedDbDraftStore', () => {

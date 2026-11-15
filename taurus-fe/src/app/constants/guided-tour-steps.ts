@@ -7,9 +7,10 @@ import { RoleEnums } from './role.enums';
 
 /**
  * Raised when a step is added or changes meaning: it is saved with the progress of each role. 2: the page guides; 3: the
- * legal document detail; 4: the payouts tab of the finance page; 5: the ensemble tab of the instruments page.
+ * legal document detail; 4: the payouts tab of the finance page; 5: the ensemble tab of the instruments page; 6: the
+ * score tab of the track detail.
  */
-export const GUIDED_TOUR_CATALOG_REVISION = 5;
+export const GUIDED_TOUR_CATALOG_REVISION = 6;
 
 /** No path may exceed it, welcome included. */
 export const GUIDED_TOUR_MAX_STEPS = 10;
