@@ -94,6 +94,45 @@ class InstrumentsServiceImplTest {
         verify(repository).save(entity);
     }
 
+    @Test
+    void storesAWrittenRangeWithBothNotesInOrder() {
+        Instruments entity = entity(1L, "Clarinetto");
+        entity.setLowestWrittenPitch(52);
+        entity.setHighestWrittenPitch(96);
+        when(repository.save(entity)).thenReturn(entity);
+
+        assertThat(rangeError(() -> service.save(ranged(null, 52, null), token()))).isEqualTo("scorePlayback.settings.invalid");
+        assertThat(rangeError(() -> service.update(1L, ranged(1L, 96, 52), token()))).isEqualTo("scorePlayback.settings.invalid");
+        assertThat(rangeError(() -> service.update(1L, ranged(1L, -1, 52), token()))).isEqualTo("scorePlayback.settings.invalid");
+        assertThat(rangeError(() -> service.partialUpdate(1L, ranged(1L, null, 40), token()))).isEqualTo("scorePlayback.settings.invalid");
+        assertThat(rangeError(() -> service.partialUpdate(1L, ranged(1L, 100, null), token()))).isEqualTo("scorePlayback.settings.invalid");
+        verify(repository, never()).save(entity);
+
+        service.update(1L, ranged(1L, 58, 89), token());
+        assertThat(entity.getLowestWrittenPitch()).isEqualTo(58);
+        assertThat(entity.getHighestWrittenPitch()).isEqualTo(89);
+        service.update(1L, ranged(1L, null, null), token());
+        assertThat(entity.getLowestWrittenPitch()).isNull();
+        assertThat(entity.getHighestWrittenPitch()).isNull();
+    }
+
+    private static InstrumentsDTO ranged(Long id, Integer lowest, Integer highest) {
+        InstrumentsDTO instrument = instrument(id, null);
+        instrument.setLowestWrittenPitch(lowest);
+        instrument.setHighestWrittenPitch(highest);
+        return instrument;
+    }
+
+    private static String rangeError(Runnable action) {
+        try {
+            action.run();
+        } catch (RequestAlertException error) {
+            assertThat(error.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_CONTENT);
+            return error.getErrorKey();
+        }
+        throw new AssertionError("No error");
+    }
+
     private Instruments entity(Long id, String name) {
         Instruments entity = new Instruments();
         entity.setId(id);

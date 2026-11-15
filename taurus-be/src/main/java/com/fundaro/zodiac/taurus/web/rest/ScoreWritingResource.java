@@ -10,12 +10,14 @@ import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EditL
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EngravingAppliedDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EngravingJobDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EngravingOptionsDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DerivedPartDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.NewWrittenPartDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.ScoreDraftDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.WrittenPartDTO;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEngravingService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDerivationService;
 import com.fundaro.zodiac.taurus.service.scorewriting.WrittenPartService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -47,17 +49,20 @@ public class ScoreWritingResource {
     private final ScoreEditLockService lockService;
     private final ScoreDraftService draftService;
     private final WrittenPartService writtenPartService;
+    private final ScoreDerivationService derivationService;
     private final ScoreEngravingService engravingService;
 
     public ScoreWritingResource(
         ScoreEditLockService lockService,
         ScoreDraftService draftService,
         WrittenPartService writtenPartService,
+        ScoreDerivationService derivationService,
         ScoreEngravingService engravingService
     ) {
         this.lockService = lockService;
         this.draftService = draftService;
         this.writtenPartService = writtenPartService;
+        this.derivationService = derivationService;
         this.engravingService = engravingService;
     }
 
@@ -70,6 +75,18 @@ public class ScoreWritingResource {
         AbstractAuthenticationToken token
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(writtenPartService.create(trackId, request, token));
+    }
+
+    /** Adds a part derived from a version of the part for another instrument, with the transposed content as its draft. */
+    @PostMapping("/scores/{scoreId}/derive")
+    @RequiresTenantFeature(TenantFeature.SCORE_WRITING)
+    public ResponseEntity<WrittenPartDTO> derivePart(
+        @PathVariable Long trackId,
+        @PathVariable Long scoreId,
+        @RequestBody DerivedPartDTO request,
+        AbstractAuthenticationToken token
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(derivationService.derive(trackId, scoreId, request, token));
     }
 
     /** Takes the lock when the editor opens; {@code takeOver} takes it from the author holding it. */

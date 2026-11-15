@@ -5,6 +5,7 @@ import com.fundaro.zodiac.taurus.domain.Tenants;
 import com.fundaro.zodiac.taurus.multitenancy.TenantContext;
 import com.fundaro.zodiac.taurus.repository.TenantsRepository;
 import com.fundaro.zodiac.taurus.service.TenantFeatureService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDerivationService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEngravingService;
@@ -41,6 +42,7 @@ class ScoreWritingResourceFeatureTest {
         mock(ScoreEditLockService.class),
         mock(ScoreDraftService.class),
         mock(WrittenPartService.class),
+        mock(ScoreDerivationService.class),
         mock(ScoreEngravingService.class)
     );
 
@@ -65,6 +67,7 @@ class ScoreWritingResourceFeatureTest {
                 "saveDraft",
                 "discardDraft",
                 "createWrittenPart",
+                "derivePart",
                 "startEngraving",
                 "engraving",
                 "applyEngraving",

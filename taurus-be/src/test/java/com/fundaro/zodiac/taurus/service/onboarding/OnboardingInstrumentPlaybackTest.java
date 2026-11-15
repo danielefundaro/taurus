@@ -16,7 +16,7 @@ class OnboardingInstrumentPlaybackTest {
 
         assertThat(resolution.explicit()).isFalse();
         assertThat(resolution.keyword()).isEqualTo("corno");
-        assertThat(resolution.values()).isEqualTo(new Values(-9, null, 0, 60, null));
+        assertThat(resolution.values()).isEqualTo(new Values(-9, null, 0, 60, null, 42, 84));
         assertThat(resolution.values().configured()).isTrue();
         assertThat(resolution.problems()).isEmpty();
     }
@@ -38,8 +38,8 @@ class OnboardingInstrumentPlaybackTest {
 
         assertThat(melodic.explicit()).isTrue();
         assertThat(melodic.keyword()).isNull();
-        assertThat(melodic.values()).isEqualTo(new Values(-2, 0, 0, 71, null));
-        assertThat(drum.values()).isEqualTo(new Values(null, null, null, null, 38));
+        assertThat(melodic.values()).isEqualTo(new Values(-2, 0, 0, 71, null, 52, 96));
+        assertThat(drum.values()).isEqualTo(new Values(null, null, null, null, 38, null, null));
         assertThat(drum.values().configured()).isTrue();
         assertThat(partial.values().configured()).isFalse();
     }
@@ -62,9 +62,25 @@ class OnboardingInstrumentPlaybackTest {
         Instruments instrument = new Instruments();
         instrument.setSoundProgram(0);
 
-        new Values(null, null, null, null, 49).applyTo(instrument);
+        instrument.setLowestWrittenPitch(52);
+        instrument.setHighestWrittenPitch(96);
+
+        new Values(null, null, null, null, 49, null, null).applyTo(instrument);
 
         assertThat(instrument.getSoundProgram()).isNull();
         assertThat(instrument.getPercussionKey()).isEqualTo(49);
+        assertThat(instrument.getLowestWrittenPitch()).isNull();
+        assertThat(instrument.getHighestWrittenPitch()).isNull();
+    }
+
+    @Test
+    void takesTheRangeOfTheCatalogueOnlyWithItsTransposition() {
+        Resolution catalogue = OnboardingInstrumentPlayback.resolve("Sax contralto", "65", "-9", "");
+        Resolution other = OnboardingInstrumentPlayback.resolve("Sax contralto", "65", "-2", "");
+
+        assertThat(catalogue.values().lowestWrittenPitch()).isEqualTo(58);
+        assertThat(catalogue.values().highestWrittenPitch()).isEqualTo(89);
+        assertThat(other.values().lowestWrittenPitch()).isNull();
+        assertThat(other.values().highestWrittenPitch()).isNull();
     }
 }

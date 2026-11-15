@@ -11,9 +11,12 @@ import com.fundaro.zodiac.taurus.multitenancy.TenantSchemaNameResolver;
 import com.fundaro.zodiac.taurus.multitenancy.TenantSchemaProvisioningService;
 import com.fundaro.zodiac.taurus.multitenancy.TenantTransactionExecutor;
 import com.fundaro.zodiac.taurus.security.AuthoritiesConstants;
+import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.CorrectionDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.DerivedFromDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.ScoreVersionDTO;
+import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DerivedPartDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DraftRequestDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DraftSavedDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.EditLockDTO;
@@ -119,6 +122,12 @@ class ScoreWritingIT {
 
     @Autowired
     private WrittenPartService writtenPartService;
+
+    @Autowired
+    private ScoreDerivationService derivationService;
+
+    @Autowired
+    private ScoreVersionRepository versionRepository;
 
     private final String tenantCode = "score-writing-it-" + UUID.randomUUID();
     private Long tenantId;
@@ -312,6 +321,60 @@ class ScoreWritingIT {
             trackId, created.scoreId(), new DraftRequestDTO(MARIO_EDITOR, TUBA, null, draft.entityVersion()), archivist("mario", "Mario", "Rossi")
         ));
         assertThat(saved.entityVersion()).isGreaterThan(draft.entityVersion());
+    }
+
+    @Test
+    void theMigrationProposesTheWrittenRangeOfTheSeededInstruments() {
+        List<Object[]> ranges = inTenant(() -> entityManager.createQuery(
+            "select i.name, i.lowestWrittenPitch, i.highestWrittenPitch from Instruments i where i.name in ('Clarinetto soprano 1°', 'Basso 1°', 'Gran cassa')",
+            Object[].class
+        ).getResultList());
+
+        assertThat(ranges).extracting(row -> row[0] + " " + row[1] + "-" + row[2])
+            .containsExactlyInAnyOrder("Clarinetto soprano 1° 52-96", "Basso 1° 26-65", "Gran cassa null-null");
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE " + schema() + ".instrument SET lowest_written_pitch = 70, highest_written_pitch = 60 WHERE name = 'Basso 1°'"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update("UPDATE " + schema() + ".instrument SET highest_written_pitch = NULL WHERE name = 'Basso 1°'"))
+            .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void aDerivedPartStartsAsADraftAndKeepsTheVersionItComesFrom() {
+        inTenant(() -> lockService.acquire(trackId, partId, MARIO_EDITOR, false, archivist("mario", "Mario", "Rossi")));
+        ScoreVersionDTO source = inTenant(() -> versionService.correct(
+            trackId, partId, new CorrectionDTO(null, TUBA, false, null, ScoreVersionOrigin.WRITING, MARIO_EDITOR, false), archivist("mario", "Mario", "Rossi")
+        ));
+        Long euphonium = inTenant(() -> entityManager.createQuery("select i.id from Instruments i where i.name = 'Euphonium 1°'", Long.class).getSingleResult());
+        Long drum = inTenant(() -> entityManager.createQuery("select i.id from Instruments i where i.name = 'Tamburo'", Long.class).getSingleResult());
+        Long version = inTenant(() -> entityManager.find(Tracks.class, trackId).getEntityVersion());
+
+        assertThatThrownBy(() -> inTenant(() -> derivationService.derive(
+            trackId, partId, new DerivedPartDTO(source.id(), drum, "Tamburo", TUBA, version), archivist("mario", "Mario", "Rossi")
+        ))).isInstanceOfSatisfying(RequestAlertException.class, error -> assertThat(error.getErrorKey()).isEqualTo("scoreWriting.derivationUnavailable"));
+        assertThat(count("sheet_music")).isEqualTo(1);
+
+        WrittenPartDTO created = inTenant(() -> derivationService.derive(
+            trackId, partId, new DerivedPartDTO(source.id(), euphonium, "Euphonium", TUBA.replace("<octave>2</octave>", "<octave>3</octave>"), version),
+            archivist("mario", "Mario", "Rossi")
+        ));
+
+        assertThat(jdbcTemplate.queryForObject("SELECT derived_from_version_id FROM " + schema() + ".sheet_music WHERE id = ?", Long.class, created.scoreId()))
+            .isEqualTo(source.id());
+        assertThat(inTenant(() -> draftService.get(trackId, created.scoreId())).orElseThrow().content()).contains("<octave>3</octave>");
+        PartPlaybackDTO derived = inTenant(() -> playbackService.overview(trackId, archivist("lucia", "Lucia", "Bianchi"))).parts().stream()
+            .filter(part -> part.scoreId().equals(created.scoreId())).findFirst().orElseThrow();
+        assertThat(derived.derivedFrom()).isEqualTo(new DerivedFromDTO(partId, source.id(), 1));
+        assertThat(derived.instruments()).extracting(instrument -> instrument.name() + " " + instrument.lowestWrittenPitch() + "-" + instrument.highestWrittenPitch())
+            .containsExactly("Euphonium 1° 48-84");
+        assertThat(part(inTenant(() -> playbackService.overview(trackId, archivist("lucia", "Lucia", "Bianchi"))).parts()).derivedFrom()).isNull();
+
+        // A newer version of the source makes the first one removable, but not while a part derives from it.
+        inTenant(() -> versionService.correct(
+            trackId, partId, new CorrectionDTO(null, TUBA, false, null, ScoreVersionOrigin.WRITING, MARIO_EDITOR, true), archivist("mario", "Mario", "Rossi")
+        ));
+        assertThat(inTenant(() -> versionRepository.findRemovableIds(1))).doesNotContain(source.id());
+        jdbcTemplate.update("UPDATE " + schema() + ".sheet_music SET deleted = true WHERE id = ?", created.scoreId());
+        assertThat(inTenant(() -> versionRepository.findRemovableIds(1))).contains(source.id());
     }
 
     private <T> T inTenant(java.util.function.Supplier<T> action) {

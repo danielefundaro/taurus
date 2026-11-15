@@ -40,17 +40,19 @@ public class InstrumentsServiceImpl extends CommonOpenSearchServiceImpl<Instrume
     @Override
     public InstrumentsDTO save(InstrumentsDTO dto, AbstractAuthenticationToken token) {
         requireValidPlaybackSettings(dto);
+        PlaybackSettingsValidator.requireValidRange(getEntityName(), dto.getLowestWrittenPitch(), dto.getHighestWrittenPitch());
         requireUniqueName(dto.getName(), null);
         return super.save(dto, token);
     }
 
     /**
-     * A full update also replaces the playback settings: a value left empty clears the stored one, so an instrument can
-     * go back to "not configured". The other fields keep the partial semantics of the common services.
+     * A full update also replaces the playback settings and the written range: a value left empty clears the stored one,
+     * so an instrument can go back to "not configured". The other fields keep the partial semantics of the common services.
      */
     @Override
     public InstrumentsDTO update(Long id, InstrumentsDTO dto, AbstractAuthenticationToken token) {
         requireValidPlaybackSettings(dto);
+        PlaybackSettingsValidator.requireValidRange(getEntityName(), dto.getLowestWrittenPitch(), dto.getHighestWrittenPitch());
         if (id == null || !Objects.equals(id, dto.getId())) {
             throw new RequestAlertException(HttpStatus.BAD_REQUEST, "Invalid ID", getEntityName(), "id.invalid");
         }
@@ -63,13 +65,22 @@ public class InstrumentsServiceImpl extends CommonOpenSearchServiceImpl<Instrume
         entity.setSoundBank(dto.getSoundBank());
         entity.setSoundProgram(dto.getSoundProgram());
         entity.setPercussionKey(dto.getPercussionKey());
+        entity.setLowestWrittenPitch(dto.getLowestWrittenPitch());
+        entity.setHighestWrittenPitch(dto.getHighestWrittenPitch());
         return saveEntity(entity, token, false);
     }
 
+    /** A partial update keeps the stored values it does not send: the range is checked as it will be stored. */
     @Override
     public InstrumentsDTO partialUpdate(Long id, InstrumentsDTO dto, AbstractAuthenticationToken token) {
         requireValidPlaybackSettings(dto);
-        if (id != null) getRepository().findByIdAndDeletedFalse(id).ifPresent(entity -> requireUniqueRename(entity, dto.getName()));
+        Instruments stored = id == null ? null : getRepository().findByIdAndDeletedFalse(id).orElse(null);
+        if (stored != null) requireUniqueRename(stored, dto.getName());
+        PlaybackSettingsValidator.requireValidRange(
+            getEntityName(),
+            dto.getLowestWrittenPitch() != null || stored == null ? dto.getLowestWrittenPitch() : stored.getLowestWrittenPitch(),
+            dto.getHighestWrittenPitch() != null || stored == null ? dto.getHighestWrittenPitch() : stored.getHighestWrittenPitch()
+        );
         return super.update(id, dto, token);
     }
 

@@ -30,6 +30,13 @@ public class Instruments extends CommonFieldsOpenSearch {
     @Column(name = "percussion_key")
     private Integer percussionKey;
 
+    /** Lowest written note in the main transposition, as a MIDI note number; present together with the highest. */
+    @Column(name = "lowest_written_pitch")
+    private Integer lowestWrittenPitch;
+
+    @Column(name = "highest_written_pitch")
+    private Integer highestWrittenPitch;
+
     public Integer getTranspositionSemitones() {
         return transpositionSemitones;
     }
@@ -70,6 +77,22 @@ public class Instruments extends CommonFieldsOpenSearch {
         this.percussionKey = percussionKey;
     }
 
+    public Integer getLowestWrittenPitch() {
+        return lowestWrittenPitch;
+    }
+
+    public void setLowestWrittenPitch(Integer lowestWrittenPitch) {
+        this.lowestWrittenPitch = lowestWrittenPitch;
+    }
+
+    public Integer getHighestWrittenPitch() {
+        return highestWrittenPitch;
+    }
+
+    public void setHighestWrittenPitch(Integer highestWrittenPitch) {
+        this.highestWrittenPitch = highestWrittenPitch;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -105,6 +128,8 @@ public class Instruments extends CommonFieldsOpenSearch {
             ", soundBank=" + getSoundBank() +
             ", soundProgram=" + getSoundProgram() +
             ", percussionKey=" + getPercussionKey() +
+            ", lowestWrittenPitch=" + getLowestWrittenPitch() +
+            ", highestWrittenPitch=" + getHighestWrittenPitch() +
             "}";
     }
 }

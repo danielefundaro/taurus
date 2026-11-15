@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -57,7 +58,7 @@ public final class InstrumentPlaybackSuggester {
         String bestKeyword = match.keyword();
 
         if (best.percussionKey() != null) {
-            return Optional.of(new Suggestion(bestKeyword, null, null, null, null, null, best.percussionKey()));
+            return Optional.of(new Suggestion(bestKeyword, null, null, null, null, null, best.percussionKey(), null, null));
         }
         Integer key = writtenKey(tokens);
         int transposition = key == null || key.equals(best.referenceKey())
@@ -70,7 +71,9 @@ public final class InstrumentPlaybackSuggester {
             best.bassClefTransposition(),
             InstrumentPlaybackCatalog.GENERAL_MIDI_BANK,
             best.soundProgram(),
-            null
+            null,
+            best.lowestWrittenPitch(),
+            best.highestWrittenPitch()
         ));
     }
 
@@ -140,11 +143,13 @@ public final class InstrumentPlaybackSuggester {
     public record Match(InstrumentPlaybackCatalog.Entry entry, String keyword) {}
 
     /**
-     * A proposal: values are {@code null} when they do not apply (no transposition for unpitched percussion, no drum key
-     * for pitched instruments, no bass-clef value when equal to the main transposition).
+     * A proposal: values are {@code null} when they do not apply (no transposition and no range for unpitched
+     * percussion, no drum key for pitched instruments, no bass-clef value when equal to the main transposition).
      *
-     * @param keyword    catalogue keyword recognized in the name
-     * @param writtenKey pitch class of the key written in the name, if any
+     * @param keyword             catalogue keyword recognized in the name
+     * @param writtenKey          pitch class of the key written in the name, if any
+     * @param lowestWrittenPitch  lowest written note, a MIDI note number, in the notation of {@code transposition}
+     * @param highestWrittenPitch highest written note
      */
     public record Suggestion(
         String keyword,
@@ -153,6 +158,16 @@ public final class InstrumentPlaybackSuggester {
         Integer bassClefTransposition,
         Integer soundBank,
         Integer soundProgram,
-        Integer percussionKey
-    ) {}
+        Integer percussionKey,
+        Integer lowestWrittenPitch,
+        Integer highestWrittenPitch
+    ) {
+        /**
+         * The written range applies to an instrument with the transposition of the proposal: with another one it would
+         * refer to a different notation, for example a bass written in treble clef.
+         */
+        public boolean rangeAppliesTo(Integer instrumentTransposition) {
+            return lowestWrittenPitch != null && highestWrittenPitch != null && Objects.equals(instrumentTransposition, transposition);
+        }
+    }
 }

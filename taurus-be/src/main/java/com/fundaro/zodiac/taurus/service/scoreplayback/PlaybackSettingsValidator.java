@@ -14,6 +14,7 @@ public final class PlaybackSettingsValidator {
     private static final int MAX_TRANSPOSITION = 36;
     private static final int MAX_BANK = 16383;
     private static final int MAX_PROGRAM = 127;
+    private static final int MAX_PITCH = 127;
     private static final int MIN_PERCUSSION_KEY = 27;
     private static final int MAX_PERCUSSION_KEY = 87;
     private static final int MIN_TEMPO = 20;
@@ -36,6 +37,19 @@ public final class PlaybackSettingsValidator {
                 outside(soundProgram, 0, MAX_PROGRAM) ||
                 outside(percussionKey, MIN_PERCUSSION_KEY, MAX_PERCUSSION_KEY) ||
                 (soundBank != null && soundProgram == null)
+        ) {
+            throw invalid(entityName);
+        }
+    }
+
+    /** A written range has both notes or none, each a MIDI note number, the lowest not above the highest. */
+    public static void requireValidRange(String entityName, Integer lowestWrittenPitch, Integer highestWrittenPitch) {
+        if ((lowestWrittenPitch == null) != (highestWrittenPitch == null)) throw invalid(entityName);
+        if (lowestWrittenPitch == null) return;
+        if (
+            outside(lowestWrittenPitch, 0, MAX_PITCH) ||
+                outside(highestWrittenPitch, 0, MAX_PITCH) ||
+                lowestWrittenPitch > highestWrittenPitch
         ) {
             throw invalid(entityName);
         }

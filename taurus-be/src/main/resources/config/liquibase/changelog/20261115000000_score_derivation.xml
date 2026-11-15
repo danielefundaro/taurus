@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261115000000-1" author="taurus">
+    <comment>
+      Written range of the instruments, as MIDI note numbers in the main transposition of the instrument: both values or
+      none, the lowest not above the highest.
+    </comment>
+    <addColumn tableName="instrument">
+      <column name="lowest_written_pitch" type="smallint"/>
+      <column name="highest_written_pitch" type="smallint"/>
+    </addColumn>
+    <sql><![CDATA[
+      ALTER TABLE instrument
+        ADD CONSTRAINT ck_instrument_written_range CHECK (
+          (lowest_written_pitch IS NULL) = (highest_written_pitch IS NULL)
+          AND (lowest_written_pitch IS NULL
+               OR (lowest_written_pitch BETWEEN 0 AND 127 AND highest_written_pitch BETWEEN 0 AND 127
+                   AND lowest_written_pitch <= highest_written_pitch))
+        );
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        ALTER TABLE instrument DROP CONSTRAINT ck_instrument_written_range;
+        ]]></sql>
+      <dropColumn tableName="instrument" columnName="highest_written_pitch"/>
+      <dropColumn tableName="instrument" columnName="lowest_written_pitch"/>
+    </rollback>
+  </changeSet>
+
+  <changeSet id="20261115000000-2" author="taurus">
+    <comment>
+      Version of another part a part was derived from for a different instrument. Versions are only soft-deleted, and the
+      cleanup keeps the versions parts derive from.
+    </comment>
+    <addColumn tableName="sheet_music">
+      <column name="derived_from_version_id" type="bigint"/>
+    </addColumn>
+    <addForeignKeyConstraint baseTableName="sheet_music" baseColumnNames="derived_from_version_id"
+                             referencedTableName="score_version" referencedColumnNames="id"
+                             constraintName="fk_sheet_music_derived_from_version" onDelete="SET NULL"/>
+    <sql><![CDATA[
+      CREATE INDEX idx_sheet_music_derived_from_version ON sheet_music (derived_from_version_id)
+        WHERE derived_from_version_id IS NOT NULL;
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        DROP INDEX idx_sheet_music_derived_from_version;
+        ]]></sql>
+      <dropForeignKeyConstraint baseTableName="sheet_music" constraintName="fk_sheet_music_derived_from_version"/>
+      <dropColumn tableName="sheet_music" columnName="derived_from_version_id"/>
+    </rollback>
+  </changeSet>
+
+  <changeSet id="20261115000000-3" author="taurus">
+    <comment>Fill the written range of existing instruments with the one of the reference catalogue.</comment>
+    <customChange class="com.fundaro.zodiac.taurus.config.changelog.InstrumentRangeDefaultsChange"/>
+  </changeSet>
+</databaseChangeLog>

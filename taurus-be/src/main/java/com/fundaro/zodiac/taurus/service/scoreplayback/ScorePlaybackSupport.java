@@ -131,7 +131,9 @@ public class ScorePlaybackSupport {
             instrument.getSoundBank(),
             instrument.getSoundProgram(),
             instrument.getPercussionKey(),
-            instrument.getPercussionKey() != null || (instrument.getSoundProgram() != null && instrument.getTranspositionSemitones() != null)
+            instrument.getPercussionKey() != null || (instrument.getSoundProgram() != null && instrument.getTranspositionSemitones() != null),
+            instrument.getLowestWrittenPitch(),
+            instrument.getHighestWrittenPitch()
         );
     }
 
