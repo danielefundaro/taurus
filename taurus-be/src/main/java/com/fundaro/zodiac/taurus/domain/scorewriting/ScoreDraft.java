@@ -10,9 +10,9 @@ import jakarta.persistence.Table;
 import java.time.ZonedDateTime;
 
 /**
- * The work in progress of the writing editor on a part, saved automatically a few seconds after the last change. It is
- * not a version: nobody listens to it, saving a version removes it, and it never expires. Removed physically with its
- * part, since the content is music of the archive and not personal data.
+ * The work in progress of the writing editor on a part or a score, saved automatically a few seconds after the last
+ * change. It is not a version: nobody listens to it, saving a version removes it, and it never expires. Removed
+ * physically with its part or score, since the content is music of the archive and not personal data.
  */
 @Entity
 @Table(name = "score_draft")
@@ -29,9 +29,13 @@ public class ScoreDraft extends TenantAuditedEntity {
     @Column(name = "base_version_id")
     private Long baseVersionId;
 
-    /** Compressed MusicXML with a single part. */
+    /** Compressed MusicXML: a single part, or one part for each row of a score. */
     @Column(name = "content", nullable = false, columnDefinition = "bytea")
     private byte[] content;
+
+    /** Rows of the draft of a score, as JSON: the id of each part of the content, its name and its instruments. */
+    @Column(name = "rows_json", columnDefinition = "text")
+    private String rowsJson;
 
     @Column(name = "measure_count", nullable = false)
     private Integer measureCount;
@@ -73,6 +77,14 @@ public class ScoreDraft extends TenantAuditedEntity {
 
     public void setContent(byte[] content) {
         this.content = content;
+    }
+
+    public String getRowsJson() {
+        return rowsJson;
+    }
+
+    public void setRowsJson(String rowsJson) {
+        this.rowsJson = rowsJson;
     }
 
     public Integer getMeasureCount() {

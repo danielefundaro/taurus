@@ -20,6 +20,14 @@ public interface ScoreVersionRepository extends JpaRepository<ScoreVersion, Long
     @Query("select coalesce(max(version.versionNumber), 0) from ScoreVersion version where version.sheetMusicId = :sheetMusicId")
     int findMaxVersionNumber(@Param("sheetMusicId") Long sheetMusicId);
 
+    /** The versions of the given parts extracted from a version of the score, removed versions excluded. */
+    @Query(
+        "select version from ScoreVersion version where version.sheetMusicId in :partIds and version.deleted = false " +
+            "and version.arrangementVersionId in (" +
+            "select arrangementVersion.id from ArrangementVersion arrangementVersion where arrangementVersion.arrangementId = :arrangementId)"
+    )
+    List<ScoreVersion> findExtracted(@Param("partIds") Collection<Long> partIds, @Param("arrangementId") Long arrangementId);
+
     /**
      * Versions beyond the newest {@code kept} of their part that are not approved, not current, not the origin of a kept
      * version, of pages, of a derived part or of an engraving still running or waiting to be assigned.

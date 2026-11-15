@@ -77,6 +77,13 @@ public class SheetsMusic extends AuditFields implements Serializable {
     @Column(name = "derived_from_version_id")
     private Long derivedFromVersionId;
 
+    /**
+     * Row of the score of the track this part is extracted from. Written only by the score, after the part is saved, so
+     * that saving the track never rewrites a link changed in the meantime.
+     */
+    @Column(name = "arrangement_row", insertable = false, updatable = false)
+    private String arrangementRow;
+
     public String getDescription() {
         return description;
     }
@@ -171,6 +178,14 @@ public class SheetsMusic extends AuditFields implements Serializable {
 
     public void setDerivedFromVersionId(Long derivedFromVersionId) {
         this.derivedFromVersionId = derivedFromVersionId;
+    }
+
+    public String getArrangementRow() {
+        return arrangementRow;
+    }
+
+    public void setArrangementRow(String arrangementRow) {
+        this.arrangementRow = arrangementRow;
     }
 
     public void setEngravedPagesFingerprint(String engravedPagesFingerprint) {

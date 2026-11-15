@@ -78,6 +78,20 @@ public final class MusicXmlDocuments {
         return result;
     }
 
+    /** Ids of the {@code part} elements of the document, in order, also those missing from {@code part-list}. */
+    public static List<String> partElementIds(Document document) {
+        return children(document.getDocumentElement(), "part").stream().map(part -> part.getAttribute("id")).toList();
+    }
+
+    /**
+     * Whether the document is written in concert pitch: MusicXML 4.0 marks it with {@code concert-score} in
+     * {@code defaults}, as MuseScore reads it.
+     */
+    public static boolean concertScore(Document document) {
+        Element defaults = child(document.getDocumentElement(), "defaults");
+        return defaults != null && child(defaults, "concert-score") != null;
+    }
+
     /** A copy of the document that keeps only the given part. */
     public static Document singlePart(Document document, String partId) {
         Document copy = (Document) document.cloneNode(true);

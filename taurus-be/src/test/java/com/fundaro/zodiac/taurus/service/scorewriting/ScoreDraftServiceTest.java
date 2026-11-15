@@ -104,7 +104,7 @@ class ScoreDraftServiceTest {
             assertThat(MusicXmlDocuments.parts(MusicXmlDocuments.read(stored.getContent()))).hasSize(1);
         });
         assertThat(saved.savedAt()).isEqualTo(draft.getValue().getSavedAt());
-        verify(lockService).requireHeld(eq(9L), eq(SESSION), any());
+        verify(lockService).requireHeld(eq(ScoreEditTarget.PART), eq(9L), eq(SESSION), any());
         assertThat(registry.counter("taurus.score.writing.drafts", "outcome", "saved").count()).isEqualTo(1);
     }
 
@@ -125,7 +125,7 @@ class ScoreDraftServiceTest {
             assertThat(stored.getSavedAt()).isNotNull();
             assertThat(stored.getContent()).isEqualTo(content.compressed());
         });
-        verify(lockService, never()).requireHeld(any(), any(), any());
+        verify(lockService, never()).requireHeld(any(ScoreEditTarget.class), any(), any(), any());
         assertThat(registry.counter("taurus.score.writing.drafts", "outcome", "saved").count()).isEqualTo(1);
     }
 
@@ -166,7 +166,7 @@ class ScoreDraftServiceTest {
     @Test
     void refusesDraftsWithoutTheLockOrWithAContentThatIsNotOnePart() {
         doThrow(new RequestAlertException(HttpStatus.CONFLICT, "Locked", "ScoreEditLock", "scoreWriting.locked"))
-            .when(lockService).requireHeld(eq(9L), eq("session-of-lucia"), any());
+            .when(lockService).requireHeld(eq(ScoreEditTarget.PART), eq(9L), eq("session-of-lucia"), any());
         assertThatThrownBy(() -> service.save(4L, 9L, new DraftRequestDTO("session-of-lucia", TUBA, null, null), mario()))
             .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getErrorKey()).isEqualTo("scoreWriting.locked"));
 
@@ -223,11 +223,11 @@ class ScoreDraftServiceTest {
 
         service.discard(4L, 9L, null, mario());
 
-        verify(lockService).requireNotHeldByOthers(eq(9L), eq(null), any());
+        verify(lockService).requireNotHeldByOthers(eq(ScoreEditTarget.PART), eq(9L), eq(null), any());
         assertThat(registry.counter("taurus.score.writing.drafts", "outcome", "discarded").count()).isEqualTo(1);
 
         doThrow(new RequestAlertException(HttpStatus.CONFLICT, "Locked", "ScoreEditLock", "scoreWriting.locked"))
-            .when(lockService).requireNotHeldByOthers(anyLong(), eq(SESSION), any());
+            .when(lockService).requireNotHeldByOthers(eq(ScoreEditTarget.PART), anyLong(), eq(SESSION), any());
         assertThatThrownBy(() -> service.discard(4L, 9L, SESSION, mario()))
             .isInstanceOfSatisfying(RequestAlertException.class, exception -> assertThat(exception.getErrorKey()).isEqualTo("scoreWriting.locked"));
         verify(repository, org.mockito.Mockito.times(1)).deleteAllByTargets(ScoreEditTarget.PART, List.of(9L));

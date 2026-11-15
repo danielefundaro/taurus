@@ -7,6 +7,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.util.unit.DataSize;
 import org.springframework.validation.annotation.Validated;
@@ -1119,6 +1120,14 @@ public class ApplicationProperties {
         @NotNull
         private Duration draftMinInterval = Duration.ofSeconds(2);
 
+        /** Largest plain MusicXML of a score, for its drafts and versions; each extracted part keeps the limit of the parts. */
+        @Positive
+        private long maxArrangementBytes = 30L * 1024 * 1024;
+
+        /** Most rows of a score. */
+        @Positive
+        private int maxArrangementRows = 60;
+
         @Valid
         private EngravingJobProperties engraving = new EngravingJobProperties();
 
@@ -1144,6 +1153,22 @@ public class ApplicationProperties {
 
         public void setDraftMinInterval(Duration value) {
             draftMinInterval = value;
+        }
+
+        public long getMaxArrangementBytes() {
+            return maxArrangementBytes;
+        }
+
+        public void setMaxArrangementBytes(long value) {
+            maxArrangementBytes = value;
+        }
+
+        public int getMaxArrangementRows() {
+            return maxArrangementRows;
+        }
+
+        public void setMaxArrangementRows(int value) {
+            maxArrangementRows = value;
         }
 
         public EngravingJobProperties getEngraving() {

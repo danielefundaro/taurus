@@ -3,9 +3,11 @@ package com.fundaro.zodiac.taurus.service.scoreplayback;
 import com.fundaro.zodiac.taurus.config.ApplicationProperties;
 import com.fundaro.zodiac.taurus.domain.enumeration.TenantFeature;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersion;
+import com.fundaro.zodiac.taurus.domain.scorewriting.ArrangementVersion;
 import com.fundaro.zodiac.taurus.multitenancy.TenantSchemaRegistry;
 import com.fundaro.zodiac.taurus.multitenancy.TenantTransactionExecutor;
 import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
+import com.fundaro.zodiac.taurus.repository.scorewriting.ArrangementVersionRepository;
 import com.fundaro.zodiac.taurus.service.MediaService;
 import com.fundaro.zodiac.taurus.service.TenantFeatureService;
 import org.slf4j.Logger;
@@ -17,7 +19,9 @@ import java.util.List;
 
 /**
  * Nightly removal of old versions: for each part, the versions beyond the newest {@code kept-versions} are deleted unless
- * they are current, approved or the origin of a kept correction. Their files are removed once nothing references them.
+ * they are current, approved or the origin of a kept correction. The versions of the scores of the tracks follow the same
+ * rule, and are kept while a version of a part extracted from them is. Their files are removed once nothing references
+ * them.
  */
 @Component
 public class ScoreVersionCleanup {
@@ -27,6 +31,7 @@ public class ScoreVersionCleanup {
 
     private final ApplicationProperties properties;
     private final ScoreVersionRepository versionRepository;
+    private final ArrangementVersionRepository arrangementVersionRepository;
     private final MediaService mediaService;
     private final TenantSchemaRegistry tenantSchemaRegistry;
     private final TenantFeatureService tenantFeatureService;
@@ -35,6 +40,7 @@ public class ScoreVersionCleanup {
     public ScoreVersionCleanup(
         ApplicationProperties properties,
         ScoreVersionRepository versionRepository,
+        ArrangementVersionRepository arrangementVersionRepository,
         MediaService mediaService,
         TenantSchemaRegistry tenantSchemaRegistry,
         TenantFeatureService tenantFeatureService,
@@ -42,6 +48,7 @@ public class ScoreVersionCleanup {
     ) {
         this.properties = properties;
         this.versionRepository = versionRepository;
+        this.arrangementVersionRepository = arrangementVersionRepository;
         this.mediaService = mediaService;
         this.tenantSchemaRegistry = tenantSchemaRegistry;
         this.tenantFeatureService = tenantFeatureService;
@@ -61,17 +68,26 @@ public class ScoreVersionCleanup {
         }
     }
 
-    /** Removes the old versions of one tenant and returns how many were removed. */
+    /** Removes the old versions of the parts and of the scores of one tenant and returns how many were removed. */
     public int cleanup(String tenant) {
         return transactions.execute(tenant, () -> {
-            List<ScoreVersion> removable = versionRepository.findAllById(versionRepository.findRemovableIds(properties.getScorePlayback().getKeptVersions()));
+            int kept = properties.getScorePlayback().getKeptVersions();
+            // The parts first: a version of a score is kept while a version extracted from it is.
+            List<ScoreVersion> removable = versionRepository.findAllById(versionRepository.findRemovableIds(kept));
             removable.forEach(version -> {
                 version.setDeleted(true);
                 version.touchAudit(SYSTEM);
             });
             versionRepository.saveAllAndFlush(removable);
+            List<ArrangementVersion> removableScores = arrangementVersionRepository.findAllById(arrangementVersionRepository.findRemovableIds(kept));
+            removableScores.forEach(version -> {
+                version.setDeleted(true);
+                version.touchAudit(SYSTEM);
+            });
+            arrangementVersionRepository.saveAllAndFlush(removableScores);
             removable.forEach(version -> mediaService.deleteIfUnreferenced(version.getMediaAssetId(), tenant, SYSTEM));
-            return removable.size();
+            removableScores.forEach(version -> mediaService.deleteIfUnreferenced(version.getMediaAssetId(), tenant, SYSTEM));
+            return removable.size() + removableScores.size();
         });
     }
 }

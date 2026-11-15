@@ -24,7 +24,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * One author at a time on a part, in the writing and in the correction editor. The editor takes the lock when it opens,
+ * One author at a time on a part, in the writing and in the correction editor, and on the score of a track. A part and
+ * the score have separate locks: writing the score does not lock its parts. The editor takes the lock when it opens,
  * renews it every 30 seconds and releases it when it closes; without renewals the lock expires after
  * {@code application.score-writing.lock-timeout}. Drafts and versions written in the editors are accepted only from the
  * session that holds the lock, or from the session that held it when it expired and nobody else took it.
@@ -66,21 +67,35 @@ public class ScoreEditLockService {
      */
     public EditLockDTO acquire(Long trackId, Long scoreId, String session, boolean takeOver, AbstractAuthenticationToken token) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
-        return toDto(hold(part.getId(), session, takeOver, token), session);
+        return acquire(PART, part.getId(), session, takeOver, token);
     }
 
     /** Renews the lock held by the session; takes it again when it expired and nobody else took it. */
     public EditLockDTO renew(Long trackId, Long scoreId, String session, AbstractAuthenticationToken token) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
-        return toDto(hold(part.getId(), session, false, token), session);
+        return acquire(PART, part.getId(), session, false, token);
     }
 
     /** Releases the lock if the session holds it; does nothing otherwise. */
     public void release(Long trackId, Long scoreId, String session) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
+        release(PART, part.getId(), session);
+    }
+
+    /**
+     * Takes or renews the lock of a part or a score that the caller found.
+     *
+     * @param takeOver takes the lock even when another session holds it
+     */
+    public EditLockDTO acquire(ScoreEditTarget type, Long targetId, String session, boolean takeOver, AbstractAuthenticationToken token) {
+        return toDto(hold(type, targetId, session, takeOver, token), session);
+    }
+
+    /** Releases the lock of a part or a score if the session holds it; does nothing otherwise. */
+    public void release(ScoreEditTarget type, Long targetId, String session) {
         requireSession(session);
-        repository.lockTarget(PART.name(), part.getId());
-        repository.findByTargetTypeAndTargetId(PART, part.getId())
+        repository.lockTarget(type.name(), targetId);
+        repository.findByTargetTypeAndTargetId(type, targetId)
             .filter(lock -> lock.isHeldBy(session))
             .ifPresent(repository::delete);
     }
@@ -91,7 +106,12 @@ public class ScoreEditLockService {
      * @throws RequestAlertException {@code scoreWriting.locked} when another session holds the lock
      */
     public void requireHeld(Long partId, String session, AbstractAuthenticationToken token) {
-        hold(partId, session, false, token);
+        requireHeld(PART, partId, session, token);
+    }
+
+    /** Checks that the session holds the lock of a part or a score, and renews it. */
+    public void requireHeld(ScoreEditTarget type, Long targetId, String session, AbstractAuthenticationToken token) {
+        hold(type, targetId, session, false, token);
     }
 
     /**
@@ -100,10 +120,15 @@ public class ScoreEditLockService {
      * @param session session of the editor making the request, {@code null} when the request does not come from an editor
      */
     public void requireNotHeldByOthers(Long partId, String session, AbstractAuthenticationToken token) {
+        requireNotHeldByOthers(PART, partId, session, token);
+    }
+
+    /** Checks that no other session is editing the part or the score. */
+    public void requireNotHeldByOthers(ScoreEditTarget type, Long targetId, String session, AbstractAuthenticationToken token) {
         if (session != null) requireSession(session);
-        repository.lockTarget(PART.name(), partId);
+        repository.lockTarget(type.name(), targetId);
         ZonedDateTime now = ZonedDateTime.now();
-        repository.findByTargetTypeAndTargetId(PART, partId)
+        repository.findByTargetTypeAndTargetId(type, targetId)
             .filter(lock -> !lock.isExpired(now) && !(lock.isHeldBy(session) && lock.getOwner().equals(actor(token))))
             .ifPresent(lock -> {
                 throw locked(lock, actor(token));
@@ -113,22 +138,33 @@ public class ScoreEditLockService {
     /** The locks still running on the given parts, by part, as seen by a user who does not hold them. */
     @Transactional(readOnly = true)
     public Map<Long, EditLockDTO> active(Collection<Long> partIds) {
-        if (partIds.isEmpty()) return Map.of();
-        return repository.findActive(PART, partIds, ZonedDateTime.now()).stream()
+        return active(PART, partIds);
+    }
+
+    /** The locks still running on the given parts or scores, by target, as seen by a user who does not hold them. */
+    @Transactional(readOnly = true)
+    public Map<Long, EditLockDTO> active(ScoreEditTarget type, Collection<Long> targetIds) {
+        if (targetIds.isEmpty()) return Map.of();
+        return repository.findActive(type, targetIds, ZonedDateTime.now()).stream()
             .collect(Collectors.toMap(ScoreEditLock::getTargetId, lock -> toDto(lock, null)));
     }
 
-    private ScoreEditLock hold(Long partId, String session, boolean takeOver, AbstractAuthenticationToken token) {
+    /** Forgets the locks of targets removed together with them. */
+    public void forget(ScoreEditTarget type, Collection<Long> targetIds) {
+        if (!targetIds.isEmpty()) repository.deleteAllByTargets(type, targetIds);
+    }
+
+    private ScoreEditLock hold(ScoreEditTarget type, Long targetId, String session, boolean takeOver, AbstractAuthenticationToken token) {
         requireSession(session);
         String actor = actor(token);
-        repository.lockTarget(PART.name(), partId);
+        repository.lockTarget(type.name(), targetId);
         ZonedDateTime now = ZonedDateTime.now();
-        ScoreEditLock lock = repository.findByTargetTypeAndTargetId(PART, partId).orElse(null);
+        ScoreEditLock lock = repository.findByTargetTypeAndTargetId(type, targetId).orElse(null);
         if (lock == null) {
             lock = new ScoreEditLock();
             lock.initializeAudit(actor);
-            lock.setTargetType(PART);
-            lock.setTargetId(partId);
+            lock.setTargetType(type);
+            lock.setTargetId(targetId);
             assign(lock, session, actor, token, now);
             metrics.lock("acquired");
             return repository.saveAndFlush(lock);
