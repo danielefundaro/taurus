@@ -121,11 +121,23 @@ const CORRECTION_PROBLEMS: Readonly<Record<string, string>> = {
     origin: "Origine della versione non valida: riaprire l'editor"
 };
 
-/** Texts of the `reason` of `scoreWriting.contentInvalid`. */
+/** Texts of the `reason` of `scoreWriting.contentInvalid`, for a part and for the score of a track. */
 const WRITING_PROBLEMS: Readonly<Record<string, string>> = {
     severalParts: 'La parte scritta deve contenere una sola parte',
     noParts: 'La parte scritta è vuota',
-    empty: 'La parte scritta è vuota'
+    empty: 'La parte scritta è vuota',
+    rowsMismatch: "I righi della partitura non corrispondono alle sue parti: riaprire l'editor",
+    unevenMeasures: 'Tutti i righi della partitura devono avere lo stesso numero di battute',
+    rowInstruments: 'Ogni rigo deve avere un solo strumento, o soltanto strumenti a percussione'
+};
+
+/** Texts of the `reason` of `scoreWriting.extractionInvalid`. */
+const EXTRACTION_PROBLEMS: Readonly<Record<string, string>> = {
+    empty: 'Scegliere almeno un rigo da estrarre',
+    unknownRow: 'Uno dei righi scelti non è più nella partitura: riaprire il dialogo',
+    duplicateRow: 'Uno dei righi è stato scelto due volte',
+    duplicateTarget: 'Due righi non possono andare nella stessa parte',
+    instrumentsMismatch: 'La parte scelta non ha gli strumenti del rigo'
 };
 
 /** Texts of the `field` of `scoreWriting.engravingOptionsInvalid`. */
@@ -656,7 +668,10 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     // Scrittura musicale e blocco degli editor
     'scoreWriting.locked': lockedMessage,
     'scoreWriting.sessionInvalid': "Sessione dell'editor non valida: ricaricare la pagina",
-    'scoreWriting.contentInvalid': (args) => WRITING_PROBLEMS[formatApiErrorValue(args['reason'])] ?? "La parte scritta non è un MusicXML valido: annullare l'ultima modifica e riprovare",
+    'scoreWriting.contentInvalid': (args) =>
+        args['reason'] === 'tooManyRows'
+            ? `La partitura non può avere più di ${formatApiErrorValue(args['maxRows'])} righi`
+            : (WRITING_PROBLEMS[formatApiErrorValue(args['reason'])] ?? "La parte scritta non è un MusicXML valido: annullare l'ultima modifica e riprovare"),
     'scoreWriting.draftConflict': "La bozza è stata modificata altrove: riaprire l'editor",
     'scoreWriting.draftOutdated': "Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla",
     'scoreWriting.instrumentNotFound': 'Uno degli strumenti scelti non esiste più: ricaricare la pagina',
@@ -666,6 +681,11 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'scoreWriting.engravingRunning': 'La parte è già in impaginazione: attendere che finisca',
     'scoreWriting.engravingNotFound': 'Impaginazione non trovata: impaginare di nuovo la versione',
     'scoreWriting.engravingNotReady': 'Le pagine impaginate non sono più disponibili: impaginare di nuovo la versione',
+    'scoreWriting.arrangementExists': 'La traccia ha già una partitura: ricaricare la pagina',
+    'scoreWriting.arrangementNotFound': 'La partitura della traccia non esiste più: ricaricare la pagina',
+    'scoreWriting.arrangementOutdated': "Nel frattempo è stata salvata un'altra versione della partitura: estrarre le parti da quella",
+    'scoreWriting.extractionInvalid': (args) => EXTRACTION_PROBLEMS[formatApiErrorValue(args['reason'])] ?? 'Estrazione non valida: riaprire il dialogo',
+    'scoreWriting.instrumentNotConfigured': (args) => `${formatApiErrorValue(args['instrument'])} non ha la trasposizione: configurarla per estrarne la parte`,
 
     // Onboarding
     'onboarding.disabled': 'La configurazione iniziale non è disponibile',
