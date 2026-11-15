@@ -104,6 +104,15 @@ public class ScorePlaybackSupport {
         }
     }
 
+    /**
+     * Version the pages of the part were engraved from, or {@code null}: the pages no longer derive from it once they are
+     * changed in another way.
+     */
+    public static Long engravedFromVersionId(SheetsMusic part) {
+        if (part.getEngravedFromVersionId() == null || part.getEngravedPagesFingerprint() == null) return null;
+        return part.getEngravedPagesFingerprint().equals(pagesFingerprint(part)) ? part.getEngravedFromVersionId() : null;
+    }
+
     public static boolean pagesChanged(ScoreVersion version, SheetsMusic part) {
         return version.getPagesFingerprint() != null && !version.getPagesFingerprint().equals(pagesFingerprint(part));
     }

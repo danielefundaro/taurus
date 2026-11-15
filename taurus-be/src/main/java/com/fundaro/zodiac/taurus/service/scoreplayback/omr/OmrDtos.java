@@ -48,6 +48,21 @@ public final class OmrDtos {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record MeasureBox(int measure, int page, double x, double y, double width, double height, boolean approximate) {}
 
+    /**
+     * A part engraved by the music service: the pages as grayscale PNG images at 300 DPI and the vector PDF, both in
+     * Base64.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EngravingResponse(String engine, String version, long durationMillis, int pageCount, String pdf, List<String> pages) {
+        public byte[] pdfBytes() {
+            return Base64.getDecoder().decode(pdf);
+        }
+
+        public List<byte[]> pageBytes() {
+            return pages.stream().map(page -> Base64.getDecoder().decode(page)).toList();
+        }
+    }
+
     /** The text read on the pages, one entry per page in the order they were sent. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record TextRecognitionResponse(String engine, String version, long durationMillis, List<TextPage> pages) {}

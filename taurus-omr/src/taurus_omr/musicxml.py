@@ -37,7 +37,7 @@ def read(path: Path) -> ElementTree.Element:
     if not zipfile.is_zipfile(path):
         return parse(data)
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        return parse(archive.read(_root_file(archive)))
+        return parse(archive.read(root_file(archive)))
 
 
 def concatenate(documents: Sequence[ElementTree.Element]) -> ElementTree.Element:
@@ -97,7 +97,8 @@ def to_compressed(root: ElementTree.Element) -> bytes:
     return output.getvalue()
 
 
-def _root_file(archive: zipfile.ZipFile) -> str:
+def root_file(archive: zipfile.ZipFile) -> str:
+    """The path of the score in a compressed MusicXML archive, from its container or its first MusicXML file."""
     names = archive.namelist()
     if CONTAINER_PATH in names:
         container = ElementTree.fromstring(archive.read(CONTAINER_PATH))

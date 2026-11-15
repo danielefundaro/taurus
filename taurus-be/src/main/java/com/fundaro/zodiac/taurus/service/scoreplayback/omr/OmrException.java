@@ -13,6 +13,12 @@ public class OmrException extends RuntimeException {
     /** Service codes about the request content, reported to the user as they are. */
     static final Set<String> INPUT_CODES = Set.of("tooLarge", "tooManyPages", "unreadableImage", "unreadableMidi");
 
+    /**
+     * Service codes of an engraving, reported in the job as they are: what is wrong with the score or the options, and
+     * an engraving that failed or ran out of time.
+     */
+    static final Set<String> ENGRAVING_CODES = Set.of("tooLarge", "tooManyPages", "unreadableScore", "invalidOptions", "engineFailed", "engineTimeout");
+
     private final String code;
 
     private OmrException(String code, String message) {

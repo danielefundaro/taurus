@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { MAX_ENGRAVED_PAGES, numberPage, pageSections, prepareMei, ResolvedOptions, verovioOptions } from '../score-editor/score-engraving';
 
 /**
  * Pacchetto Verovio servito tra gli asset: resta fuori dal bundle, così il service worker lo scarica e lo mette in cache
@@ -12,6 +13,16 @@ interface VerovioToolkit {
     loadData(data: string): boolean;
     getPageCount(): number;
     renderToSVG(page?: number, xmlDeclaration?: boolean): string;
+    getMEI(options?: Record<string, unknown>): string;
+    select(selection: Record<string, unknown>): boolean;
+    redoLayout(options?: Record<string, unknown>): void;
+}
+
+/** Anteprima di un'impaginazione: le pagine SVG in ordine, fino al massimo consentito. */
+export interface EngravingPreview {
+    pages: string[];
+    /** La parte supera le pagine massime: il servizio musicale rifiuterebbe l'impaginazione. */
+    tooManyPages: boolean;
 }
 
 /** Oggetto globale `verovio` definito dal pacchetto. */
@@ -26,7 +37,10 @@ interface VerovioGlobal {
  */
 @Injectable({ providedIn: 'root' })
 export class ScoreRendererService {
+    private verovio?: Promise<VerovioGlobal>;
     private toolkit?: Promise<VerovioToolkit>;
+    /** Toolkit dell'impaginazione, separato perché le sue opzioni non passino al lettore e all'editor. */
+    private engraver?: Promise<VerovioToolkit>;
 
     /**
      * Pagine SVG della parte, adattate alla larghezza indicata in pixel; `scale` è la dimensione in percentuale. Con
@@ -53,16 +67,70 @@ export class ScoreRendererService {
         return pages;
     }
 
+    /**
+     * Pagine della parte come le impagina il servizio musicale, con le stesse opzioni: la prima sezione con
+     * l'intestazione, le altre tra un'interruzione di pagina e la successiva, e i numeri dalla seconda pagina.
+     */
+    async engrave(musicXml: string, options: ResolvedOptions): Promise<EngravingPreview> {
+        const toolkit = await this.engraving();
+        toolkit.setOptions(verovioOptions(options));
+        if (!toolkit.loadData(musicXml)) throw new Error('Spartito non leggibile');
+        const mei = new DOMParser().parseFromString(toolkit.getMEI(), 'application/xml');
+        if (mei.getElementsByTagName('parsererror').length > 0) throw new Error('Spartito non leggibile');
+        const sections = pageSections(mei);
+        const pages: string[] = [];
+        const load = (document: string) => {
+            if (!toolkit.loadData(document)) throw new Error('Spartito non leggibile');
+        };
+        load(prepareMei(mei, options, true, sections.length > 1 ? sections[0][1] : undefined));
+        let fits = this.collect(toolkit, pages);
+        if (fits && sections.length > 1) {
+            load(prepareMei(mei, options, false));
+            for (const [start, end] of sections.slice(1)) {
+                toolkit.select({ start, end });
+                toolkit.redoLayout();
+                fits = this.collect(toolkit, pages);
+                if (!fits) break;
+            }
+        }
+        return { pages: options.pageNumbers ? pages.map((page, index) => numberPage(page, index + 1, options)) : pages, tooManyPages: !fits };
+    }
+
+    /** Aggiunge le pagine disegnate dal toolkit; `false` quando supererebbero il massimo. */
+    private collect(toolkit: VerovioToolkit, pages: string[]): boolean {
+        const count = toolkit.getPageCount();
+        if (pages.length + count > MAX_ENGRAVED_PAGES) return false;
+        for (let page = 1; page <= count; page++) pages.push(toolkit.renderToSVG(page));
+        return true;
+    }
+
     private ready(): Promise<VerovioToolkit> {
-        this.toolkit ??= this.load().catch((error) => {
+        this.toolkit ??= this.create().catch((error) => {
             this.toolkit = undefined;
             throw error;
         });
         return this.toolkit;
     }
 
+    private engraving(): Promise<VerovioToolkit> {
+        this.engraver ??= this.create().catch((error) => {
+            this.engraver = undefined;
+            throw error;
+        });
+        return this.engraver;
+    }
+
+    private async create(): Promise<VerovioToolkit> {
+        this.verovio ??= this.load().catch((error) => {
+            this.verovio = undefined;
+            throw error;
+        });
+        const verovio = await this.verovio;
+        return new verovio.toolkit();
+    }
+
     /** Carica lo script di Verovio e attende l'avvio del suo modulo WebAssembly. */
-    private load(): Promise<VerovioToolkit> {
+    private load(): Promise<VerovioGlobal> {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
             script.src = VEROVIO_URL;
@@ -73,7 +141,7 @@ export class ScoreRendererService {
                     reject(new Error('Verovio non disponibile'));
                     return;
                 }
-                verovio.module.onRuntimeInitialized = () => resolve(new verovio.toolkit());
+                verovio.module.onRuntimeInitialized = () => resolve(verovio);
             };
             script.onerror = () => {
                 script.remove();

@@ -192,20 +192,39 @@ La copia nel browser non si elimina mai per un rifiuto del server: si elimina so
 
 ### Impaginazione
 
-1. Da una versione l'archivista sceglie **Impagina**: formato (A4 verticale, A4 orizzontale, formato marcia di 18 × 13 cm in orizzontale), dimensione del rigo, margini, intestazione (titolo della traccia, compositore, arrangiatore, nome della parte) e numerazione delle pagine.
-2. Il browser mostra subito un'anteprima con Verovio.
-3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF.
-4. Al termine Taurus chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**; per una parte scritta da zero, senza pagine, le aggiunge direttamente. Le pagine sostituite restano come media della traccia secondo le regole di pulizia esistenti.
-5. Pagine e PDF ricordano la versione da cui derivano: l'editor segnala quando la versione corrente è più recente delle pagine e propone di impaginare di nuovo.
+1. Da una versione l'archivista sceglie **Impagina**: formato (A4 verticale, A4 orizzontale, formato marcia di 18 × 13 cm in orizzontale), dimensione del rigo, margini, intestazione (titolo della traccia, compositore, arrangiatore, nome della parte), numerazione delle pagine e numeri di battuta.
+   - **Valori proposti**: rigo di 7 mm e margini di 12 mm in A4, rigo di 5,6 mm e margini di 8 mm nel formato marcia; il rigo va da 4 a 9,6 mm e i margini da 3 a 30 mm.
+   - **Intestazione**: solo sulla prima pagina, con il nome della parte in grassetto a sinistra, il titolo al centro e compositore e arrangiatore a destra, uno sotto l'altro. I testi sono proposti dalla traccia e dalla parte e si possono cambiare; un testo vuoto non compare, e senza testi la musica inizia in alto. Il nome della parte non si ripete a sinistra dei righi, e un'intestazione già presente nel MusicXML, per esempio di una parte importata da MuseScore, è sostituita.
+   - **Numeri di pagina**: dalla seconda pagina, al centro sotto la musica, in una fascia lasciata libera sopra il margine inferiore.
+   - **Numeri di battuta**: all'inizio di ogni rigo (proposto), su ogni battuta per le [parti di studio](#estensioni-approvate) o nessuno.
+   - **Righe e pagine**: le interruzioni di riga della parte restano, come nella scrittura, e una riga piena va a capo da sola; un'interruzione di pagina inizia una pagina nuova, che ripete chiave, armatura e tempo.
+2. Il browser mostra subito un'anteprima con Verovio, ridisegnata a ogni cambio delle opzioni: stesse opzioni, stessa intestazione e stesse sezioni tra le interruzioni di pagina del servizio, così le pagine dell'anteprima coincidono con quelle generate. L'anteprima segnala una parte oltre le 30 pagine, che il servizio rifiuterebbe; le scelte dell'ultima impaginazione della versione tornano come valori proposti.
+3. **Genera pagine** avvia un job: il servizio musicale produce le pagine PNG a 300 DPI e il PDF. Una parte ha una sola impaginazione in coda o in corso alla volta; il PDF si scarica appena il job termina, anche prima di assegnare le pagine. Il dialogo legge lo stato ogni 3 secondi e si può chiudere: riaperto sulla stessa versione, riprende dal job, e un job non riuscito ne mostra il motivo sopra le opzioni.
+4. Al termine Taurus mostra le miniature delle pagine e chiede se **sostituire le pagine** della parte o **aggiungerle in una parte nuova**, con la stessa descrizione e gli stessi strumenti; per una parte scritta da zero, senza pagine, offre solo **Aggiungi le pagine alla parte**. Le pagine sostituite seguono le regole delle pagine tolte da una parte: il file si elimina quando nessun'altra parte lo usa.
+   - **Pagine non assegnate**: restano con il job finché l'archivista non sceglie. Una nuova impaginazione della stessa parte le sostituisce, e la pulizia notturna le elimina, con il loro PDF, dopo 7 giorni o quando la parte viene eliminata.
+   - **PDF**: resta scaricabile finché la parte non riceve altre pagine impaginate; quello delle pagine sostituite si elimina con esse.
+5. Pagine e PDF ricordano la versione da cui derivano: la scheda Ascolto segnala con «Pagine non aggiornate» quando la versione ascoltata è più recente delle pagine, e **Impagina** propone di impaginare di nuovo. Il legame vale finché la parte conserva le pagine assegnate: se le pagine cambiano a mano, la parte non risulta più impaginata da una versione.
 
 ### Parti da impaginare
 
 Una parte scritta o ricavata non ha pagine finché non viene impaginata. Non si genera nulla da sola: la segnalazione guida chi gestisce a impaginarla.
 
-- **Workspace Parti**: l'etichetta «Da impaginare» e il pulsante **Impagina**.
-- **Anteprima e presentazione**: al posto dell'avviso generico «Nessuna pagina da mostrare», «Parte scritta non ancora impaginata», con il collegamento a **Impagina** per chi gestisce la traccia.
-- **Stampa e preparazione degli eventi**: la parte compare come «da impaginare» ed è esclusa dalla stampa, con il conteggio nel riepilogo («2 parti da impaginare non stampate»).
+- **Workspace Parti**: l'icona «Da impaginare» nell'elenco e, nel dettaglio della parte, l'avviso «Parte da impaginare» con **Impagina**, attivo con la traccia salvata. Una parte da impaginare è una parte salvata con una versione e senza pagine.
+- **Scheda Ascolto**: l'etichetta «Da impaginare», o «Pagine non aggiornate», e **Impagina** per ogni parte con una versione, con la scrittura attiva e il servizio musicale configurato.
+- **Anteprima e presentazione**: al posto dell'avviso generico «Nessuna pagina da mostrare», «Parte scritta non ancora impaginata» («Parti scritte non ancora impaginate»), che indica **Impagina** a chi gestisce la traccia e la scheda Ascolto ai soci.
+- **Stampa**: la parte è esclusa dalla stampa, con il conteggio sotto il titolo dell'anteprima, che segue le parti scelte nei filtri («2 parti da impaginare non stampate»).
+- **Preparazione degli eventi**: tra gli spartiti di un brano del programma la parte è «Da impaginare», e chi compone il programma ha **Impagina**, che apre la scheda Ascolto della traccia. La criticità degli spartiti la conta a parte («Nessuno spartito pronto: 1 da impaginare»), e la [stampa della scaletta](#stampa-della-scaletta) la esclude e la conta come l'anteprima.
 - **Soci**: leggono e ascoltano la parte nella scheda Ascolto, con le regole di visibilità dell'ascolto.
+
+### Stampa della scaletta
+
+È l'[impaginazione per l'evento](#estensioni-approvate): dal programma di un evento, **Stampa la scaletta** apre l'anteprima con le parti già impaginate di tutti i brani, per strumento e nel formato marcia. Taurus non genera pagine né PDF per l'evento: la stampa usa le pagine delle parti, e un PDF unico si ottiene con la stampa del browser.
+
+- **Parti**: quelle che la preparazione mostra a chi stampa, cioè tutte le parti dei brani a chi compone il programma e le sole parti pronte dei propri strumenti a soci ed esterni. Un brano ripetuto, per esempio come bis, si stampa una volta, e una traccia non più nel catalogo non ha parti. Si stampa il programma salvato: con modifiche in corso il comando è disattivato con «Salva il programma prima di stamparlo», e senza pagine da stampare lo dice.
+- **Ordine**: per strumento, nell'ordine in cui gli strumenti compaiono nelle parti dei brani, e per ogni strumento nell'ordine della scaletta. Una parte con più strumenti si stampa una volta, sotto il primo strumento scelto. I filtri scelgono gli strumenti da stampare, come per tracce e album.
+- **Formato marcia**: l'anteprima propone «2 · formato marcia», cioè due pagine di 18 × 13 cm a grandezza reale su un A4 verticale, con una linea di taglio tratteggiata attorno a ogni pagina, e le pagine impaginate nel formato marcia riempiono il riquadro. Una pagina di un altro formato, per esempio una scansione A4, si riduce per entrare nel riquadro, e l'anteprima lo segnala («1 pagina non in formato marcia, ridotta in stampa»). Restano disponibili «1» e «2 · automatico», e il formato marcia si può scegliere anche per tracce e album.
+- **Parti da impaginare**: restano fuori dalla stampa, e il titolo dell'anteprima le conta come per una traccia.
+- **Disponibilità**: la stampa della scaletta non dipende da `SCORE_WRITING`, perché usa le pagine che le parti hanno già.
 
 ### Organico della banda
 
@@ -218,13 +237,13 @@ L'organico è l'elenco ordinato degli strumenti che suonano abitualmente nella b
 
 ### Scaricamento
 
-MusicXML compresso, MIDI e PDF di una versione, come oggi il MusicXML per MuseScore.
+MusicXML compresso, MIDI e PDF di una versione, come oggi il MusicXML per MuseScore. Il PDF è quello dell'ultima impaginazione della versione; il MIDI arriva con le [parti ricavate](#piano-di-implementazione).
 
 ## Interfaccia utente
 
 L'editor si apre a schermo intero, come quello di correzione.
 
-- **Barra superiore**: titolo «Scrittura · nome della parte» con lo stato della bozza sotto («Bozza salvata alle 10:41»), annulla e ripristina, ascolto dal punto selezionato, **Tastiera MIDI**, **Salva**, **Salva e approva**, **Impagina**.
+- **Barra superiore**: titolo «Scrittura · nome della parte» con lo stato della bozza sotto («Bozza salvata alle 10:41»), annulla e ripristina, ascolto dal punto selezionato, **Tastiera MIDI**, **Salva**, **Salva e approva**, **Impagina**. **Impagina** chiude l'editor e apre l'impaginazione della versione da cui parte la scrittura, quando non ha modifiche; altrimenti è disattivato con «Salva la versione prima di impaginarla».
 - **Scheda Nota**: l'interruttore **Inserimento**, la voce del cursore da 1 a 4 e lo spostamento del cursore, poi durata e punti, che durante l'inserimento valgono per le note seguenti. Nella scrittura «Inserisci prima» e «Inserisci dopo» della correzione non compaiono, ed «Elimina» diventa **Cancella**, che trasforma la nota in pausa.
 - **Scheda Espressione**: dinamiche; **Crescendo**, **Diminuendo**, **Legatura di portamento** e **Togli**, sulla nota o sul passaggio; articolazioni con **Respiro** e **Corona**; **Acciaccatura** e **Appoggiatura**; il testo di espressione con le proposte. I pulsanti si evidenziano quando la nota selezionata ha già il segno.
 - **Scheda Struttura**: ritornelli, volte, segni e salti, la lettera di prova con **Numero di battuta**, il tempo con il suo testo.
@@ -238,6 +257,8 @@ L'editor si apre a schermo intero, come quello di correzione.
 - **Ricavata da**: per le parti estratte o trasposte, un'etichetta con la parte o la partitura di origine e, se divergono, un avviso.
 - **Scheda Ascolto**: **Nuova parte scritta**, e per ogni parte **Scrivi** oppure, con una bozza, l'etichetta «Bozza non salvata di …» con **Riprendi la bozza** e **Scarta la bozza**. I comandi stanno accanto a **Correggi** e alle versioni, che sono già nella scheda Ascolto, e sono disattivati finché la traccia ha modifiche da salvare.
 - **Workspace Parti**: l'etichetta «Da impaginare», con **Impagina**.
+- **Programma dell'evento**: l'etichetta «Da impaginare» e **Impagina** tra gli spartiti di ogni brano, e **Stampa la scaletta** sopra la scaletta.
+- **Impagina**: un dialogo con le opzioni a sinistra e l'anteprima delle pagine a destra, una sotto l'altra sul telefono; durante il job lo stato, al termine le miniature con le scelte di assegnazione, **Scarica il PDF** e **Impagina di nuovo**.
 
 ### Scorciatoie principali
 
@@ -293,6 +314,8 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Disegno**: Verovio in un Web Worker, con la selezione di un intervallo di battute per disegnare solo la pagina visibile e le battute vicine; il resto si aggiorna in background. La mappa tra `id` e elementi disegnati resta quella della correzione.
 - **Ascolto**: il lettore esistente, che già legge una parte qualsiasi di un file a più parti e applica trasposizioni e suoni.
 - **MIDI**: un servizio (`MidiInputService`) legge i dispositivi con Web MIDI e riunisce in un accordo le note arrivate entro la soglia mentre la prima è premuta; `score-input.ts` sceglie la grafia dall'armatura, scrive l'altezza esatta conservando il suono delle altre note della battuta e traduce le note di batteria in voce e posizione per le percussioni, sopra le stesse operazioni di inserimento della tastiera del computer. Il pianoforte a schermo passa i suoi tocchi alla stessa strada.
+- **Impaginazione**: `score-engraving.ts` riproduce in TypeScript la preparazione dell'MEI, le opzioni di Verovio, le sezioni tra le interruzioni di pagina e i numeri di pagina del servizio (`engrave.py`); `ScoreRendererService.engrave` disegna l'anteprima con un toolkit Verovio separato da quello del lettore e dell'editor, perché le opzioni dell'impaginazione non passino al loro disegno.
+- **Stampa della scaletta**: `PrinterService.previewProgram` apre l'anteprima con le parti del programma e con quelle da impaginare che l'evento segnala, perché il programma non porta la loro versione. L'anteprima le ordina per strumento e propone il formato marcia, le cui regole di stampa sono in `styles.scss`.
 - **Bozze e blocco**: un servizio che salva la bozza con ritardo, ne conserva una copia in IndexedDB e rinnova il blocco ogni 30 secondi. La copia resta in IndexedDB anche quando il server la rifiuta, fino all'accettazione o allo scarto. L'editor di correzione usa lo stesso servizio per il blocco, senza bozze.
 
 ### Backend
@@ -300,13 +323,24 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Versioni delle parti**: `score_version` esistente, con le nuove origini `WRITING` e `ARRANGEMENT`. Il salvataggio usa la stessa richiesta JSON della correzione, con controlli e limiti invariati, più il controllo del blocco, che vale anche per le correzioni.
 - **Partiture**: nuove entità per la partitura della traccia e le sue versioni, con lo stesso modello immutabile delle parti.
 - **Estrazione**: il backend divide la versione della partitura in parti, applica la trasposizione dello strumento e crea le versioni delle parti in una transazione; i controlli MusicXML esistenti (`MusicXmlInspector`) valgono anche qui.
-- **Impaginazione**: job su una nuova coda RabbitMQ, con lo stesso schema del riconoscimento (tabella dei job come fonte di verità, recupero pianificato), senza notifica al termine: l'editor legge lo stato del job.
+- **Impaginazione**: job su una nuova coda RabbitMQ, `score.engraving` con la coda di scarto `score.engraving.dead`, con lo stesso schema del riconoscimento, senza notifica al termine: l'editor legge lo stato del job.
+  - **Job**: la tabella dei job è la fonte di verità. Un worker prende il job con un aggiornamento atomico, chiama il servizio fuori da ogni transazione e scarta il risultato se nel frattempo il job è passato a un altro tentativo. Il recupero pianificato rimette in coda i job interrotti, fino a tre tentativi (`interrupted` dopo l'ultimo), e ripubblica quelli rimasti in coda.
+  - **Opzioni**: si controllano prima di accodare il job (rigo da 4 a 9,6 mm, margini da 3 a 30 mm, testi dell'intestazione fino a 200 caratteri, quelli vuoti tolti) e si salvano con il job, che le manda al servizio così come sono.
+  - **Pagine e PDF**: media della categoria delle parti, con il nome della parte (`basso-in-do-pagina-1.png`, `basso-in-do.pdf`). Le pagine restano legate al job (`score_engraving_page`) fino all'assegnazione, che blocca la traccia e ne controlla la versione come la modifica delle parti.
+  - **Versione impaginata**: l'assegnazione salva con la parte la versione e l'impronta delle pagine; l'ascolto la riporta, solo a chi gestisce la traccia, finché l'impronta coincide.
+- **Preparazione degli eventi**: le parti del programma riportano gli identificativi degli strumenti (`instrumentIds`) e se sono da impaginare (`unengraved`), cioè con una versione corrente e senza pagine in nessuno stato. Una pagina ancora in elaborazione non rende la parte da impaginare.
 
 ### Servizio musicale
 
-`taurus-omr` aggiunge `POST /v1/engravings`: riceve un MusicXML e le opzioni di impaginazione e restituisce il PDF e le pagine PNG. Usa Verovio per Python e Cairo, gli stessi strumenti con cui il test di accuratezza disegna il proprio corpus, già provati con il carattere musicale incorporato. Il servizio resta interno, senza stato e senza accesso a database o storage.
+`taurus-omr` aggiunge `POST /v1/engravings`: riceve un MusicXML, normale o compresso, e le opzioni di impaginazione e restituisce il PDF e le pagine PNG in scala di grigi a 300 DPI. Usa Verovio per Python e CairoSVG, gli stessi strumenti con cui il test di accuratezza disegna il proprio corpus, con il carattere musicale incorporato in Verovio reso disponibile a Cairo e Liberation Serif per i testi. Il servizio resta interno, senza stato e senza accesso a database o storage. Le opzioni e i codici di errore sono descritti nel [README del servizio](../taurus-omr/README.md#impaginazione).
 
-Verovio ha la stessa versione nel frontend, nel servizio e nel test di accuratezza, così l'anteprima del browser e le pagine generate coincidono. Le versioni si aggiornano insieme, e un controllo del repository fallisce se divergono.
+- **Processo separato**: l'impaginazione gira in un processo a parte, con slot propri e un tempo massimo di 120 secondi (`TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS`), come la lettura del testo: non aspetta i riconoscimenti e si interrompe allo scadere del tempo. Il MusicXML non supera 20 MB anche dopo la decompressione, e le pagine non superano il limite del servizio, 30 (`tooManyPages`).
+- **Intestazione e righe**: l'intestazione si scrive nell'MEI che Verovio ricava dal MusicXML, così Verovio le lascia spazio; il disegno usa le stesse opzioni di interruzione dell'editor di scrittura (`breaks: smart`, `breaksSmartSb: 0`).
+- **Interruzioni di pagina**: Verovio le ignora nel suo impaginare automatico e non disegna l'intestazione di una selezione di battute. Il servizio impagina quindi la parte in sezioni tra due interruzioni di pagina: la prima dalla parte tagliata dopo la sua ultima battuta, con l'intestazione, le altre come selezioni della parte intera, che conservano chiave, armatura e tempo in vigore.
+- **Numeri di pagina**: scritti dal servizio nella fascia di 6 mm lasciata libera sopra il margine inferiore, contati su tutte le sezioni.
+- **PDF**: vettoriale, in PDF 1.4, con le pagine nel formato scelto, titolo della traccia e nome della parte nei metadati.
+
+Verovio ha la stessa versione nel frontend, nel servizio e nel test di accuratezza, così l'anteprima del browser e le pagine generate coincidono. Le versioni si aggiornano insieme, e `scripts/ops/check-verovio-versions.mjs`, eseguito dalla CI, fallisce se divergono.
 
 ## Modello dati e migrazioni
 
@@ -319,12 +353,13 @@ Changelog nello schema del tenant. Tutte le nuove tabelle hanno i campi di audit
 | `arrangement_version` | `id`, `arrangement_id`, `version_number`, `status`, `media_asset_id` (MusicXML compresso a più parti), `parent_version_id`, `part_map_json` (parte della partitura → parte della traccia), `measure_count`, `checks_json`, approvazione; univoco `(arrangement_id, version_number)` |
 | `score_draft` | `id`, tipo e identificativo del bersaglio (parte o partitura), `base_version_id`, `content` (MusicXML compresso; il testo inviato non supera il limite dei caricamenti, 10 MB), `saved_by`, `saved_at`, `entity_version`; una bozza per bersaglio |
 | `score_edit_lock` | tipo e identificativo del bersaglio, `owner`, `owner_name`, `acquired_at`, `heartbeat_at`, `expires_at`; univoco per bersaglio |
-| `score_engraving_job` | `id`, `sheet_music_id`, `score_version_id`, `options_json`, `status`, `attempts`, `error_code`, `pdf_media_asset_id`, `page_count`, audit |
-| `sheet_music` (esistente) | `engraved_from_version_id` facoltativo: versione da cui derivano le pagine generate |
+| `score_engraving_job` | `id`, `sheet_music_id`, `track_id`, `score_version_id`, `options_json`, `status`, `attempts`, `requested_by`, `started_at`, `finished_at`, `error_code`, `engine_version`, `duration_millis`, `page_count`, `pdf_media_asset_id`, `applied_at`, `applied_sheet_music_id`, `entity_version`, audit; un solo job in coda o in corso per parte |
+| `score_engraving_page` | `job_id`, `page_index`, `media_asset_id`: pagine di un job non ancora assegnate |
+| `sheet_music` (esistente) | `engraved_from_version_id` facoltativo: versione da cui derivano le pagine generate; `engraved_pages_fingerprint`: impronta delle pagine assegnate, presente con la versione |
 | `instrument` (esistente) | `lowest_written_pitch`, `highest_written_pitch`: estensione scritta come numeri di nota MIDI, facoltativi, proposti dal catalogo di riferimento come suono e trasposizione; `ensemble_position` facoltativo: posizione nell'[organico della banda](#organico-della-banda) |
-| `track` (esistente) | `arranger` facoltativo, come `composer`: mostrato nel dettaglio della traccia e nell'intestazione delle pagine |
+| `track` (esistente) | `arranger` facoltativo, già presente accanto a `composer`: mostrato nel dettaglio della traccia e proposto nell'intestazione delle pagine |
 
-Pagine e PDF generati sono media delle categorie esistenti; `MediaRepository.isUnreferenced` aggiunge i riferimenti dei job e delle partiture. La funzionalità `SCORE_WRITING` richiede una colonna del flag nel registro dei tenant, come le altre funzionalità.
+Pagine e PDF generati sono media della categoria delle parti (`scores`); `MediaRepository.isUnreferenced` aggiunge i riferimenti dei job, PDF e pagine non assegnate, e con la [partitura](#piano-di-implementazione) quelli delle sue versioni. La pulizia delle versioni non elimina una versione da cui derivano le pagine di una parte, né una con un'impaginazione in coda, in corso o non assegnata. La funzionalità `SCORE_WRITING` richiede una colonna del flag nel registro dei tenant, come le altre funzionalità.
 
 ## API REST
 
@@ -340,14 +375,18 @@ Sotto `/api/tracks/{trackId}`, per super amministratore, amministratore e archiv
 | `GET`, `POST /arrangements`, `GET /arrangements/{id}/versions` | partiture della traccia e loro versioni |
 | `POST /arrangements/{id}/versions/{versionId}/extract` | estrazione delle parti, con la corrispondenza confermata |
 | `GET`, `PUT`, `DELETE /arrangements/{id}/draft`, `.../edit-lock` | bozza e blocco della partitura |
-| `POST /scores/{scoreId}/score-versions/{versionId}/engravings` | avvia l'impaginazione; `GET` ne legge lo stato |
-| `GET /scores/{scoreId}/score-versions/{versionId}/file` (esistente) | scaricamento del MusicXML; nuovo parametro `format=midi\|pdf` |
+| `POST /scores/{scoreId}/score-versions/{versionId}/engravings` | avvia l'impaginazione con le opzioni, tutte facoltative, e risponde 202 con il job; `GET` legge l'ultimo job della versione, 204 se non ce ne sono |
+| `POST /scores/{scoreId}/score-versions/{versionId}/engravings/{jobId}/apply` | assegna le pagine del job: `target` `REPLACE`, al posto delle pagine della parte, o `NEW_PART`, e `trackVersion` facoltativa; restituisce la parte e la nuova versione della traccia |
+| `GET /scores/{scoreId}/score-versions/{versionId}/engravings/pdf` | scaricamento del PDF dell'ultima impaginazione della versione |
+| `GET /scores/{scoreId}/score-versions/{versionId}/file` (esistente) | scaricamento del MusicXML; nuovo parametro `format=midi` con le parti ricavate |
 
 L'organico si salva con `PUT /api/instruments/ensemble`, che riceve l'elenco ordinato degli strumenti che ne fanno parte, per chi gestisce gli strumenti; `GET /api/instruments/ensemble/reference` restituisce l'ordine di riferimento proposto, senza salvarlo.
 
 Il blocco di una parte (`/scores/{scoreId}/edit-lock`) richiede solo l'ascolto (`SCORE_PLAYBACK`), perché lo usa anche l'editor di correzione; con `SCORE_WRITING` disattivata restano disponibili solo il blocco e il salvataggio delle correzioni.
 
-Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriting.locked` (409, con nome e ora di chi scrive; anche per bozze e versioni inviate senza il blocco), `scoreWriting.draftOutdated` (409), `scoreWriting.instrumentNotFound` (400, per uno strumento inesistente nella parte scritta da zero), `scoreWriting.instrumentNotConfigured` (422, per l'estrazione), `scoreWriting.engravingUnavailable` (503). Una parte scritta da zero su una traccia modificata nel frattempo riceve `version.conflict` (409).
+Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriting.locked` (409, con nome e ora di chi scrive; anche per bozze e versioni inviate senza il blocco), `scoreWriting.draftOutdated` (409), `scoreWriting.instrumentNotFound` (400, per uno strumento inesistente nella parte scritta da zero), `scoreWriting.instrumentNotConfigured` (422, per l'estrazione), `scoreWriting.engravingUnavailable` (503, senza servizio musicale), `scoreWriting.engravingOptionsInvalid` (400, con `field`), `scoreWriting.engravingRunning` (409, un'impaginazione della parte è già in coda o in corso), `scoreWriting.engravingNotFound` (404), `scoreWriting.engravingNotReady` (409, job non terminato, già assegnato o con le pagine ormai sostituite). Una parte scritta da zero, o un'assegnazione di pagine, su una traccia modificata nel frattempo riceve `version.conflict` (409).
+
+Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOptions`, `tooManyPages`, `tooLarge`, `engineFailed`, `engineTimeout`, `serviceUnavailable` quando non risponde) o del backend (`versionNotFound` per una versione o una parte eliminata nel frattempo, `interrupted`, `unexpected`); un risultato senza pagine o con un numero di pagine diverso da quello dichiarato vale `engineFailed`.
 
 ## Autorizzazioni e isolamento tenant
 
@@ -357,7 +396,7 @@ Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriti
 
 ## Osservabilità e sicurezza
 
-- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` e la durata dell'impaginazione.
+- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` (`done` o il codice dell'errore), la durata dell'impaginazione (`taurus.score.engraving.duration`) e `taurus.score.engravings.applied{target}` (`replace`, `newPart`).
 - Log con identificativi di parte, partitura, versione e job; mai il contenuto MusicXML.
 - Gli stessi limiti di sicurezza dei file MusicXML caricati (entità e DTD disattivate, limiti di dimensione); bozze entro lo stesso limite dei caricamenti (`application.score-playback.max-upload-bytes`, 10 MB di MusicXML non compresso) e al più un salvataggio ogni due secondi per bozza (`application.score-writing.draft-min-interval`), che una sola finestra alla volta può scrivere perché serve il blocco.
 - Il servizio musicale resta sulla rete interna con la chiave condivisa; l'impaginazione ha un tempo massimo come il riconoscimento.
@@ -377,11 +416,11 @@ Le misure seguono il metodo della [fase 4 dell'ascolto](track-score-playback-spe
 
 ## Strategia di test
 
-- **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura.
+- **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura; preparazione dell'MEI, opzioni, sezioni e numeri di pagina dell'impaginazione, dialogo con il job simulato, parti da impaginare nella scheda Ascolto, nel Workspace Parti, nell'anteprima e nel programma dell'evento, stampa della scaletta per strumento e nel formato marcia.
 - **Validità**: ogni documento prodotto dai test viene validato contro lo schema XSD di MusicXML 4.0; un campione si apre in MuseScore durante la verifica manuale.
 - **Andata e ritorno**: scrivere, salvare, riaprire e scaricare produce lo stesso MusicXML, senza attributi di lavoro.
-- **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, bozze e versioni scritte o corrette rifiutate senza il blocco, estrazione con trasposizione per rigo e strumenti non configurati, derivazione rifiutata per parti con più strumenti, job di impaginazione con il servizio simulato, autorizzazioni e isolamento tenant.
-- **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend.
+- **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, bozze e versioni scritte o corrette rifiutate senza il blocco, estrazione con trasposizione per rigo e strumenti non configurati, derivazione rifiutata per parti con più strumenti, job di impaginazione con il servizio simulato, parti da impaginare nel programma e nella criticità degli spartiti della preparazione degli eventi, autorizzazioni e isolamento tenant.
+- **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend. I test che disegnano richiedono la libreria Cairo, installata dalla CI, che con `TAURUS_OMR_REQUIRE_CAIRO=true` li fa fallire invece di saltarli se manca; la pagina di riferimento si confronta a un quarto della dimensione, perché contino l'impaginazione e non le sfumature dei bordi.
 - **Prestazioni**: misure ripetibili del disegno su parti e partiture grandi.
 - **Manuale**: prove con archivisti su parti reali, tempo per scrivere una parte di una pagina, uso su tablet, tastiera MIDI reale su Chrome, Edge e Firefox.
 
@@ -400,6 +439,7 @@ Le misure seguono il metodo della [fase 4 dell'ascolto](track-score-playback-spe
 - [ ] Una partitura di 30 parti si scrive senza ritardi percepibili e si estrae in parti trasposte per strumento.
 - [ ] Una parte scritta si impagina in A4 e nel formato marcia, compare in anteprima e si stampa come le parti dei PDF.
 - [ ] Prima dell'impaginazione la parte è «da impaginare» nel workspace, in anteprima e in stampa, che la esclude e la conta nel riepilogo; il socio la legge e la ascolta nella scheda Ascolto.
+- [ ] Dalla preparazione di un evento la scaletta si stampa per strumento nel formato marcia, due pagine di 18 × 13 cm per foglio A4, e le parti da impaginare sono indicate nel programma e nella criticità degli spartiti.
 - [ ] Una partitura nuova segue l'ordine dell'organico, e la stampa ordina le parti allo stesso modo; senza organico la stampa non cambia.
 - [ ] Il MusicXML scaricato si apre in MuseScore senza avvisi.
 - [ ] Nessun dato di un tenant è accessibile da un altro tenant.
@@ -465,7 +505,7 @@ Le proposte della prima bozza, approvate nella seconda revisione. Ognuna si dett
 
 - **Organico della banda per tenant** (fase 4): un modello con gli strumenti e l'ordine in partitura, usato per le nuove partiture e per ordinare le parti in stampa; descritto in [Organico della banda](#organico-della-banda).
 - **Confronto tra versioni** (fase 5): una vista che evidenzia le battute diverse tra due versioni, riusando il confronto per battute già scritto per l'[accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori); utile per rivedere correzioni, estrazioni e approvazioni.
-- **Parti di studio** (fase 2): l'ascolto della propria parte con le altre attenuate e il tempo rallentato è già possibile con il lettore; si aggiunge la stampa con le battute numerate a ogni rigo, come opzione dell'impaginazione.
+- **Parti di studio** (fase 2): l'ascolto della propria parte con le altre attenuate e il tempo rallentato è già possibile con il lettore; si aggiunge la stampa con le battute numerate, come opzione dell'impaginazione. Verovio numera già la prima battuta di ogni rigo, che diventa il valore proposto per tutte le parti; per le parti di studio l'opzione **Su ogni battuta** numera ogni battuta.
 - **Frammenti riutilizzabili** (fase 5): introduzioni, marce d'ordinanza, segnali e rulli di tamburo salvati una volta e inseriti nelle parti.
-- **Impaginazione per l'evento** (fase 2): dalla preparazione di un evento, la stampa di tutte le parti di una scaletta già impaginate per strumento, nel formato marcia.
+- **Impaginazione per l'evento** (fase 2): dalla preparazione di un evento, la stampa di tutte le parti di una scaletta già impaginate per strumento, nel formato marcia; descritta in [Stampa della scaletta](#stampa-della-scaletta).
 - **Raccolta dai riconoscimenti** (fase 5): le battute che gli archivisti correggono più spesso indicano i difetti dei motori e possono diventare nuove parti del corpus di accuratezza.

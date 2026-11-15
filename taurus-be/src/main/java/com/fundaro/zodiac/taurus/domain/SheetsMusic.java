@@ -65,6 +65,14 @@ public class SheetsMusic extends AuditFields implements Serializable {
     @Column(name = "sound_program_override")
     private Integer soundProgramOverride;
 
+    /** Version the pages were engraved from; it holds only while the pages match {@link #engravedPagesFingerprint}. */
+    @Column(name = "engraved_from_version_id")
+    private Long engravedFromVersionId;
+
+    /** Fingerprint of the engraved pages, to tell when the pages were changed in another way. */
+    @Column(name = "engraved_pages_fingerprint")
+    private String engravedPagesFingerprint;
+
     public String getDescription() {
         return description;
     }
@@ -139,6 +147,22 @@ public class SheetsMusic extends AuditFields implements Serializable {
 
     public void setSoundProgramOverride(Integer soundProgramOverride) {
         this.soundProgramOverride = soundProgramOverride;
+    }
+
+    public Long getEngravedFromVersionId() {
+        return engravedFromVersionId;
+    }
+
+    public void setEngravedFromVersionId(Long engravedFromVersionId) {
+        this.engravedFromVersionId = engravedFromVersionId;
+    }
+
+    public String getEngravedPagesFingerprint() {
+        return engravedPagesFingerprint;
+    }
+
+    public void setEngravedPagesFingerprint(String engravedPagesFingerprint) {
+        this.engravedPagesFingerprint = engravedPagesFingerprint;
     }
 
     public void setNeedsReview(Boolean needsReview) {

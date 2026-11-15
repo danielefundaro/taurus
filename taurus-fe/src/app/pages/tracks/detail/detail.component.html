@@ -90,7 +90,8 @@
                         }
                         <app-score-workspace [scores]="track.scores ?? []" [baseline]="baselineScores"
                             [instruments]="instruments" [readOnly]="isUser" [saving]="saving" [trackDirty]="isDirty"
-                            [suggestionPartIds]="suggestionPartIds"
+                            [suggestionPartIds]="suggestionPartIds" [canEngrave]="canEngrave"
+                            (engraveRequested)="engravePart($event)"
                             (scoresChange)="onScoresChange($event)" (dirtyChange)="onScoresDirtyChange($event)"
                             (imageEdit)="openImageEditor($event)" (uxEvent)="onUxEvent($event)"
                             (pdfRequested)="openPdfTab()" />
@@ -103,6 +104,7 @@
                         description="Ascolta le singole parti o la partitura intera. Le impostazioni dell'ascolto si salvano subito, separatamente dalla traccia.">
                         @if (activeTab === 'playback' && track.id) {
                         <app-score-playback-panel [trackId]="track.id" [trackDirty]="isDirty"
+                            [composer]="track.composer" [arranger]="track.arranger"
                             (trackVersionChange)="onTrackVersionChange($event)" (partsChange)="reloadTrack()" />
                         }
                     </app-detail-section>

@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Le code di scarto dei due consumatori. Un messaggio che il consumatore rifiuta non torna in coda:
+ * Le code di scarto dei consumatori. Un messaggio che il consumatore rifiuta non torna in coda:
  * finisce qui, una volta, invece di essere riconsegnato senza fine.
  *
  * <p>La riconsegna non serve come tentativo successivo, perché in entrambe le pipeline la tabella
@@ -34,6 +34,8 @@ public class DeadLetterQueueConfiguration {
 
     public static final String SCORE_RECOGNITION_DEAD_LETTER_QUEUE = ScoreRecognitionQueueConfiguration.QUEUE + ".dead";
 
+    public static final String SCORE_ENGRAVING_DEAD_LETTER_QUEUE = ScoreEngravingQueueConfiguration.QUEUE + ".dead";
+
     /** Gli argomenti che legano una coda di lavoro alla sua coda di scarto. */
     public static Queue workQueue(String name) {
         return QueueBuilder.durable(name)
@@ -51,11 +53,14 @@ public class DeadLetterQueueConfiguration {
     public Declarables deadLetterQueues(DirectExchange deadLetterExchange) {
         Queue uploads = QueueBuilder.durable(UPLOAD_FILES_DEAD_LETTER_QUEUE).build();
         Queue recognitions = QueueBuilder.durable(SCORE_RECOGNITION_DEAD_LETTER_QUEUE).build();
+        Queue engravings = QueueBuilder.durable(SCORE_ENGRAVING_DEAD_LETTER_QUEUE).build();
         return new Declarables(
             uploads,
             recognitions,
+            engravings,
             bind(uploads, deadLetterExchange, RabbitMQConfig.queueNameListener),
-            bind(recognitions, deadLetterExchange, ScoreRecognitionQueueConfiguration.QUEUE)
+            bind(recognitions, deadLetterExchange, ScoreRecognitionQueueConfiguration.QUEUE),
+            bind(engravings, deadLetterExchange, ScoreEngravingQueueConfiguration.QUEUE)
         );
     }
 

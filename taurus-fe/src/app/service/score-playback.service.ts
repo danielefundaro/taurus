@@ -3,7 +3,23 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 import { RoleEnums } from '../constants';
-import { ErrorReport, ErrorReportRequest, InstrumentPlaybackSuggestion, MusicXmlPart, PartPlaybackSettings, RecognitionJob, ScoreCorrection, ScoreEditorData, ScoreVersion, TrackPlayback, TrackPlaybackSettings } from '../module';
+import {
+    EngravingApplied,
+    EngravingJob,
+    EngravingOptions,
+    EngravingTarget,
+    ErrorReport,
+    ErrorReportRequest,
+    InstrumentPlaybackSuggestion,
+    MusicXmlPart,
+    PartPlaybackSettings,
+    RecognitionJob,
+    ScoreCorrection,
+    ScoreEditorData,
+    ScoreVersion,
+    TrackPlayback,
+    TrackPlaybackSettings
+} from '../module';
 import { KeycloakService } from './keycloak.service';
 
 /**
@@ -87,6 +103,26 @@ export class ScorePlaybackService {
         return this.http.post<ScoreVersion>(`${this.manageBase(trackId)}/scores/${scoreId}/score-versions`, correction, { context });
     }
 
+    /** Avvia l'impaginazione di una versione in pagine e PDF. */
+    engrave(trackId: number, scoreId: number, versionId: number, options: EngravingOptions, context?: HttpContext): Observable<EngravingJob> {
+        return this.http.post<EngravingJob>(this.engravings(trackId, scoreId, versionId), options, { context });
+    }
+
+    /** Ultima impaginazione della versione; `null` se non ce ne sono. */
+    engraving(trackId: number, scoreId: number, versionId: number): Observable<EngravingJob | null> {
+        return this.http.get<EngravingJob | null>(this.engravings(trackId, scoreId, versionId));
+    }
+
+    /** Assegna le pagine di un'impaginazione terminata, al posto di quelle della parte o in una parte nuova. */
+    applyEngraving(trackId: number, scoreId: number, versionId: number, jobId: number, target: EngravingTarget, trackVersion: number | null, context?: HttpContext): Observable<EngravingApplied> {
+        return this.http.post<EngravingApplied>(`${this.engravings(trackId, scoreId, versionId)}/${jobId}/apply`, { target, trackVersion }, { context });
+    }
+
+    /** PDF dell'ultima impaginazione della versione. */
+    engravingPdf(trackId: number, scoreId: number, versionId: number): Observable<Blob> {
+        return this.http.get(`${this.engravings(trackId, scoreId, versionId)}/pdf`, { responseType: 'blob' });
+    }
+
     /** Segnala un errore sentito nella versione ascoltata per la parte. */
     reportError(trackId: number, scoreId: number, report: ErrorReportRequest, context?: HttpContext): Observable<void> {
         return this.http.post<void>(`${this.readBase(trackId)}/scores/${scoreId}/error-reports`, report, { context });
@@ -115,6 +151,10 @@ export class ScorePlaybackService {
         if (role === RoleEnums.USER_EXTERNAL) return `${this.baseUrl}/external/tracks/${trackId}`;
         if (role === RoleEnums.USER) return `${this.baseUrl}/user/tracks/${trackId}`;
         return this.manageBase(trackId);
+    }
+
+    private engravings(trackId: number, scoreId: number, versionId: number): string {
+        return `${this.manageBase(trackId)}/scores/${scoreId}/score-versions/${versionId}/engravings`;
     }
 
     private manageBase(trackId: number): string {

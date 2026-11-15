@@ -1,5 +1,6 @@
 import { fakeAsync, tick } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
+import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { PartPlayback, PlaybackSound, RecognitionJob, TrackPlayback } from '../../../../module';
@@ -60,9 +61,9 @@ describe('ScorePlaybackPanelComponent', () => {
 describe('ScorePlaybackPanelComponent writing', () => {
     const version = { id: 7, versionNumber: 2, status: 'UNVERIFIED' as const, origin: 'OMR_AUDIVERIS' as const, measureCount: 8, checks: null as never, pagesChanged: false };
 
-    function setup(parts: PartPlayback[], { canManage = true, writing = true } = {}) {
+    function setup(parts: PartPlayback[], { canManage = true, writing = true, recognitionAvailable = true } = {}) {
         const closes: Subject<unknown>[] = [];
-        const service = { canManage, playback: jasmine.createSpy().and.returnValue(of(playback(parts))) };
+        const service = { canManage, playback: jasmine.createSpy().and.returnValue(of(playback(parts, recognitionAvailable))) };
         const dialogs = {
             open: jasmine.createSpy('open').and.callFake(() => {
                 const onClose = new Subject<unknown>();
@@ -154,6 +155,99 @@ describe('ScorePlaybackPanelComponent writing', () => {
         expect(drafts.discard).toHaveBeenCalledWith(5, 1);
         expect(toast.success).toHaveBeenCalledWith('Bozza scartata', jasmine.any(String));
         expect(service.playback).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('ScorePlaybackPanelComponent engraving', () => {
+    const version = { id: 7, versionNumber: 2, status: 'APPROVED' as const, origin: 'WRITING' as const, measureCount: 8, checks: null as never, pagesChanged: false };
+
+    function setup(parts: PartPlayback[], { writing = true, recognitionAvailable = true } = {}) {
+        const closes: Subject<unknown>[] = [];
+        const service = { canManage: true, playback: jasmine.createSpy().and.returnValue(of(playback(parts, recognitionAvailable))) };
+        const dialogs = {
+            open: jasmine.createSpy('open').and.callFake(() => {
+                const onClose = new Subject<unknown>();
+                closes.push(onClose);
+                return { onClose };
+            })
+        };
+        const component: any = new ScorePlaybackPanelComponent(service as never, dialogs as never, jasmine.createSpyObj('ToastService', ['success']), null!, null!, { scoreWritingEnabled: () => writing } as never);
+        component.trackId = 5;
+        component.composer = 'G. Gabetti';
+        component.arranger = null;
+        component.reload();
+        const close = (result?: unknown): void => {
+            const onClose = closes[closes.length - 1];
+            onClose.next(result);
+            onClose.complete();
+        };
+        const opened = () => ({ component: dialogs.open.calls.mostRecent().args[0], data: dialogs.open.calls.mostRecent().args[1].data });
+        return { component, service, dialogs, close, opened };
+    }
+
+    it('engraves with the writing on and the music service configured', () => {
+        expect(setup([]).component.canEngrave).toBeTrue();
+        expect(setup([], { writing: false }).component.canEngrave).toBeFalse();
+        expect(setup([], { recognitionAvailable: false }).component.canEngrave).toBeFalse();
+    });
+
+    it('marks the parts to engrave and those with pages of an older version', () => {
+        const { component } = setup([]);
+        expect(component.toEngrave(part({}, { version, hasPages: false }))).toBeTrue();
+        expect(component.toEngrave(part({}, { version: null, hasPages: false }))).toBeFalse();
+        expect(component.toEngrave(part({}, { version }))).toBeFalse();
+        expect(component.engravingOutdated(part({}, { version, engravedFromVersionId: 6 }))).toBeTrue();
+        expect(component.engravingOutdated(part({}, { version, engravedFromVersionId: 7 }))).toBeFalse();
+        expect(component.engravingOutdated(part({}, { version, engravedFromVersionId: null }))).toBeFalse();
+    });
+
+    it('engraves the current version with the header of the track and reloads the parts once the pages are assigned', () => {
+        const written = part({}, { version, hasPages: false, description: 'Flicorno I' });
+        const { component, service, close, opened } = setup([written]);
+        const versions: number[] = [];
+        let partsChanged = 0;
+        component.trackVersionChange.subscribe((value: number) => versions.push(value));
+        component.partsChange.subscribe(() => partsChanged++);
+
+        component.engrave(written);
+        expect(opened().component).toBe(EngraveDialogComponent);
+        expect(opened().data).toEqual({
+            trackId: 5,
+            scoreId: 1,
+            versionId: 7,
+            versionNumber: 2,
+            partLabel: 'Flicorno I',
+            header: { title: 'Marcia', composer: 'G. Gabetti', arranger: '', partName: 'Flicorno I' },
+            hasPages: false,
+            trackVersion: 2
+        });
+        close();
+        expect(service.playback).toHaveBeenCalledTimes(1);
+
+        component.engrave(written);
+        close({ scoreId: 1, trackVersion: 3, target: 'REPLACE' });
+        expect(versions).toEqual([3]);
+        expect(partsChanged).toBe(1);
+        expect(service.playback).toHaveBeenCalledTimes(2);
+    });
+
+    it('engraves the version the writing editor asks for, after reading the parts again', () => {
+        const written = part({}, { version, hasPages: false });
+        const { component, service, close, opened } = setup([written]);
+
+        component.write(written);
+        expect(opened().data).toEqual(jasmine.objectContaining({ engravable: true }));
+        close({ engraveVersionId: 7 });
+
+        expect(service.playback).toHaveBeenCalledTimes(2);
+        expect(opened().component).toBe(EngraveDialogComponent);
+        expect(opened().data).toEqual(jasmine.objectContaining({ scoreId: 1, versionId: 7, versionNumber: 2 }));
+    });
+
+    it('does not engrave a part without a version', () => {
+        const { component, dialogs } = setup([]);
+        component.engrave(part({}, { version: null }));
+        expect(dialogs.open).not.toHaveBeenCalled();
     });
 });
 

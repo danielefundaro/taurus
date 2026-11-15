@@ -372,10 +372,12 @@ final class EventPreparationEvaluator {
         if (parts.isEmpty()) return "La traccia non ha spartiti";
         long review = parts.stream().filter(Score::needsReview).count();
         long withoutInstruments = parts.stream().filter(part -> part.instruments().isEmpty()).count();
-        long withoutFiles = parts.stream().filter(part -> part.readyFiles().isEmpty()).count();
+        long unengraved = parts.stream().filter(Score::unengraved).count();
+        long withoutFiles = parts.stream().filter(part -> !part.unengraved() && part.readyFiles().isEmpty()).count();
         List<String> reasons = new ArrayList<>();
         if (review > 0) reasons.add(review + " in revisione");
         if (withoutInstruments > 0) reasons.add(withoutInstruments + " senza strumenti");
+        if (unengraved > 0) reasons.add(unengraved + " da impaginare");
         if (withoutFiles > 0) reasons.add(withoutFiles + " senza file pronti");
         return "Nessuno spartito pronto: " + String.join(", ", reasons);
     }

@@ -100,7 +100,8 @@ class EventPreparationLoader {
         Map<Long, Map<Long, ScoreBuilder>> byTrack = new LinkedHashMap<>();
         for (Object[] row : preparations.findScores(trackIds, MediaAssetStatus.READY)) {
             ScoreBuilder score = byTrack.computeIfAbsent((Long) row[0], key -> new LinkedHashMap<>())
-                .computeIfAbsent((Long) row[1], key -> new ScoreBuilder((Long) row[1], (String) row[2], Boolean.TRUE.equals(row[3])));
+                .computeIfAbsent((Long) row[1], key -> new ScoreBuilder((Long) row[1], (String) row[2], Boolean.TRUE.equals(row[3]),
+                    row[8] != null && ((Number) row[9]).intValue() == 0));
             if (row[4] != null) score.instruments.putIfAbsent((Long) row[4], (String) row[5]);
             if (row[6] != null) score.files.putIfAbsent((Long) row[6], new File((Long) row[6], (String) row[7]));
         }
@@ -156,17 +157,19 @@ class EventPreparationLoader {
         private final Long id;
         private final String description;
         private final boolean needsReview;
+        private final boolean unengraved;
         private final Map<Long, String> instruments = new LinkedHashMap<>();
         private final Map<Long, File> files = new LinkedHashMap<>();
 
-        private ScoreBuilder(Long id, String description, boolean needsReview) {
+        private ScoreBuilder(Long id, String description, boolean needsReview, boolean unengraved) {
             this.id = id;
             this.description = description;
             this.needsReview = needsReview;
+            this.unengraved = unengraved;
         }
 
         private Score build() {
-            return new Score(id, description, needsReview, Collections.unmodifiableMap(instruments), List.copyOf(files.values()));
+            return new Score(id, description, needsReview, unengraved, Collections.unmodifiableMap(instruments), List.copyOf(files.values()));
         }
     }
 }

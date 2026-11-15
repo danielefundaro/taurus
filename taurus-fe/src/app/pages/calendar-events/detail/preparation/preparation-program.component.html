@@ -54,6 +54,12 @@
     }
 
     @if (rows.length) {
+    <div class="flex justify-end">
+        <span [pTooltip]="printHint" tooltipPosition="left">
+            <p-button label="Stampa la scaletta" icon="pi pi-print" severity="secondary" outlined
+                [disabled]="dirty || !printablePages" (onClick)="printProgram()" />
+        </span>
+    </div>
     <ol class="preparation-program list-none p-0 m-0 flex flex-col gap-3" cdkDropList
         [cdkDropListDisabled]="!editable" (cdkDropListDropped)="drop($event)" aria-label="Scaletta dell’evento">
         @for (row of rows; track row.key; let i = $index; let last = $last) {
@@ -145,6 +151,10 @@
                             <div class="flex flex-wrap items-center gap-2">
                                 <strong class="text-sm">{{ score.description || 'Parte senza descrizione' }}</strong>
                                 <p-tag [value]="scoreState(score).label" [severity]="scoreState(score).severity" />
+                                @if (editable && score.unengraved && row.trackAvailable) {
+                                <a class="text-primary text-sm" [routerLink]="['/tracks', row.trackId]" [queryParams]="{ tab: 'playback' }"
+                                    [attr.aria-label]="'Impagina ' + (score.description || 'la parte') + ' nella scheda Ascolto della traccia'">Impagina</a>
+                                }
                             </div>
                             <small class="block text-muted-color">{{ score.instruments.length ?
                                 score.instruments.join(', ') : 'Nessuno strumento indicato' }}</small>

@@ -1119,6 +1119,9 @@ public class ApplicationProperties {
         @NotNull
         private Duration draftMinInterval = Duration.ofSeconds(2);
 
+        @Valid
+        private EngravingJobProperties engraving = new EngravingJobProperties();
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -1143,9 +1146,97 @@ public class ApplicationProperties {
             draftMinInterval = value;
         }
 
+        public EngravingJobProperties getEngraving() {
+            return engraving;
+        }
+
+        public void setEngraving(EngravingJobProperties value) {
+            engraving = value;
+        }
+
         @AssertTrue(message = "lock-timeout must be longer than one minute")
         public boolean isLockTimeoutValid() {
             return lockTimeout != null && lockTimeout.compareTo(Duration.ofMinutes(1)) > 0;
+        }
+    }
+
+    /** The engraving jobs of the writing editor, run with the music service configured in {@code application.omr}. */
+    public static class EngravingJobProperties {
+
+        /** Longest wait for one engraving, the wait for a slot of the service included. */
+        @NotNull
+        private Duration timeout = Duration.ofMinutes(3);
+
+        /** Engraving jobs run at the same time by this backend instance. */
+        @Min(1)
+        @Max(4)
+        private int concurrency = 1;
+
+        /** A running job not finished after this time is queued again, at most {@code maxAttempts} times in total. */
+        @NotNull
+        private Duration staleAfter = Duration.ofMinutes(10);
+
+        @Min(1)
+        private int maxAttempts = 3;
+
+        /** Pages and PDF of a finished engraving never assigned to a part are released after this time. */
+        @NotNull
+        private Duration unappliedRetention = Duration.ofDays(7);
+
+        /** Requeues interrupted jobs and republishes lost messages; disabled in tests that drive jobs by hand. */
+        private boolean recoveryEnabled = true;
+
+        public Duration getTimeout() {
+            return timeout;
+        }
+
+        public void setTimeout(Duration value) {
+            timeout = value;
+        }
+
+        public int getConcurrency() {
+            return concurrency;
+        }
+
+        public void setConcurrency(int value) {
+            concurrency = value;
+        }
+
+        public Duration getStaleAfter() {
+            return staleAfter;
+        }
+
+        public void setStaleAfter(Duration value) {
+            staleAfter = value;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int value) {
+            maxAttempts = value;
+        }
+
+        public Duration getUnappliedRetention() {
+            return unappliedRetention;
+        }
+
+        public void setUnappliedRetention(Duration value) {
+            unappliedRetention = value;
+        }
+
+        public boolean isRecoveryEnabled() {
+            return recoveryEnabled;
+        }
+
+        public void setRecoveryEnabled(boolean value) {
+            recoveryEnabled = value;
+        }
+
+        @AssertTrue(message = "stale-after must be longer than the engraving timeout")
+        public boolean isStaleAfterValid() {
+            return staleAfter != null && timeout != null && staleAfter.compareTo(timeout) > 0;
         }
     }
 

@@ -7,6 +7,7 @@ import com.fundaro.zodiac.taurus.repository.TenantsRepository;
 import com.fundaro.zodiac.taurus.service.TenantFeatureService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreDraftService;
 import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEditLockService;
+import com.fundaro.zodiac.taurus.service.scorewriting.ScoreEngravingService;
 import com.fundaro.zodiac.taurus.service.scorewriting.WrittenPartService;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import org.junit.jupiter.api.Test;
@@ -28,8 +29,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * The edit lock serves the correction editor too and needs only score playback; drafts and written parts need the
- * writing editor, which in turn needs score playback and its installation.
+ * The edit lock serves the correction editor too and needs only score playback; drafts, written parts and engravings
+ * need the writing editor, which in turn needs score playback and its installation.
  */
 class ScoreWritingResourceFeatureTest {
 
@@ -39,7 +40,8 @@ class ScoreWritingResourceFeatureTest {
     private final ScoreWritingResource resource = new ScoreWritingResource(
         mock(ScoreEditLockService.class),
         mock(ScoreDraftService.class),
-        mock(WrittenPartService.class)
+        mock(WrittenPartService.class),
+        mock(ScoreEngravingService.class)
     );
 
     @Test
@@ -55,7 +57,19 @@ class ScoreWritingResourceFeatureTest {
             .filter(method -> AnnotatedElementUtils.hasAnnotation(method, RequestMapping.class))
             .toList();
         assertThat(endpoints).extracting(Method::getName)
-            .containsExactlyInAnyOrder("acquireLock", "renewLock", "releaseLock", "draft", "saveDraft", "discardDraft", "createWrittenPart");
+            .containsExactlyInAnyOrder(
+                "acquireLock",
+                "renewLock",
+                "releaseLock",
+                "draft",
+                "saveDraft",
+                "discardDraft",
+                "createWrittenPart",
+                "startEngraving",
+                "engraving",
+                "applyEngraving",
+                "engravingPdf"
+            );
 
         for (Method endpoint : endpoints) {
             HandlerMethod handler = new HandlerMethod(resource, endpoint);

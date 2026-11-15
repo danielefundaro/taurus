@@ -138,6 +138,11 @@ export interface PartPlayback {
     editing?: EditLock | null;
     /** Bozza dell'editor di scrittura, solo per archivisti e amministratori. */
     draft?: DraftSummary | null;
+    /**
+     * Versione da cui sono state impaginate le pagine della parte, solo per archivisti e amministratori; `null` se le
+     * pagine non vengono da un'impaginazione o sono cambiate dopo.
+     */
+    engravedFromVersionId?: number | null;
 }
 
 /** Blocco di una parte: un solo autore alla volta, nell'editor di scrittura o di correzione. */
@@ -169,6 +174,61 @@ export interface ScoreDraft {
     entityVersion: number;
     /** Dopo l'inizio della scrittura è stata salvata un'altra versione della parte. */
     outdated: boolean;
+}
+
+/** Formato della pagina impaginata: A4 verticale, A4 orizzontale o formato marcia di 18 × 13 cm. */
+export type EngravingFormat = 'A4_PORTRAIT' | 'A4_LANDSCAPE' | 'MARCH';
+/** Numeri di battuta: all'inizio di ogni rigo, su ogni battuta (parti di studio) o nessuno. */
+export type MeasureNumbers = 'SYSTEM' | 'EVERY' | 'NONE';
+export type EngravingJobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
+/** Dove vanno le pagine impaginate: al posto di quelle della parte o in una parte nuova. */
+export type EngravingTarget = 'REPLACE' | 'NEW_PART';
+
+/** Testi dell'intestazione della prima pagina; quelli vuoti non compaiono. */
+export interface EngravingHeader {
+    title?: string | null;
+    composer?: string | null;
+    arranger?: string | null;
+    partName?: string | null;
+}
+
+/** Opzioni dell'impaginazione; quelle vuote prendono i valori proposti per il formato. */
+export interface EngravingOptions {
+    format?: EngravingFormat | null;
+    /** Altezza del rigo in millimetri, da 4 a 9,6. */
+    staffSize?: number | null;
+    /** Margini in millimetri, da 3 a 30. */
+    margin?: number | null;
+    header?: EngravingHeader | null;
+    pageNumbers?: boolean | null;
+    measureNumbers?: MeasureNumbers | null;
+}
+
+/** Impaginazione di una versione nel servizio musicale. */
+export interface EngravingJob {
+    id: number;
+    scoreId: number;
+    versionId: number;
+    status: EngravingJobStatus;
+    errorCode?: string | null;
+    attempts: number;
+    options: EngravingOptions;
+    pageCount?: number | null;
+    /** Pagine ancora da assegnare, in ordine; vuoto dopo l'assegnazione o quando sono state sostituite. */
+    pages: number[];
+    /** Il PDF si può scaricare. */
+    pdf: boolean;
+    requestedAt: string;
+    startedAt?: string | null;
+    finishedAt?: string | null;
+    appliedAt?: string | null;
+    appliedScoreId?: number | null;
+}
+
+/** Pagine assegnate: la parte che le ha ricevute e la nuova versione della traccia. */
+export interface EngravingApplied {
+    scoreId: number;
+    trackVersion: number;
 }
 
 /** Bozza salvata: la versione da inviare con il salvataggio successivo. */

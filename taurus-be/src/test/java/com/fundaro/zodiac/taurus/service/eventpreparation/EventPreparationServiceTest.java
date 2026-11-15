@@ -3,6 +3,7 @@ package com.fundaro.zodiac.taurus.service.eventpreparation;
 import static com.fundaro.zodiac.taurus.service.dto.eventpreparation.EventPreparationDtos.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -627,6 +628,25 @@ class EventPreparationServiceTest {
     }
 
     @Test
+    void writtenPartWithoutPagesIsToEngrave() {
+        CalendarEventPreparation plan = plan();
+        plan.setProgramRequired(true);
+        plan.setScoresRequired(true);
+        givenPlan(plan);
+        program(entry(track(7L, "Marcia", StateEnum.COMPLETE), 0));
+        // A written part without pages and one whose only page is still processing: only the first is to engrave.
+        scores(versionedScore(7L, 1L, "Tromba", 3L, "Tromba", 0), versionedScore(7L, 2L, "Clarinetto", 4L, "Clarinetto", 1));
+
+        View result = service.get(42L);
+
+        Issue issue = issue(result, "SCORE_NOT_READY");
+        assertThat(issue.details().get(0).message()).isEqualTo("Nessuno spartito pronto: 1 da impaginare, 1 senza file pronti");
+        assertThat(issue.details().get(0).action()).isEqualTo("/tracks/7");
+        assertThat(result.program().get(0).scores()).extracting(ProgramScore::unengraved, ProgramScore::ready, ProgramScore::instrumentIds)
+            .containsExactly(tuple(true, false, List.of(3L)), tuple(false, false, List.of(4L)));
+    }
+
+    @Test
     void uncoveredInstrumentIsOnlyInformation() {
         CalendarEventPreparation plan = plan();
         plan.setProgramRequired(true);
@@ -771,7 +791,12 @@ class EventPreparationServiceTest {
 
     private static Object[] score(Long trackId, Long scoreId, String description, boolean needsReview, Long instrumentId, String instrumentName, Long mediaId,
                                   String fileName) {
-        return new Object[]{trackId, scoreId, description, needsReview, instrumentId, instrumentName, mediaId, fileName};
+        return new Object[]{trackId, scoreId, description, needsReview, instrumentId, instrumentName, mediaId, fileName, null, mediaId == null ? 0 : 1};
+    }
+
+    /** A part with a current version: written or derived, it has pages only once it is engraved. */
+    private static Object[] versionedScore(Long trackId, Long scoreId, String description, Long instrumentId, String instrumentName, int pages) {
+        return new Object[]{trackId, scoreId, description, false, instrumentId, instrumentName, null, null, 90L + scoreId, pages};
     }
 
     private CalendarEventProgramEntry entry(Tracks track, int order) {

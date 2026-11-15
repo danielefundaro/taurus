@@ -114,7 +114,8 @@ public class ScorePlaybackService {
                 recognitions.containsKey(part.getId()) ? recognitionService.toDto(recognitions.get(part.getId())) : null,
                 openReports.getOrDefault(part.getId(), 0),
                 editing.get(part.getId()),
-                drafts.get(part.getId())
+                drafts.get(part.getId()),
+                viewer == Viewer.MANAGER ? ScorePlaybackSupport.engravedFromVersionId(part) : null
             ));
         }
         Long referenceScoreId = track.getScores().stream().anyMatch(part -> Objects.equals(part.getId(), track.getReferenceSheetMusicId()))

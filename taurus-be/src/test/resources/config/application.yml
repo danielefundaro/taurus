@@ -105,6 +105,9 @@ application:
   score-playback:
     omr:
       recovery-enabled: false
+  score-writing:
+    engraving:
+      recovery-enabled: false
 management:
   health:
     mail:

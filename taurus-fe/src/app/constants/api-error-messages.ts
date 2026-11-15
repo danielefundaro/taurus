@@ -128,6 +128,18 @@ const WRITING_PROBLEMS: Readonly<Record<string, string>> = {
     empty: 'La parte scritta è vuota'
 };
 
+/** Texts of the `field` of `scoreWriting.engravingOptionsInvalid`. */
+const HEADER_TOO_LONG = "I testi dell'intestazione non possono superare 200 caratteri";
+const ENGRAVING_OPTIONS: Readonly<Record<string, string>> = {
+    staffSize: 'La dimensione del rigo deve essere tra 4 e 9,6 mm',
+    margin: 'I margini devono essere tra 3 e 30 mm',
+    'header.title': HEADER_TOO_LONG,
+    'header.composer': HEADER_TOO_LONG,
+    'header.arranger': HEADER_TOO_LONG,
+    'header.partName': HEADER_TOO_LONG,
+    target: 'Scegliere se sostituire le pagine della parte o aggiungerle in una parte nuova'
+};
+
 /** Time of day of an ISO instant, as HH:mm in the time zone of the browser; empty when unreadable. */
 const timeOfDay = (value: ApiErrorArgValue): string => {
     const date = typeof value === 'string' ? new Date(value) : null;
@@ -640,6 +652,11 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'scoreWriting.draftConflict': "La bozza è stata modificata altrove: riaprire l'editor",
     'scoreWriting.draftOutdated': "Nel frattempo è stata salvata un'altra versione della parte: confermare per sostituirla",
     'scoreWriting.instrumentNotFound': 'Uno degli strumenti scelti non esiste più: ricaricare la pagina',
+    'scoreWriting.engravingUnavailable': 'Impaginazione non disponibile: il servizio musicale non è configurato',
+    'scoreWriting.engravingOptionsInvalid': (args) => ENGRAVING_OPTIONS[formatApiErrorValue(args['field'])] ?? 'Opzioni di impaginazione non valide',
+    'scoreWriting.engravingRunning': 'La parte è già in impaginazione: attendere che finisca',
+    'scoreWriting.engravingNotFound': 'Impaginazione non trovata: impaginare di nuovo la versione',
+    'scoreWriting.engravingNotReady': 'Le pagine impaginate non sono più disponibili: impaginare di nuovo la versione',
 
     // Onboarding
     'onboarding.disabled': 'La configurazione iniziale non è disponibile',

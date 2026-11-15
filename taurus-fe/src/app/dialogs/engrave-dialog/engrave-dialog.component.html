@@ -1,0 +1,168 @@
+<app-dialog-shell
+    #shell
+    [heading]="heading"
+    [subtitle]="subtitle"
+    confirmLabel="Genera pagine"
+    [cancelLabel]="step === 'options' || step === 'loading' ? 'Annulla' : 'Chiudi'"
+    [dismissOnly]="step === 'running' || step === 'done'"
+    [saving]="busy"
+    [invalidCount]="invalidCount"
+    [dirty]="dirty"
+    (cancel)="cancel()"
+    (confirm)="generate()"
+>
+    @switch (step) {
+        @case ('loading') {
+            <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Lettura della versione…</span>
+        }
+        @case ('running') {
+            <div class="flex flex-col items-center gap-3 py-10 text-center" role="status" aria-live="polite">
+                <i class="pi pi-spin pi-spinner text-3xl text-primary" aria-hidden="true"></i>
+                <strong>{{ statusLabel }}</strong>
+                <span class="text-sm text-muted-color">Una parte di due pagine richiede di solito meno di 15 secondi. Lo stato si aggiorna da solo.</span>
+            </div>
+        }
+        @case ('done') {
+            <div class="flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <strong>{{ pageCountLabel }}</strong>
+                    @if (job?.pdf) {
+                        <p-button label="Scarica il PDF" icon="pi pi-download" size="small" severity="secondary" text (onClick)="downloadPdf()" />
+                    }
+                </div>
+                <ul class="engrave-thumbnails" aria-label="Pagine generate">
+                    @for (url of thumbnails; track $index) {
+                        <li>
+                            @if (url) {
+                                <img [src]="url" [alt]="'Pagina ' + ($index + 1)" />
+                            } @else {
+                                <p-skeleton width="100%" height="100%" />
+                            }
+                            <span class="text-xs text-muted-color">{{ $index + 1 }}</span>
+                        </li>
+                    }
+                </ul>
+                @if (data.hasPages) {
+                    <p class="text-sm text-muted-color m-0">Sostituendo le pagine, quelle attuali della parte si tolgono e il loro file si elimina quando nessun'altra parte lo usa. La parte nuova ha la stessa descrizione e gli stessi strumenti.</p>
+                }
+                <div class="flex flex-wrap gap-2">
+                    @if (data.hasPages) {
+                        <p-button label="Sostituisci le pagine" icon="pi pi-replay" [loading]="busy" [disabled]="busy" (onClick)="apply('REPLACE')" />
+                        <p-button label="Aggiungi in una parte nuova" icon="pi pi-plus" severity="secondary" outlined [disabled]="busy" (onClick)="apply('NEW_PART')" />
+                    } @else {
+                        <p-button label="Aggiungi le pagine alla parte" icon="pi pi-check" [loading]="busy" [disabled]="busy" (onClick)="apply('REPLACE')" />
+                    }
+                    <p-button label="Impagina di nuovo" icon="pi pi-sliders-h" severity="secondary" text [disabled]="busy" (onClick)="again()" />
+                </div>
+            </div>
+        }
+        @default {
+            <div class="engrave-layout">
+                <div class="flex flex-col gap-4">
+                    @if (failure) {
+                        <app-inline-alert severity="error" heading="Pagine non generate" [detail]="failure" />
+                    }
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <app-form-field class="sm:col-span-2" label="Formato" forId="engraveFormat">
+                            <p-select inputId="engraveFormat" class="w-full" name="format" [options]="formats" [(ngModel)]="options.format" (ngModelChange)="changedFormat()" optionLabel="label" optionValue="value" appendTo="body" />
+                        </app-form-field>
+                        <app-form-field label="Rigo" forId="engraveStaff" [hint]="'Altezza del rigo, da 4 a 9,6 mm.'" [error]="shell.validationAttempted && problem?.startsWith('La dimensione') ? problem! : undefined">
+                            <p-inputnumber
+                                inputId="engraveStaff"
+                                class="w-full"
+                                name="staffSize"
+                                [(ngModel)]="options.staffSize"
+                                (ngModelChange)="changed()"
+                                mode="decimal"
+                                locale="it-IT"
+                                [minFractionDigits]="1"
+                                [maxFractionDigits]="1"
+                                [step]="0.1"
+                                [min]="limits.minStaff"
+                                [max]="limits.maxStaff"
+                                suffix=" mm"
+                                [showButtons]="true"
+                            />
+                        </app-form-field>
+                        <app-form-field label="Margini" forId="engraveMargin" [hint]="'Da 3 a 30 mm, su tutti i lati.'" [error]="shell.validationAttempted && problem?.startsWith('I margini') ? problem! : undefined">
+                            <p-inputnumber
+                                inputId="engraveMargin"
+                                class="w-full"
+                                name="margin"
+                                [(ngModel)]="options.margin"
+                                (ngModelChange)="changed()"
+                                mode="decimal"
+                                locale="it-IT"
+                                [maxFractionDigits]="1"
+                                [step]="1"
+                                [min]="limits.minMargin"
+                                [max]="limits.maxMargin"
+                                suffix=" mm"
+                                [showButtons]="true"
+                            />
+                        </app-form-field>
+                    </div>
+
+                    <fieldset class="engrave-fieldset">
+                        <legend>Intestazione della prima pagina</legend>
+                        <p class="text-sm text-muted-color mt-0 mb-3">Un testo vuoto non compare; senza testi la musica inizia in alto.</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <app-form-field class="sm:col-span-2" label="Titolo" forId="engraveTitle">
+                                <input pInputText id="engraveTitle" name="title" class="w-full" [(ngModel)]="options.header.title" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
+                            </app-form-field>
+                            <app-form-field label="Compositore" forId="engraveComposer">
+                                <input pInputText id="engraveComposer" name="composer" class="w-full" [(ngModel)]="options.header.composer" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
+                            </app-form-field>
+                            <app-form-field label="Arrangiatore" forId="engraveArranger">
+                                <input pInputText id="engraveArranger" name="arranger" class="w-full" [(ngModel)]="options.header.arranger" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
+                            </app-form-field>
+                            <app-form-field class="sm:col-span-2" label="Nome della parte" forId="engravePartName" hint="In grassetto a sinistra; non si ripete accanto ai righi.">
+                                <input pInputText id="engravePartName" name="partName" class="w-full" [(ngModel)]="options.header.partName" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
+                            </app-form-field>
+                        </div>
+                    </fieldset>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <app-form-field label="Numeri di battuta" forId="engraveMeasureNumbers" hint="Su ogni battuta per le parti di studio.">
+                            <p-select
+                                inputId="engraveMeasureNumbers"
+                                class="w-full"
+                                name="measureNumbers"
+                                [options]="measureNumberOptions"
+                                [(ngModel)]="options.measureNumbers"
+                                (ngModelChange)="changed()"
+                                optionLabel="label"
+                                optionValue="value"
+                                appendTo="body"
+                            />
+                        </app-form-field>
+                        <div class="flex items-center gap-2 sm:pt-7">
+                            <p-checkbox inputId="engravePageNumbers" name="pageNumbers" [binary]="true" [(ngModel)]="options.pageNumbers" (ngModelChange)="changed()" />
+                            <label for="engravePageNumbers">Numeri di pagina dalla seconda pagina</label>
+                        </div>
+                    </div>
+                    @if (job?.pdf && !failure) {
+                        <div>
+                            <p-button label="Scarica il PDF dell'ultima impaginazione" icon="pi pi-download" size="small" severity="secondary" text (onClick)="downloadPdf()" />
+                        </div>
+                    }
+                </div>
+
+                <section class="engrave-preview" aria-label="Anteprima delle pagine">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <h3 class="text-base font-semibold m-0">Anteprima</h3>
+                        @if (!previewError) {
+                            <span class="text-sm text-muted-color" role="status">{{ previewStatus }}</span>
+                        }
+                    </div>
+                    @if (previewError) {
+                        <app-inline-alert severity="info" heading="Anteprima non disponibile" [detail]="previewError" />
+                    } @else if (tooManyPages) {
+                        <app-inline-alert severity="warn" heading="Troppe pagine" [detail]="'La parte supera ' + limits.pages + ' pagine: riduci il rigo o i margini, oppure scegli un formato più grande.'" />
+                    }
+                    <div #preview class="engrave-pages" [class.engrave-pages--loading]="previewLoading" [class.engrave-pages--march]="options.format === 'MARCH'"></div>
+                </section>
+            </div>
+        }
+    }
+</app-dialog-shell>

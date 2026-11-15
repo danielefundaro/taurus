@@ -95,4 +95,29 @@ describe('ScorePlaybackService', () => {
         suggestion.flush(null);
         http.match(() => true).forEach((request) => request.flush({}));
     });
+
+    it('engraves a version, reads its latest engraving, assigns the pages and downloads the PDF', () => {
+        const base = `${environment.baseUrl}/tracks/5/scores/9/score-versions/70/engravings`;
+        const options = { format: 'MARCH' as const, header: { title: 'Marcia' } };
+
+        service.engrave(5, 9, 70, options).subscribe();
+        const start = http.expectOne(base);
+        expect([start.request.method, start.request.body]).toEqual(['POST', options]);
+        start.flush({ id: 100 });
+
+        let latest: unknown = 'unread';
+        service.engraving(5, 9, 70).subscribe((job) => (latest = job));
+        http.expectOne((request) => request.method === 'GET' && request.url === base).flush(null, { status: 204, statusText: 'No Content' });
+        expect(latest).toBeNull();
+
+        service.applyEngraving(5, 9, 70, 100, 'NEW_PART', 4).subscribe();
+        const apply = http.expectOne(`${base}/100/apply`);
+        expect([apply.request.method, apply.request.body]).toEqual(['POST', { target: 'NEW_PART', trackVersion: 4 }]);
+        apply.flush({ scoreId: 12, trackVersion: 5 });
+
+        service.engravingPdf(5, 9, 70).subscribe();
+        const pdf = http.expectOne(`${base}/pdf`);
+        expect(pdf.request.responseType).toBe('blob');
+        pdf.flush(new Blob(['%PDF']));
+    });
 });

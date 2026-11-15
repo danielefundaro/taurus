@@ -493,8 +493,10 @@ public class EventPreparationService {
                 part.id(),
                 part.description(),
                 List.copyOf(part.instruments().values()),
+                List.copyOf(part.instruments().keySet()),
                 part.ready(),
                 part.needsReview(),
+                part.unengraved(),
                 part.readyFiles().stream().map(file -> new ScoreFile(file.mediaId(), file.fileName())).toList()
             )).toList();
             return new ProgramEntry(entry.getId(), track.getId(), EventPreparationEvaluator.trackName(entry),

@@ -21,8 +21,8 @@ public interface ScoreVersionRepository extends JpaRepository<ScoreVersion, Long
     int findMaxVersionNumber(@Param("sheetMusicId") Long sheetMusicId);
 
     /**
-     * Versions beyond the newest {@code kept} of their part that are not approved, not current and not the origin of a
-     * kept version.
+     * Versions beyond the newest {@code kept} of their part that are not approved, not current, not the origin of a kept
+     * version, of pages or of an engraving still running or waiting to be assigned.
      */
     @Query(
         value = """
@@ -36,6 +36,12 @@ public interface ScoreVersionRepository extends JpaRepository<ScoreVersion, Long
               AND ranked.status <> 'APPROVED'
               AND NOT EXISTS (SELECT 1 FROM sheet_music part WHERE part.current_score_version_id = ranked.id)
               AND NOT EXISTS (SELECT 1 FROM score_version child WHERE child.parent_version_id = ranked.id AND child.deleted = FALSE)
+              AND NOT EXISTS (SELECT 1 FROM sheet_music part WHERE part.engraved_from_version_id = ranked.id AND part.deleted = FALSE)
+              AND NOT EXISTS (
+                  SELECT 1 FROM score_engraving_job job
+                   WHERE job.score_version_id = ranked.id AND job.deleted = FALSE
+                     AND (job.status IN ('QUEUED', 'RUNNING') OR EXISTS (SELECT 1 FROM score_engraving_page page WHERE page.job_id = job.id))
+              )
             """,
         nativeQuery = true
     )

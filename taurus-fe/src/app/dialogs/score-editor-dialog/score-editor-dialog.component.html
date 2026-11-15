@@ -83,6 +83,11 @@
             }
             <p-button label="Salva" icon="pi pi-save" severity="secondary" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione non verificata" (onClick)="save(false)" />
             <p-button label="Salva e approva" icon="pi pi-check" [disabled]="!canSave" [loading]="saving" pTooltip="Salva come nuova versione approvata" (onClick)="save(true)" />
+            @if (writingMode && data.engravable) {
+                <span [pTooltip]="engraveHint" tooltipPosition="bottom">
+                    <p-button label="Impagina" icon="pi pi-file-pdf" severity="secondary" outlined [disabled]="!canEngrave" (onClick)="engrave()" />
+                </span>
+            }
         </div>
     </header>
 

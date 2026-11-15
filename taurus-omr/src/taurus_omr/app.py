@@ -17,7 +17,7 @@ from fastapi import Depends, FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
 from PIL import Image
 
-from . import __version__, images, midi, musicxml
+from . import __version__, engraving, images, midi, musicxml
 from .config import Settings
 from .engines import AUDIVERIS, HOMR, Engine, default_engines
 from .errors import Busy, EngineFailure, LengthRequired, OmrError, RequestTooLarge, TooManyPages, Unauthorized, UnknownEngine
@@ -35,9 +35,11 @@ def create_app(settings: Settings | None = None, engines: dict[str, Engine] | No
     _configure_logging()
     engines = engines if engines is not None else default_engines(settings)
     reader = TextReader(settings)
+    engraver = engraving.Engraver(settings)
     slots = threading.BoundedSemaphore(settings.concurrency)
     # Separate slots: a text reading of a few seconds must not wait for a recognition that can last minutes.
     text_slots = threading.BoundedSemaphore(settings.text_concurrency)
+    engraving_slots = threading.BoundedSemaphore(settings.engraving_concurrency)
     app = FastAPI(title="Taurus OMR", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.exception_handler(OmrError)
@@ -70,6 +72,7 @@ def create_app(settings: Settings | None = None, engines: dict[str, Engine] | No
             "service": __version__,
             "engines": {name: engine.version for name, engine in engines.items()},
             "textEngine": {"name": reader.name, "version": reader.version},
+            "engravingEngine": {"name": engraver.name, "version": engraver.version},
             "music21": _version("music21"),
         }
 
@@ -130,6 +133,39 @@ def create_app(settings: Settings | None = None, engines: dict[str, Engine] | No
         with _slot(slots, settings.engine_timeout_seconds):
             converted = midi.to_musicxml(data)
         return Response(content=converted, media_type=MUSICXML_MEDIA_TYPE)
+
+    @app.post(
+        "/v1/engravings",
+        dependencies=[Depends(authenticated), Depends(limited(settings.max_score_bytes))],
+    )
+    def engravings(
+        score: Annotated[UploadFile, File(description="MusicXML of the part, plain or compressed")],
+        options: Annotated[str, Form(description="Engraving options as JSON")] = "{}",
+    ) -> dict[str, object]:
+        parsed = engraving.parse_options(options)
+        data = score.file.read(settings.max_score_bytes + 1)
+        if len(data) > settings.max_score_bytes:
+            raise RequestTooLarge(f"score larger than {settings.max_score_bytes} bytes")
+        document = engraving.score_document(data, settings.max_score_bytes)
+        started = time.monotonic()
+        deadline = started + settings.engraving_timeout_seconds
+        try:
+            with _slot(engraving_slots, settings.engraving_timeout_seconds), tempfile.TemporaryDirectory(dir=settings.work_dir, prefix="engraving-") as work:
+                # As for the text reading, the timeout covers the wait for a slot.
+                result = engraver.engrave(document, parsed, Path(work), max(1, int(deadline - time.monotonic())))
+        except EngineFailure as failure:
+            log.warning("engraving in %s failed after %d ms: %s", parsed.format, _millis(started), failure)
+            raise
+        duration = _millis(started)
+        log.info("engraving in %s: %d pages in %d ms", parsed.format, len(result.pages), duration)
+        return {
+            "engine": engraver.name,
+            "version": engraver.version,
+            "durationMillis": duration,
+            "pageCount": len(result.pages),
+            "pdf": base64.b64encode(result.pdf).decode("ascii"),
+            "pages": [base64.b64encode(page).decode("ascii") for page in result.pages],
+        }
 
     def _pages(pages: list[UploadFile]) -> list[Image.Image]:
         """The pages within the limits of the service, decoded as grayscale images."""

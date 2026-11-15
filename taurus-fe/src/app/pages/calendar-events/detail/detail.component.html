@@ -76,7 +76,7 @@
         *hasRoles="[RolesEnum.SUPER_ADMIN, RolesEnum.ADMIN, RolesEnum.BOARD, RolesEnum.ARCHIVIST, RolesEnum.USER, RolesEnum.USER_EXTERNAL]">
         <app-preparation-program [eventId]="event.id" [entries]="preparation?.program ?? []"
             [version]="preparation?.programVersion ?? 0" [editable]="canManageProgram"
-            [personal]="personalPreparation"
+            [personal]="personalPreparation" [eventName]="event.name ?? ''"
             (saved)="onPreparationChanged($event, 'Programma aggiornato', 'La prontezza è stata ricalcolata.')"
             (dirtyChange)="setPreparationUnitDirty(preparationUnits.program, $event)"
             (conflict)="reloadPreparation()" />

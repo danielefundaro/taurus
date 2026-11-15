@@ -11,9 +11,9 @@ Il documento è una checklist eseguibile e una matrice di copertura. Non sostitu
 
 Copertura presente nel repository (la data dell'ultima verifica è nel catalogo):
 
-- backend: 220 file Java di test e supporto sotto `src/test`, con unit test, test Spring e integrazioni PostgreSQL/Testcontainers;
-- frontend: 68 specifiche Jasmine/Karma;
-- servizio OMR: 7 file pytest, con test sui motori finti e test di accuratezza sui motori reali, eseguiti solo con il servizio in esecuzione;
+- backend: 239 file Java di test e supporto sotto `src/test`, con unit test, test Spring e integrazioni PostgreSQL/Testcontainers;
+- frontend: 130 specifiche Jasmine/Karma;
+- servizio OMR: 9 file pytest, con test sui motori finti, test dell'impaginazione con Verovio e Cairo veri e test di accuratezza sui motori reali, eseguiti solo con il servizio in esecuzione;
 - provider Keycloak: 7 classi di test, fra cui `TaurusOtpTest`, `TaurusOtpResourceIT`, `EmailTemplatesTest` sui modelli di posta del tema, `EmailDeliveryIT`, che fa partire un'e-mail vera verso Mailpit, e `TenantRoleFlowIT`, che attraversa il browser flow e legge i claim del mapper su un Keycloak reale;
 - sito informativo: type-check, build e `pnpm test`/`pnpm test:image`, che controllano il sito costruito e l'immagine nginx che lo serve;
 - E2E: suite Playwright in `taurus-fe/e2e`, con i profili desktop e mobile, che richiede un'istanza completa e due tenant di prova; eseguita la prima volta il 2026-10-31, calibrata e verde — 46 prove passate e 34 saltate per dati assenti;
@@ -77,7 +77,7 @@ I valori seguenti costituiscono la baseline raccomandata; devono essere approvat
 | Tenant isolation | Tutta la matrice negativa P0 superata con almeno due tenant |
 | Migrazioni | Fresh install, upgrade e riavvio idempotente superati |
 | Sicurezza | 0 vulnerabilità Critical/High sfruttabili non accettate; il job `security` della CI cerca segreti, vulnerabilità di dipendenze e configurazioni, e difetti con analisi statica. Il DAST su staging resta da aggiungere |
-| Copertura | Baseline attiva e verificata in CI: backend 77% linee e 62% branch sulla suite intera, frontend 71% istruzioni, 62% branch e 73% linee. La proposta resta 80% linee e 70% branch nei moduli modificati, 90% per logica P0 nuova: la baseline si alza man mano, non si abbassa |
+| Copertura | Baseline attiva e verificata in CI: backend 78% linee e 62% branch sulla suite intera, frontend 71% istruzioni, 63% branch e 74% linee. La proposta resta 80% linee e 70% branch nei moduli modificati, 90% per logica P0 nuova: la baseline si alza man mano, non si abbassa |
 | Accessibilità | Nessuna violazione critica automatica; flussi principali utilizzabili da tastiera |
 | Performance | SLO p95/p99, throughput ed error rate approvati e rispettati |
 | Resilienza | Recupero dimostrato per riavvio backend e indisponibilità temporanea delle dipendenze |
@@ -282,7 +282,7 @@ Preparazione dell'evento su PostgreSQL, con il bilancio di query della dashboard
 .\mvnw.cmd "-Dit.test=EventPreparationIT" verify
 ```
 
-`EventPreparationIT` verifica la migrazione `20261027100000` con i valori predefiniti delle colonne nuove, il `409` di programma e materiali salvati con una versione superata senza toccare la configurazione, l'isolamento fra due tenant su eventi, tracce e oggetti, le 8 query fisse con cui la dashboard valuta 2 o 15 eventi (la richiesta completa passa da 11 a 19 query) e gli obiettivi della [specifica](event-preparation-spec.md#prestazioni) su un evento con 100 brani, 1.000 utenti con la loro risposta e 100 materiali assegnati: p95 della vista amministrativa sotto 700 ms e di quella personale sotto 400 ms. Serve Docker; le query sono contate da `RecordingStatementInspector`, un `StatementInspector` di Hibernate che i test attivano e fermano intorno all'operazione misurata.
+`EventPreparationIT` verifica la migrazione `20261027100000` con i valori predefiniti delle colonne nuove, il `409` di programma e materiali salvati con una versione superata senza toccare la configurazione, la parte scritta senza pagine riconosciuta da impaginare dalla query degli spartiti, l'isolamento fra due tenant su eventi, tracce e oggetti, le 8 query fisse con cui la dashboard valuta 2 o 15 eventi (la richiesta completa passa da 11 a 19 query) e gli obiettivi della [specifica](event-preparation-spec.md#prestazioni) su un evento con 100 brani, 1.000 utenti con la loro risposta e 100 materiali assegnati: p95 della vista amministrativa sotto 700 ms e di quella personale sotto 400 ms. Serve Docker; le query sono contate da `RecordingStatementInspector`, un `StatementInspector` di Hibernate che i test attivano e fermano intorno all'operazione misurata.
 
 Broker RabbitMQ reale:
 
@@ -294,7 +294,7 @@ Broker RabbitMQ reale:
 
 I test che hanno bisogno di Docker passano da `DockerRequirement.required()`: senza Docker si saltano sulla macchina di uno sviluppatore, mentre con `-Dtaurus.test.requireDocker=true` — come fa la CI — la sua assenza è un fallimento. Un test P0 saltato rende il run incompleto.
 
-La copertura della suite intera è un gate: `verify` unisce i dati di unit e integrazione in `target/jacoco-merged.exec`, ne produce il report in `target/site/jacoco-merged` e verifica le soglie `jacoco.line.minimum` e `jacoco.branch.minimum` del `pom.xml`. Oggi valgono 0,77 e 0,62: alzate il 2026-11-08 appena sotto la copertura misurata quel giorno (77,3% linee e 61,7% branch), la soglia dei branch è salita a 0,62 il 2026-11-13 con le prove dei compensi ai presenti (77,7% linee e 62,3% branch). Con gli stessi test la copertura era salita dal 75,6% e 60,5% del 2026-11-06, quando le soglie erano 0,75 e 0,60: la crescita viene dalla fase 4a dell'aggiornamento della piattaforma, con Spring Boot 3.5.16, JaCoCo 0.8.16 e Java 25, non da prove nuove. Le soglie si alzano quando la copertura sale e non si abbassano senza annotarlo qui.
+La copertura della suite intera è un gate: `verify` unisce i dati di unit e integrazione in `target/jacoco-merged.exec`, ne produce il report in `target/site/jacoco-merged` e verifica le soglie `jacoco.line.minimum` e `jacoco.branch.minimum` del `pom.xml`. Oggi valgono 0,78 e 0,62: alzate il 2026-11-08 appena sotto la copertura misurata quel giorno (77,3% linee e 61,7% branch), la soglia dei branch è salita a 0,62 il 2026-11-13 con le prove dei compensi ai presenti (77,7% linee e 62,3% branch) e quella delle linee a 0,78 il 2026-11-15 con le prove dell'editor di scrittura e dell'impaginazione (78,03% linee e 62,76% branch). Con gli stessi test la copertura era salita dal 75,6% e 60,5% del 2026-11-06, quando le soglie erano 0,75 e 0,60: la crescita viene dalla fase 4a dell'aggiornamento della piattaforma, con Spring Boot 3.5.16, JaCoCo 0.8.16 e Java 25, non da prove nuove. Le soglie si alzano quando la copertura sale e non si abbassano senza annotarlo qui.
 
 Spring tiene in cache un contesto per ogni combinazione di configurazione dei test, e ognuno conserva pool di connessioni, listener RabbitMQ e cache interne. La cache è limitata a 8 contesti da `spring.test.context.cache.maxSize` in `taurus-be/src/test/resources/spring.properties`: oltre il limite Spring chiude quello usato meno di recente, mentre il container PostgreSQL condiviso resta acceso. Con il limite predefinito di 32 gli integration test arrivano a una ventina di contesti vivi, circa 50 MB l'uno: il 2026-11-06 l'heap di 1 GB del fork si è riempito all'avvio del contesto di `AccountResourceIT`, che non è mai partito, e il fork è morto per `OutOfMemoryError` dopo 17-19 minuti di garbage collection continua. Con il limite la suite completa dura circa 26 minuti e ogni contesto parte in 10-13 secondi. Un avvio di contesto che sale verso il minuto, o un IT banale che impiega minuti, è il segnale che l'heap è di nuovo al limite: abbassare `maxSize` prima di alzare `-Xmx`.
 
@@ -317,7 +317,7 @@ npm test -- --watch=false --browsers=ChromeHeadless --code-coverage
 npm run build -- --configuration production
 ```
 
-La copertura ha un gate: `npm run test:coverage` esegue i test con `--code-coverage` e fallisce se scende sotto la baseline di `scripts/check-coverage.mjs` (71% istruzioni, 62% branch, 73% linee, misurati sul ramo principale; alzata il 2026-10-27 con le prove del workspace delle parti, dell’editor delle immagini, della dashboard e dei QR dell’inventario, il 2026-10-28 con quelle della preparazione evento, il 2026-10-29 con quelle del feed calendario, il 2026-11-04 con quelle della guida introduttiva, il 2026-11-06 con quelle dei documenti legali, il 2026-11-13 con quelle dei compensi ai presenti e il 2026-11-14 con quelle dell'editor di scrittura, dei suoi passaggi, della nuova notazione e della tastiera MIDI). Anche questa baseline si alza, non si abbassa. La build scarica il SoundFont del lettore da `ftp.osuosl.org` e ne verifica l'impronta; senza rete la build fallisce, salvo `TAURUS_SKIP_SOUNDFONT=1` quando il lettore non serve.
+La copertura ha un gate: `npm run test:coverage` esegue i test con `--code-coverage` e fallisce se scende sotto la baseline di `scripts/check-coverage.mjs` (71% istruzioni, 63% branch, 74% linee, misurati sul ramo principale; alzata il 2026-10-27 con le prove del workspace delle parti, dell’editor delle immagini, della dashboard e dei QR dell’inventario, il 2026-10-28 con quelle della preparazione evento, il 2026-10-29 con quelle del feed calendario, il 2026-11-04 con quelle della guida introduttiva, il 2026-11-06 con quelle dei documenti legali, il 2026-11-13 con quelle dei compensi ai presenti il 2026-11-14 con quelle dell'editor di scrittura, dei suoi passaggi, della nuova notazione e della tastiera MIDI, e il 2026-11-15 con quelle dell'impaginazione e della stampa della scaletta). Anche questa baseline si alza, non si abbassa. La build scarica il SoundFont del lettore da `ftp.osuosl.org` e ne verifica l'impronta; senza rete la build fallisce, salvo `TAURUS_SKIP_SOUNDFONT=1` quando il lettore non serve.
 
 Suite end to end full-stack, con Playwright:
 
@@ -356,7 +356,13 @@ python -m venv .venv
 docker build -t taurus-omr:test .
 ```
 
-I test sostituiscono Audiveris e homr con programmi finti. La build dell'immagine verifica di nuovo le impronte di pacchetti, modelli e dati.
+I test sostituiscono Audiveris e homr con programmi finti. I test dell'impaginazione usano Verovio e CairoSVG veri e, per disegnare, la libreria Cairo: su Windows di solito manca e quei test si saltano, mentre la CI installa `libcairo2` e `fonts-liberation` e li rende obbligatori con `TAURUS_OMR_REQUIRE_CAIRO=true`. Per eseguirli in locale basta un container Python 3.12 con le due librerie, montando il modulo:
+
+```powershell
+docker run --rm -v ${PWD}:/w -w /w -e TAURUS_OMR_REQUIRE_CAIRO=true python:3.12-slim sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends libcairo2 fonts-liberation fontconfig > /dev/null && pip install -q -r requirements-test.txt && python -m pytest -p no:cacheprovider"
+```
+
+La pagina di riferimento `tests/engraving/marcia-a4-1.png` si ridisegna solo dopo un cambiamento voluto di Verovio o delle opzioni, con lo stesso container. La build dell'immagine verifica di nuovo le impronte di pacchetti, modelli e dati. `node scripts/ops/check-verovio-versions.mjs` controlla che Verovio abbia la stessa versione nel frontend e nel servizio.
 
 L'accuratezza dei motori reali si misura con il servizio in esecuzione, per esempio quello avviato da `services.yml`:
 
@@ -451,9 +457,10 @@ Serve Docker Compose v2 per il primo e solo `curl` per il secondo. Nessuno dei d
 | Frontend condiviso/layout | Tutti i ruoli, responsive, tastiera, temi, build e smoke browser |
 | Anteprima e stampa spartiti | Casi `PRV-*`, con stampa reale su almeno due browser e un documento per orientamento |
 | QR, etichette e guasti inventario | Casi `QR-*`, test di `InventoryQr*`, `InventoryScan*`, `InventoryLabelServiceTest` e `InventoryIssueServiceTest`, spec di scansione, etichette e guasti, `e2e/specs/inventory-qr.spec.ts`, stampa e scansione reali come nelle [verifiche fisiche](inventory-qr-code-spec.md#verifiche-fisiche) |
-| Preparazione evento | Casi `PREP-*`, `EventPreparationServiceTest`, `PreparationHashesTest`, `EventPreparationIT`, `EventPreparationSecurityConfigurationTest`, `EventPreparationNotificationSchedulerTest`, `CalendarOperationProviderTest` e `OperationalDashboardIT`, spec di `calendar-events/detail` e `detail/preparation/`, `e2e/specs/event-preparation.spec.ts` con `E2E_PREPARATION_EVENT_ID` |
+| Preparazione evento | Casi `PREP-*`, `EventPreparationServiceTest`, `PreparationHashesTest`, `EventPreparationIT`, `EventPreparationSecurityConfigurationTest`, `EventPreparationNotificationSchedulerTest`, `CalendarOperationProviderTest` e `OperationalDashboardIT`, spec di `calendar-events/detail` e `detail/preparation/`, con le parti da impaginare e la stampa della scaletta, `e2e/specs/event-preparation.spec.ts` con `E2E_PREPARATION_EVENT_ID` |
 | Firma elettronica | Casi `SIG-*` interessati, `SignatureIT`, `LoanSheetSignatureIT` e test di `service/signature`, specifiche delle finestre di firma e del codice, invio reale con Mailpit e con il server SMTP dell'ambiente, stampa del modello predefinito; per l'app di autenticazione anche `mvnw verify` di `keycloak-authenticator` |
 | Ascolto, riconoscimento e correzione delle parti | Casi `PLY-*` interessati, `ScorePlaybackIT` e `ScoreRecognitionIT`, specifiche di `score-player/` e `score-editor/`, prova nel browser anche a larghezza di telefono |
+| Scrittura e impaginazione delle parti | `ScoreWritingIT`, `ScoreEngravingIT` e i test di `service/scorewriting`, `ScoreWritingResourceFeatureTest`, `OmrClientTest`, specifiche di `score-editor/`, dell'editor a schermo intero, del dialogo `engrave-dialog`, della scheda Ascolto, del Workspace Parti, dell'anteprima con il formato marcia, del servizio di stampa e del programma dell'evento, `EventPreparationServiceTest` e `EventPreparationIT` per le parti da impaginare, `tests/test_engraving.py` di `taurus-omr` con Cairo; dopo un aggiornamento di Verovio, confronto delle pagine dell'anteprima con quelle del servizio sullo stesso MusicXML |
 | Servizio OMR, motori o modelli | `pytest`, build dell'immagine, test di accuratezza sul corpus e, se cambiano i motori, `PLY-018` |
 | Keycloak provider/theme | Build JAR, avvio Keycloak reale, login, selezione tenant/ruolo e rendering temi |
 | Configurazione/manifest | `scripts/ops/validate-deploy-manifest.sh` e `scripts/ops/fetch-cie-trust-anchors.mjs --verify-bundle`, poi deploy staging, probe, secret, rete, restart, rollback e `scripts/ops/smoke-test.sh` |

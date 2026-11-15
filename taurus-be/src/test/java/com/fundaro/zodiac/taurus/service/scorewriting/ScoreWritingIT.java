@@ -236,14 +236,14 @@ class ScoreWritingIT {
         inTenant(() -> lockService.acquire(trackId, partId, MARIO_EDITOR, false, archivist("mario", "Mario", "Rossi")));
         inTenant(() -> draftService.save(trackId, partId, new DraftRequestDTO(MARIO_EDITOR, TUBA, null, null), archivist("mario", "Mario", "Rossi")));
 
-        assertThat(cleanup.cleanup(tenantCode)).isEqualTo(new ScoreWritingCleanup.Removed(0, 0));
+        assertThat(cleanup.cleanup(tenantCode)).isEqualTo(new ScoreWritingCleanup.Removed(0, 0, 0));
 
         jdbcTemplate.update(
             "UPDATE " + schema() + ".score_edit_lock SET heartbeat_at = now() - interval '10 minutes', expires_at = now() - interval '8 minutes'"
         );
         jdbcTemplate.update("UPDATE " + schema() + ".sheet_music SET deleted = true WHERE id = ?", partId);
 
-        assertThat(cleanup.cleanup(tenantCode)).isEqualTo(new ScoreWritingCleanup.Removed(1, 1));
+        assertThat(cleanup.cleanup(tenantCode)).isEqualTo(new ScoreWritingCleanup.Removed(1, 1, 0));
         assertThat(count("score_edit_lock")).isZero();
         assertThat(count("score_draft")).isZero();
     }

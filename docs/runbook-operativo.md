@@ -46,7 +46,7 @@ Finché questi campi non sono valorizzati e approvati, il runbook è utilizzabil
 | `taurus-be` | Java 25, Spring Boot 4.1, JHipster | API, processi asincroni, scheduler, migrazioni e accesso ai dati | `8080` | Media su filesystem; dati in PostgreSQL |
 | PostgreSQL | PostgreSQL 18.6 nel compose locale | Schema globale `public`, schemi tenant e database Keycloak | `5432` | Critico |
 | Keycloak | Keycloak 26.8.2 nel compose locale | OIDC, utenti, ruoli, tenant claim, login e-mail e temi | `9080`, `9443` locali | Database `taurus_keycloak` e provider custom |
-| RabbitMQ | RabbitMQ 4.4.0 management nel compose locale | Code `upload.files` (elaborazione PDF) e `score.recognition` (riconoscimento delle parti), con le rispettive code di scarto `.dead` | `5672`, console `15672` | Code e messaggi in transito |
+| RabbitMQ | RabbitMQ 4.4.0 management nel compose locale | Code `upload.files` (elaborazione PDF), `score.recognition` (riconoscimento delle parti) e `score.engraving` (impaginazione delle parti scritte), con le rispettive code di scarto `.dead` | `5672`, console `15672` | Code e messaggi in transito |
 | `taurus-omr` | Python 3.12, FastAPI, Audiveris 5.11.0, homr 0.7.0 | Riconoscimento ottico della musica e conversione MIDI per l'ascolto delle parti, chiamato solo dal backend | `8090` | Nessuno; file temporanei in `/tmp`, eliminati a fine richiesta |
 | `keycloak-authenticator` | Java 21, provider Keycloak | Selezione tenant/ruolo, protocol mapper e verifica dei codici dell'app per la firma (`taurus-otp`) | n/a | JAR e temi distribuiti in Keycloak |
 | `taurus-info` | Astro 7, Nginx 1.30 senza privilegi | Sito informativo statico | `4321` dev, `8088` container locale, `8080` nel container | Nessuno; variabili incorporate in build |
@@ -62,7 +62,8 @@ Browser
                                     |--> PostgreSQL/tenant_<hash>
                                     |--> filesystem media per tenant
                                     |--> RabbitMQ/upload.files --> worker nello stesso backend
-                                    `--> RabbitMQ/score.recognition --> worker --> taurus-omr (HTTP interno)
+                                    |--> RabbitMQ/score.recognition --> worker --> taurus-omr (HTTP interno)
+                                    `--> RabbitMQ/score.engraving ----> worker --> taurus-omr (HTTP interno)
 ```
 
 Il claim JWT `tenant` determina lo schema PostgreSQL. Le entità globali restano in `public`; le entità operative risiedono in uno schema fisico `tenant_<hash>`. Una richiesta senza un tenant valido non deve poter leggere uno schema di un altro tenant.
@@ -184,9 +185,11 @@ Le e-mail di Keycloak e quelle del backend hanno lo stesso aspetto ([standard de
 
 Le altre proprietà dell'ascolto (dimensione dei caricamenti, tempi e concorrenza del servizio OMR, recupero dei job, versioni conservate e orario della pulizia) hanno valori predefiniti adatti alla produzione e sono elencate nella [specifica](track-score-playback-spec.md#configurazione-del-backend).
 
-Le proprietà RabbitMQ standard Spring, per esempio `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME` e `SPRING_RABBITMQ_PASSWORD`, devono essere impostate nell'ambiente distribuito. Le code applicative sono `upload.files` e `score.recognition`, l'exchange è `taurus.rabbitmq`. La coda `upload.files` ha due consumatori per replica, quello configurato e quello dell'annotazione sul worker: è atteso, e un messaggio resta comunque consegnato a uno solo. I messaggi di `score.recognition` sono JSON `{ tenant, jobId }`: la tabella dei job resta la fonte di verità e un messaggio perso viene ripubblicato dal recupero pianificato.
+Anche l'impaginazione delle parti scritte ha valori predefiniti adatti alla produzione, sotto `application.score-writing.engraving`: attesa del servizio (`timeout`, 3 minuti), job contemporanei per replica (`concurrency`, 1, al più 4), recupero dei job fermi (`stale-after`, 10 minuti, più lungo dell'attesa) dopo al più `max-attempts` tentativi (3), conservazione delle pagine non assegnate (`unapplied-retention`, 7 giorni). Una concorrenza più alta di quella del servizio (`TAURUS_OMR_ENGRAVING_CONCURRENCY`) non accelera nulla: le richieste in più aspettano il loro turno nel servizio, e oltre il suo tempo massimo terminano con `serviceUnavailable`.
 
-Un messaggio che il consumatore rifiuta non torna in coda: `spring.rabbitmq.listener.simple.default-requeue-rejected` è `false`, le due code di lavoro dichiarano `x-dead-letter-exchange: taurus.dead-letter` con la propria `x-dead-letter-routing-key`, e il broker lo instrada una volta sola nella coda di scarto corrispondente — `upload.files.dead` e `score.recognition.dead`. La riconsegna infinita non servirebbe come nuovo tentativo, perché in entrambe le pipeline la tabella dei job è la fonte di verità e ha la sua ripresa pianificata (§11), mentre occuperebbe un consumatore senza far avanzare nulla. Le code di scarto sono materiale di diagnosi: vanno osservate (§10.2) e svuotate a mano dopo l'analisi, non riversate nella coda di lavoro.
+Le proprietà RabbitMQ standard Spring, per esempio `SPRING_RABBITMQ_HOST`, `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME` e `SPRING_RABBITMQ_PASSWORD`, devono essere impostate nell'ambiente distribuito. Le code applicative sono `upload.files`, `score.recognition` e `score.engraving`, l'exchange è `taurus.rabbitmq`. La coda `upload.files` ha due consumatori per replica, quello configurato e quello dell'annotazione sul worker: è atteso, e un messaggio resta comunque consegnato a uno solo. I messaggi di `score.recognition` e `score.engraving` sono JSON `{ tenant, jobId }`: la tabella dei job resta la fonte di verità e un messaggio perso viene ripubblicato dal recupero pianificato.
+
+Un messaggio che il consumatore rifiuta non torna in coda: `spring.rabbitmq.listener.simple.default-requeue-rejected` è `false`, le code di lavoro dichiarano `x-dead-letter-exchange: taurus.dead-letter` con la propria `x-dead-letter-routing-key`, e il broker lo instrada una volta sola nella coda di scarto corrispondente — `upload.files.dead`, `score.recognition.dead` e `score.engraving.dead`. La riconsegna infinita non servirebbe come nuovo tentativo, perché in tutte le pipeline la tabella dei job è la fonte di verità e ha la sua ripresa pianificata (§11), mentre occuperebbe un consumatore senza far avanzare nulla. Le code di scarto sono materiale di diagnosi: vanno osservate (§10.2) e svuotate a mano dopo l'analisi, non riversate nella coda di lavoro.
 
 ### 4.2 Frontend Angular
 
@@ -257,6 +260,7 @@ Disabilitare un flag nasconde e blocca la funzione, ma non cancella i dati. Dopo
 - In produzione il servizio non pubblica porte: sta su una rete interna raggiungibile solo dal backend, con file system in sola lettura, `/tmp` in memoria, utente non privilegiato e limiti di CPU e memoria come in `omr.yml`.
 - Stato: `GET /v1/health` restituisce senza chiave stato e versioni dei motori di riconoscimento e del motore di lettura del testo (`textEngine`). Un riconoscimento di una pagina richiede circa 40 secondi con 4 CPU, con i due motori in parallelo; la concorrenza predefinita è un job alla volta.
 - Lettura del testo: l'elaborazione dei PDF manda al servizio (`POST /v1/text-recognitions`) la prima pagina delle parti senza testo selezionabile, a lotti di 8 pagine, e suggerisce gli strumenti letti nel margine sinistro o nella fascia in alto. RapidOCR gira in un processo separato, con slot propri che non aspettano i riconoscimenti: circa 4 secondi a pagina con 2 thread. `TAURUS_OMR_TEXT_CONCURRENCY` (1), `TAURUS_OMR_TEXT_THREADS` (2) e `TAURUS_OMR_TEXT_TIMEOUT_SECONDS` (60) regolano il servizio; `application.pdf-processing.ocr.*` il backend (attivazione, attesa, affidabilità minima, pagine per richiesta). Se il servizio non risponde, l'elaborazione termina comunque e le parti restano senza suggerimenti.
+- Impaginazione: le parti scritte si impaginano nel servizio (`POST /v1/engravings`) con Verovio e Cairo, in pagine PNG a 300 DPI e in un PDF. Gira in un processo separato, con slot propri che non aspettano i riconoscimenti: meno di un secondo per una pagina A4 con l'immagine pubblicata. `TAURUS_OMR_ENGRAVING_CONCURRENCY` (1), `TAURUS_OMR_ENGRAVING_TIMEOUT_SECONDS` (120) e `TAURUS_OMR_MAX_SCORE_MB` (20) regolano il servizio. `GET /v1/health` riporta la versione di Verovio (`engravingEngine`), che deve coincidere con quella del frontend perché l'anteprima del browser corrisponda alle pagine: la CI lo controlla con `scripts/ops/check-verovio-versions.mjs`.
 - Rotazione della chiave: aggiornare insieme `TAURUS_OMR_API_KEY` del servizio e del backend (§15.4); con chiavi diverse i job terminano con `serviceUnavailable`, le parti scansionate restano senza suggerimenti e il backend registra un errore.
 - Aggiornamento dei motori: nuova immagine con le versioni e le impronte aggiornate in `Dockerfile`, `requirements.txt` e `models.sha256`. La CI (`verify.yml`) costruisce l'immagine, la avvia e misura l'accuratezza sul corpus di riferimento: il job fallisce se un motore legge meno battute del minimo fissato in `taurus-omr/tests/test_accuracy.py` e la tabella dei risultati è nel riepilogo del job. Se i risultati migliorano si alza il minimo. Prima del rilascio si ripete la misura su parti reali (§4.6).
 
@@ -781,7 +785,7 @@ La versione di RabbitMQ è `TAURUS_RABBITMQ_VERSION`. Le code di Taurus non sono
 
 Il nodo non si aggiorna per due motivi. La documentazione di RabbitMQ non ammette il salto dalla 4.0 alla 4.4: dalla 4.0 e dalla 4.1 si passa prima per la 4.2. Inoltre, fino alla release che porta la 4.4, il manifest non fissava l'hostname del container. Il nodo prende il nome dall'hostname, quindi si chiamava come il container (`rabbit@<id>`), e ogni container ricreato apriva un nodo vuoto nello stesso volume. Da quella release il servizio ha `hostname: rabbitmq`, il nodo si chiama `rabbit@rabbitmq` e si ritrova quando il container viene ricreato. Negli aggiornamenti successivi si potrà quindi seguire il percorso di versioni della documentazione, dopo aver abilitato tutti i feature flag stabili (`rabbitmqctl enable_feature_flag all`).
 
-1. In un momento di poco traffico, controllare le code: `dc exec rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged`. Si prosegue quando `upload.files` e `score.recognition` sono a zero. Le code di scarto `.dead` non si svuotano da sole: se contengono messaggi, leggerli prima (§14.6), perché il nodo nuovo parte senza. Se sull'installazione sono stati aggiunti a mano utenti, vhost o policy, esportarli con `dc exec rabbitmq rabbitmqctl export_definitions /tmp/definizioni.json` e copiarli fuori con `dc cp rabbitmq:/tmp/definizioni.json .`.
+1. In un momento di poco traffico, controllare le code: `dc exec rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged`. Si prosegue quando `upload.files`, `score.recognition` e `score.engraving` sono a zero. Le code di scarto `.dead` non si svuotano da sole: se contengono messaggi, leggerli prima (§14.6), perché il nodo nuovo parte senza. Se sull'installazione sono stati aggiunti a mano utenti, vhost o policy, esportarli con `dc exec rabbitmq rabbitmqctl export_definitions /tmp/definizioni.json` e copiarli fuori con `dc cp rabbitmq:/tmp/definizioni.json .`.
 2. Fermare chi produce e chi consuma: `dc stop frontend backend`. Ricontrollare le code. Un messaggio rimasto non è un lavoro perso: il job resta nel database, e la ripresa pianificata lo chiude in errore, con «Riprova» per l'utente, o lo ripubblica.
 3. Togliere il nodo vecchio:
 
@@ -792,7 +796,7 @@ Il nodo non si aggiorna per due motivi. La documentazione di RabbitMQ non ammett
    ```
 
 4. Portare `deploy/` alla release nuova e, se `TAURUS_RABBITMQ_VERSION` è fissata in `.env`, aggiornarla. Poi `dc pull rabbitmq` e `dc up -d --wait rabbitmq`. Se al punto 1 sono state esportate delle definizioni, reimportarle ora con `rabbitmqctl import_definitions`.
-5. Verificare la versione (`dc exec rabbitmq rabbitmqctl version`), poi `dc up -d`. Dopo l'avvio del backend, `list_queues` mostra `upload.files`, `score.recognition` e le due code `.dead`. Chiudere con gli smoke test (§8.4), compreso il caricamento di un file.
+5. Verificare la versione (`dc exec rabbitmq rabbitmqctl version`), poi `dc up -d`. Dopo l'avvio del backend, `list_queues` mostra `upload.files`, `score.recognition`, `score.engraving` e le loro code `.dead`. Chiudere con gli smoke test (§8.4), compreso il caricamento di un file.
 
 **Ritorno indietro.** È la stessa procedura, all'indietro: code vuote, frontend e backend fermi, nodo e volume tolti come al punto 3, i file di `deploy/` e `TAURUS_RABBITMQ_VERSION` della release precedente, `dc up -d`. RabbitMQ non supporta il ritorno a una versione precedente sugli stessi dati, quindi anche qui il nodo riparte vuoto.
 
@@ -854,9 +858,9 @@ Definire soglie specifiche per ambiente e almeno i seguenti alert:
 - esaurimento pool JDBC;
 - connessioni o storage PostgreSQL prossimi al limite;
 - spazio/inode del filesystem media;
-- backlog e messaggi non confermati sulle code `upload.files` e `score.recognition`;
-- messaggi nelle code di scarto `upload.files.dead` e `score.recognition.dead`: ogni messaggio è un lavoro che il consumatore ha rifiutato e che nessuno riprenderà dalla coda, da analizzare e svuotare a mano;
-- riconoscimenti terminati con errore (`taurus_score_recognition_jobs_total` con `outcome` diverso da `done`) e servizio OMR non `UP`;
+- backlog e messaggi non confermati sulle code `upload.files`, `score.recognition` e `score.engraving`;
+- messaggi nelle code di scarto `upload.files.dead`, `score.recognition.dead` e `score.engraving.dead`: ogni messaggio è un lavoro che il consumatore ha rifiutato e che nessuno riprenderà dalla coda, da analizzare e svuotare a mano;
+- riconoscimenti terminati con errore (`taurus_score_recognition_jobs_total` con `outcome` diverso da `done`), impaginazioni terminate con errore (`taurus_score_engravings_total` con `outcome` diverso da `done`) e servizio OMR non `UP`;
 - invii falliti dei codici e dei link di firma (`taurus_signature_mail_total` con `outcome` diverso da `sent`, `taurus_signature_links_total{outcome="mailFailed"}`) e catene delle prove non coerenti (`signature_chain_inconsistent` nel log);
 - firme CieSign rifiutate per certificato non attendibile (`taurus_signature_ciesign_total{outcome="untrustedCertificate"}`) o accettate senza controllo di revoca (`outcome="acceptedRevocationUnavailable"`) in crescita costante: certificati della CIE da aggiornare o CRL non raggiungibile;
 - consumer RabbitMQ assenti;
@@ -923,7 +927,9 @@ Gli orari cron senza `zone` esplicita usano il timezone del processo JVM. Impost
 | Rollover economia | 00:10 Europe/Rome | Aggiorna saldi/aperture annuali |
 | Scadenze preparazione evento | ogni minuto Europe/Rome | Genera notifiche operative e quelle delle conferme materiali non più valide |
 | Recupero riconoscimenti | ogni minuto | Rimette in coda i riconoscimenti interrotti da oltre 30 minuti (al massimo tre tentativi) e ripubblica quelli in coda da oltre 30 minuti |
-| Pulizia versioni delle parti | 04:15 giornaliero | Elimina le versioni oltre le ultime 20 di ogni parte che non sono correnti né approvate |
+| Recupero impaginazioni | ogni minuto | Rimette in coda le impaginazioni interrotte da oltre 10 minuti (al massimo tre tentativi) e ripubblica quelle in coda da oltre 10 minuti (`application.score-writing.engraving.*`) |
+| Pulizia versioni delle parti | 04:15 giornaliero | Elimina le versioni oltre le ultime 20 di ogni parte che non sono correnti né approvate, né quelle da cui derivano pagine impaginate o con un'impaginazione in sospeso |
+| Pulizia della scrittura | 04:15 giornaliero | Elimina i blocchi scaduti, le bozze delle parti eliminate e i file delle impaginazioni non assegnate da oltre 7 giorni o di parti eliminate (`application.score-playback.cleanup-cron`, `application.score-writing.engraving.unapplied-retention`) |
 | Pulizia conferme di firma | 03:45 giornaliero | Elimina per tenant le conferme con codice chiuse da oltre 30 giorni (`application.signature.cleanup-cron`, `challenge-retention-days`) |
 | Eliminazione atti firmati | 03:50 giornaliero | Elimina per tenant documenti, attestazioni e dati personali delle prove degli atti dei fogli definiti o annullati da oltre il periodo di grazia (`application.signature.purge-cron`, `download-grace-days`) |
 | Link di firma scaduti | ogni ora al minuto 20 | Notifica una volta agli amministratori i link dei genitori scaduti senza firma e rimuove dal registro pubblico le righe dei link revocati o scaduti (`application.signature.link-expiry-cron`) |
@@ -1110,7 +1116,7 @@ Non bypassare OIDC e non distribuire client secret nel frontend.
 - non eliminare o requeue massivamente i messaggi senza valutarne l'idempotenza; dalla coda di scarto si riparte dal job nel database, non rimettendo il messaggio nella coda di lavoro;
 - sospendere nuovi upload se il backlog continua a crescere.
 
-Per la coda `score.recognition` seguire il §14.9.
+Per le code `score.recognition` e `score.engraving` seguire il §14.9.
 
 ### 14.7 Storage media pieno o non disponibile
 
@@ -1130,7 +1136,7 @@ Per la coda `score.recognition` seguire il §14.9.
 - usare la console amministrativa di delivery per retry/chiusura controllati;
 - evitare retry massivi finché la causa esterna persiste.
 
-### 14.9 Riconoscimento delle parti lento o fallito
+### 14.9 Riconoscimento o impaginazione delle parti lenti o falliti
 
 - verificare `GET /v1/health` del servizio OMR dalla rete del backend e che `TAURUS_OMR_API_KEY` abbia lo stesso valore nel servizio e nel backend: con chiavi diverse ogni job termina con `serviceUnavailable`;
 - leggere il codice d'errore dei job (`score_recognition_job.error_code`) e i log del backend per `jobId`, parte e tenant: `serviceUnavailable` indica servizio fermo o irraggiungibile, `engineFailed` ed `engineTimeout` un motore fallito su quelle pagine, che resta ripetibile con «Riprova»;
@@ -1138,6 +1144,7 @@ Per la coda `score.recognition` seguire il §14.9.
 - verificare CPU, memoria e `/tmp` del container: Audiveris e homr insieme usano fino a 4 CPU e alcuni GB di memoria per pagina;
 - i job interrotti vengono rimessi in coda dal recupero pianificato (§11), al massimo tre volte, poi terminano con `interrupted`: non ripubblicare a mano i messaggi;
 - se un motore peggiora dopo un aggiornamento, tornare alla versione precedente dell'immagine con `TAURUS_OMR_VERSION` e misurare di nuovo l'accuratezza (§4.6);
+- impaginazioni: il codice d'errore è in `score_engraving_job.error_code`. `unreadableScore`, `invalidOptions` e `tooManyPages` dipendono dalla parte o dalle opzioni, e un'altra impaginazione con opzioni diverse li risolve; `engineFailed`, `engineTimeout` e `serviceUnavailable` dipendono dal servizio, e `versionNotFound` indica una versione o una parte eliminata nel frattempo. Le pagine di un job terminato restano nel job finché l'archivista non le assegna, e la pulizia della scrittura le elimina dopo 7 giorni (§11): non si cancellano a mano dalla cartella dei media;
 - parti dei PDF scansionati senza strumenti suggeriti: il backend registra al massimo un avviso per caricamento con il motivo (servizio non raggiungibile, chiave rifiutata, `busy`, `engineTimeout`, 404 da un servizio non aggiornato); il caricamento termina comunque `DONE` e gli strumenti si assegnano a mano. Nei log del servizio ogni lettura riporta pagine, righe lette e durata, mai il testo; il testo letto compare nel backend solo a livello debug.
 
 ### 14.10 Sospetta violazione tenant o sicurezza

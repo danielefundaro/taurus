@@ -58,6 +58,11 @@
                         } @else {
                             <p-tag severity="secondary" value="Ascolto non ancora disponibile" />
                         }
+                        @if (canManage && toEngrave(part)) {
+                            <p-tag severity="warn" icon="pi pi-file-pdf" value="Da impaginare" pTooltip="La parte non ha pagine: non compare in anteprima, in presentazione né in stampa finché non si impagina" />
+                        } @else if (canManage && engravingOutdated(part)) {
+                            <p-tag severity="secondary" icon="pi pi-file-pdf" value="Pagine non aggiornate" pTooltip="Le pagine sono impaginate da una versione precedente a quella ascoltata" />
+                        }
                         @if (canManage && part.editing; as editing) {
                             <p-tag severity="info" icon="pi pi-pencil" [value]="editingLabel(editing)" />
                         }
@@ -159,6 +164,18 @@
                                     (onClick)="write(part)"
                                 />
                             }
+                        }
+                        @if (canEngrave && part.version) {
+                            <p-button
+                                label="Impagina"
+                                icon="pi pi-file-pdf"
+                                size="small"
+                                [severity]="toEngrave(part) || engravingOutdated(part) ? 'primary' : 'secondary'"
+                                outlined
+                                [disabled]="trackDirty"
+                                pTooltip="Impagina la versione ascoltata in pagine e PDF, per anteprima, presentazione e stampa"
+                                (onClick)="engrave(part)"
+                            />
                         }
                         <p-button [label]="playback.recognitionAvailable ? 'Carica MusicXML o MIDI' : 'Carica MusicXML'" icon="pi pi-upload" size="small" severity="secondary" outlined [disabled]="trackDirty" (onClick)="upload(part)" />
                         <p-button label="Versioni e suono" icon="pi pi-history" size="small" severity="secondary" text [disabled]="trackDirty" (onClick)="versions(part)" />

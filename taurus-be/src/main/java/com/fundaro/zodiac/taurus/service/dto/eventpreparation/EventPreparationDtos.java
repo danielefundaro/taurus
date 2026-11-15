@@ -55,9 +55,12 @@ public final class EventPreparationDtos {
     public record ScoreFile(Long mediaId, String fileName) {
     }
 
-    /** A part of the track: {@code files} are the media ready to be opened through the catalogue. */
-    public record ProgramScore(Long id, String description, List<String> instruments, boolean ready, boolean needsReview,
-                               List<ScoreFile> files) {
+    /**
+     * A part of the track: {@code instrumentIds} follow the order of {@code instruments}, {@code unengraved} marks a
+     * part with a version and without pages, and {@code files} are the media ready to be opened through the catalogue.
+     */
+    public record ProgramScore(Long id, String description, List<String> instruments, List<Long> instrumentIds, boolean ready,
+                               boolean needsReview, boolean unengraved, List<ScoreFile> files) {
     }
 
     /**

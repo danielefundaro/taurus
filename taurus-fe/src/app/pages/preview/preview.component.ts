@@ -5,7 +5,9 @@ import { Router } from '@angular/router';
 import { CheckboxChangeEvent } from 'primeng/checkbox';
 import { Subscription } from 'rxjs';
 import { ImportsModule } from '../../imports';
-import { MediaService, PrinterService, ToastService } from '../../service';
+import { SheetsMusic } from '../../module';
+import { unengravedLabel } from '../../score-editor/score-engraving';
+import { MediaService, PrinterService, ScorePlaybackService, ToastService } from '../../service';
 
 type PrintSheetOrientation = 'portrait' | 'landscape';
 
@@ -22,6 +24,12 @@ interface MediaPage {
 }
 
 type PrintSheet = Array<string | null>;
+
+/** Una o due pagine per foglio, oppure il formato marcia: due pagine di 18 × 13 cm su un A4 verticale. */
+type PrintLayout = 1 | 2 | 'march';
+
+/** Rapporto tra i lati del formato marcia, 18 × 13 cm in orizzontale. */
+const MARCH_RATIO = 180 / 130;
 
 // Oltre 960 px la spalla parte aperta; fino a 960 px parte chiusa e si comporta come overlay.
 const DESKTOP_VIEWPORT = '(min-width: 961px)';
@@ -48,6 +56,8 @@ export class PreviewComponent implements OnInit, OnDestroy {
     protected currentPage: number = 1;
     protected zoom: number = 100;
     protected printPagesPerSheet: 1 | 2 = 1;
+    /** Le pagine si stampano a 18 × 13 cm, due per foglio A4 verticale, con la linea di taglio. */
+    protected marchFormat = false;
     protected previewTitle: string;
     protected previewSource: string;
     protected readonly responsiveOptions = [
@@ -72,7 +82,8 @@ export class PreviewComponent implements OnInit, OnDestroy {
         private readonly location: Location,
         private readonly sanitizer: DomSanitizer,
         private readonly changeDetector: ChangeDetectorRef,
-        private readonly toastService: ToastService
+        private readonly toastService: ToastService,
+        private readonly playbackService: ScorePlaybackService
     ) {
         this.mediaStreams = [];
         this.instruments = {};
@@ -102,6 +113,12 @@ export class PreviewComponent implements OnInit, OnDestroy {
         });
 
         this.selectedInstruments = this.getInstrumentIndices(true);
+
+        // La scaletta di un evento si stampa per strumento, nel formato marcia.
+        if (this.printerService.byInstrument) {
+            this.mediaStreams = this.filterMedia();
+            this.printLayout = 'march';
+        }
 
         if (this.mediaStreams.length === 0) {
             this.leaveWithoutPages();
@@ -141,6 +158,37 @@ export class PreviewComponent implements OnInit, OnDestroy {
 
     protected print(): void {
         window.print();
+    }
+
+    protected get printLayout(): PrintLayout {
+        return this.marchFormat ? 'march' : this.printPagesPerSheet;
+    }
+
+    protected set printLayout(layout: PrintLayout) {
+        this.marchFormat = layout === 'march';
+        this.printPagesPerSheet = layout === 1 ? 1 : 2;
+    }
+
+    /** Pagine caricate con un altro formato: nel formato marcia si riducono per entrare nel riquadro di 18 × 13 cm. */
+    protected get nonMarchPageCount(): number {
+        return this.mediaStreams.filter((mediaStream) => {
+            const page = this.printPageDimensions.get(mediaStream);
+            return page !== undefined && Math.abs(page.width / page.height / MARCH_RATIO - 1) > 0.01;
+        }).length;
+    }
+
+    protected get nonMarchPageLabel(): string {
+        const count = this.nonMarchPageCount;
+        return count === 1 ? '1 pagina non in formato marcia, ridotta in stampa' : `${count} pagine non in formato marcia, ridotte in stampa`;
+    }
+
+    /** Parti selezionate scritte e non ancora impaginate: restano fuori da anteprima e stampa. */
+    protected get unengravedCount(): number {
+        return this.printerService.scores.filter((score) => this.printerService.isUnengraved(score) && this.isSelected(score)).length;
+    }
+
+    protected get unengravedSummary(): string {
+        return unengravedLabel(this.unengravedCount);
     }
 
     protected openGalleria(): void {
@@ -230,7 +278,7 @@ export class PreviewComponent implements OnInit, OnDestroy {
     protected get printOrientation(): PrintSheetOrientation {
         const dimensions = this.mediaStreams.map((mediaStream) => this.printPageDimensions.get(mediaStream)).filter((value): value is PrintPageDimensions => value !== undefined);
 
-        if (dimensions.length === 0) return 'portrait';
+        if (dimensions.length === 0 || this.marchFormat) return 'portrait';
 
         const averageAspectRatio = dimensions.reduce((total, page) => total + page.width / page.height, 0) / dimensions.length;
         if (this.printPagesPerSheet === 2) return averageAspectRatio > 1 ? 'portrait' : 'landscape';
@@ -297,8 +345,18 @@ export class PreviewComponent implements OnInit, OnDestroy {
      * alla superficie da cui è arrivato, invece di trovarsi su una pagina vuota o alla home senza spiegazione.
      */
     private leaveWithoutPages(): void {
+        const unengraved = this.printerService.scores.filter((score) => this.printerService.isUnengraved(score)).length;
         if (this.printerService.scores.length === 0) {
-            this.toastService.warn('Anteprima non disponibile', 'L’anteprima non conserva i dati dopo un ricaricamento: ripeti il comando dalla traccia o dall’album.');
+            this.toastService.warn('Anteprima non disponibile', 'L’anteprima non conserva i dati dopo un ricaricamento: ripeti il comando dalla traccia, dall’album o dalla scaletta dell’evento.');
+        } else if (unengraved) {
+            const title = unengraved === 1 ? 'Parte scritta non ancora impaginata' : 'Parti scritte non ancora impaginate';
+            const subject = unengraved === 1 ? 'La parte non ha' : 'Le parti non hanno';
+            this.toastService.warn(
+                title,
+                this.playbackService.canManage
+                    ? `${subject} ancora pagine: impaginale con «Impagina» nella scheda Ascolto o nel Workspace Parti della traccia per vederle in anteprima e stamparle.`
+                    : `${subject} ancora pagine: si leggono e si ascoltano nella scheda Ascolto della traccia, e si stampano quando l’archivio le impagina.`
+            );
         } else {
             this.toastService.warn('Nessuna pagina da mostrare', 'La sorgente selezionata non contiene pagine da consultare o stampare.');
         }
@@ -374,17 +432,33 @@ export class PreviewComponent implements OnInit, OnDestroy {
     }
 
     private filterMedia(): string[] {
-        return this.printerService.scores
-            .filter((score) => {
-                if (!score.instruments?.length) {
-                    return this.selectedInstruments['null'];
-                }
+        return this.ordered(this.printerService.scores.filter((score) => this.isSelected(score))).flatMap((score) => {
+            return (score.media ?? []).map((media) => this.mediaService.stream(media.index));
+        });
+    }
 
-                return score.instruments?.some((instrument) => this.selectedInstruments[instrument.index]);
-            })
-            .flatMap((score) => {
-                return score.media!.map((media) => this.mediaService.stream(media.index));
-            });
+    /**
+     * Nella scaletta di un evento le parti seguono gli strumenti, nell'ordine dei filtri, e per ognuno l'ordine dei
+     * brani: una parte con più strumenti si stampa una volta, sotto il primo strumento scelto.
+     */
+    private ordered(scores: SheetsMusic[]): SheetsMusic[] {
+        if (!this.printerService.byInstrument) return scores;
+
+        const group = (score: SheetsMusic): number => {
+            const keys = score.instruments?.length ? score.instruments.map((instrument) => String(instrument.index)).filter((key) => this.selectedInstruments[key]) : ['null'];
+            return Math.min(...keys.map((key) => this.instrumentKeys.indexOf(key)));
+        };
+
+        return scores
+            .map((score, index) => ({ score, index, group: group(score) }))
+            .sort((first, second) => first.group - second.group || first.index - second.index)
+            .map(({ score }) => score);
+    }
+
+    /** La parte è tra quelle scelte nei filtri, per uno dei suoi strumenti o tra quelle senza strumento. */
+    private isSelected(score: SheetsMusic): boolean {
+        if (!score.instruments?.length) return !!this.selectedInstruments['null'];
+        return score.instruments.some((instrument) => this.selectedInstruments[instrument.index]);
     }
 
     private refreshMediaStreams(): void {

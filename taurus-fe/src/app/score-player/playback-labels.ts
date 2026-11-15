@@ -11,6 +11,23 @@ const RECOGNITION_ERRORS: Readonly<Record<string, string>> = {
     interrupted: 'il riconoscimento si è interrotto più volte'
 };
 
+const ENGRAVING_ERRORS: Readonly<Record<string, string>> = {
+    unreadableScore: 'il servizio musicale non riesce a leggere la versione',
+    invalidOptions: 'il servizio musicale non accetta le opzioni scelte',
+    tooManyPages: 'la parte supera 30 pagine: riduci il rigo o i margini',
+    tooLarge: 'la versione supera la dimensione massima',
+    engineFailed: 'Verovio non è riuscito a impaginare la parte',
+    engineTimeout: "l'impaginazione ha superato il tempo massimo",
+    serviceUnavailable: 'il servizio musicale non è raggiungibile: riprova più tardi',
+    versionNotFound: 'la versione o la parte è stata eliminata nel frattempo',
+    interrupted: "l'impaginazione si è interrotta più volte"
+};
+
+/** Motivo di un'impaginazione non riuscita. */
+export function engravingErrorLabel(code: string | null | undefined): string {
+    return `Impaginazione non riuscita: ${ENGRAVING_ERRORS[code ?? ''] ?? 'errore imprevisto'}`;
+}
+
 /** Nome di una parte nel lettore: descrizione, altrimenti gli strumenti, altrimenti il numero d'ordine. */
 export function partLabel(part: PartPlayback): string {
     const instruments = part.instruments.map((instrument) => instrument.name).join(', ');

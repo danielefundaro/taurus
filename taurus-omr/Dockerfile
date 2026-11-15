@@ -1,4 +1,5 @@
-# Taurus OMR service: Audiveris, homr and the RapidOCR text reading, unmodified, behind an internal HTTP API.
+# Taurus OMR service, the internal music service of Taurus: Audiveris, homr and the RapidOCR text reading, unmodified,
+# and the engraving of written parts with Verovio and Cairo, behind an internal HTTP API.
 # Every downloaded component is pinned and verified with SHA-256; the models are part of the image, so the service
 # never reaches the Internet while running.
 FROM ubuntu:24.04
@@ -17,11 +18,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TAURUS_OMR_WORK_DIR=/tmp \
     HOME=/tmp
 
-# Audiveris needs GTK and a virtual display even in batch mode; homr needs OpenGL and GLib for OpenCV.
+# Audiveris needs GTK and a virtual display even in batch mode; homr needs OpenGL and GLib for OpenCV; the engraving
+# needs Cairo and a font with the metrics of Times, the text font of Verovio.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl python3 python3-venv \
-        xvfb xauth libgtk-3-0t64 libfreetype6 fontconfig fonts-dejavu-core \
+        xvfb xauth libgtk-3-0t64 libfreetype6 fontconfig fonts-dejavu-core libcairo2 fonts-liberation \
         libx11-6 libxext6 libxrender1 libxtst6 libxi6 libasound2t64 libgl1 libglib2.0-0 \
     && curl -fsSL -o /tmp/audiveris.deb \
         "https://github.com/Audiveris/audiveris/releases/download/${AUDIVERIS_VERSION}/Audiveris-${AUDIVERIS_VERSION}-ubuntu24.04-x86_64.deb" \

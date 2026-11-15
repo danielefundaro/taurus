@@ -49,6 +49,16 @@ class UnreadableMidi(OmrError):
     code = "unreadableMidi"
 
 
+class UnreadableScore(OmrError):
+    status = 422
+    code = "unreadableScore"
+
+
+class InvalidOptions(OmrError):
+    status = 422
+    code = "invalidOptions"
+
+
 class Busy(OmrError):
     status = 503
     code = "busy"
