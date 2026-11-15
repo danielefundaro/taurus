@@ -2,6 +2,7 @@ package com.fundaro.zodiac.taurus.service.onboarding;
 
 import com.fundaro.zodiac.taurus.domain.Instruments;
 import com.fundaro.zodiac.taurus.service.scoreplayback.InstrumentPlaybackSuggester;
+import com.fundaro.zodiac.taurus.service.scoreplayback.InstrumentPlaybackSuggester.Suggestion;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,8 +38,17 @@ final class OnboardingInstrumentPlayback {
 
     record Problem(String column, String message) {}
 
-    record Values(Integer transposition, Integer bassClefTransposition, Integer soundBank, Integer soundProgram, Integer percussionKey) {
-        static final Values NONE = new Values(null, null, null, null, null);
+    /** Sound and transposition, with the written range of the catalogue when it applies to the transposition. */
+    record Values(
+        Integer transposition,
+        Integer bassClefTransposition,
+        Integer soundBank,
+        Integer soundProgram,
+        Integer percussionKey,
+        Integer lowestWrittenPitch,
+        Integer highestWrittenPitch
+    ) {
+        static final Values NONE = new Values(null, null, null, null, null, null, null);
 
         boolean configured() {
             return percussionKey != null || (soundProgram != null && transposition != null);
@@ -50,6 +60,8 @@ final class OnboardingInstrumentPlayback {
             instrument.setSoundBank(soundBank);
             instrument.setSoundProgram(soundProgram);
             instrument.setPercussionKey(percussionKey);
+            instrument.setLowestWrittenPitch(lowestWrittenPitch);
+            instrument.setHighestWrittenPitch(highestWrittenPitch);
         }
     }
 
@@ -62,7 +74,9 @@ final class OnboardingInstrumentPlayback {
                         suggestion.bassClefTransposition(),
                         suggestion.soundBank(),
                         suggestion.soundProgram(),
-                        suggestion.percussionKey()
+                        suggestion.percussionKey(),
+                        suggestion.lowestWrittenPitch(),
+                        suggestion.highestWrittenPitch()
                     ),
                     false,
                     suggestion.keyword(),
@@ -95,7 +109,16 @@ final class OnboardingInstrumentPlayback {
         if (drum != null && (semitones != null || bassClefSemitones != null)) {
             problems.add(new Problem(TRANSPOSITION, "La trasposizione non si applica ai suoni di batteria"));
         }
-        Values values = new Values(semitones, bassClefSemitones, program == null ? null : 0, program, drum);
+        Suggestion catalogue = drum == null ? InstrumentPlaybackSuggester.suggest(name).filter(found -> found.rangeAppliesTo(semitones)).orElse(null) : null;
+        Values values = new Values(
+            semitones,
+            bassClefSemitones,
+            program == null ? null : 0,
+            program,
+            drum,
+            catalogue == null ? null : catalogue.lowestWrittenPitch(),
+            catalogue == null ? null : catalogue.highestWrittenPitch()
+        );
         return new Resolution(problems.isEmpty() ? values : Values.NONE, true, null, List.copyOf(problems));
     }
 

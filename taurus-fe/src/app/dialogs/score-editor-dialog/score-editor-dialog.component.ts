@@ -9,6 +9,7 @@ import { ErrorReport, MeasureBox, PlaybackSound, ScoreCorrection, ScoreDraft, Sc
 import { EditHistory } from '../../score-editor/edit-history';
 import { excerpt } from '../../score-editor/excerpt';
 import { Alteration, ALTERATIONS, CLEF_OPTIONS, fraction, KEY_OPTIONS, NOTE_TYPES, NoteType, Step, STEP_NAMES, STEPS, toNumber } from '../../score-editor/notation-rules';
+import { RangeInstrument, rangeLabel, RangeWarning, rangeWarnings, writtenRange } from '../../score-editor/score-derivation';
 import { EditError, ScoreDocument, ScoreDocumentChecks } from '../../score-editor/score-document';
 import * as edits from '../../score-editor/score-edits';
 import * as input from '../../score-editor/score-input';
@@ -57,6 +58,14 @@ export interface ScoreEditorDialogData {
     initialContent?: string;
     /** Scrittura: il servizio musicale impagina le parti, e la barra superiore offre «Impagina». */
     engravable?: boolean;
+    /** Strumento di una parte con un solo strumento, per segnalare le note fuori dalla sua estensione. */
+    range?: EditorRange | null;
+}
+
+/** Estensione dello strumento della parte, con il nome per i controlli. */
+export interface EditorRange {
+    instrumentName: string;
+    instrument: RangeInstrument;
 }
 
 /** L'editor si è chiuso per impaginare la versione aperta, senza modifiche. */
@@ -276,6 +285,10 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected note: edits.NoteInfo | null = null;
     protected measure: edits.MeasureInfo | null = null;
     protected checks: ScoreDocumentChecks = { wrongDuration: [], empty: [] };
+    /** Battute con note fuori dall'estensione dello strumento, con la prima di ognuna. */
+    protected rangeWarnings: RangeWarning[] = [];
+    /** Estensione della parte nella sua chiave iniziale, «Si♭3–Fa6»; `null` se non è configurata. */
+    protected rangeText: string | null = null;
     protected reports: ErrorReport[] = [];
 
     protected timeBeats = 4;
@@ -622,6 +635,13 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const id = edits.firstNoteOf(this.score, index);
         if (id) this.select(id);
         else this.selectEmptyMeasure(index);
+    }
+
+    /** Seleziona la prima nota fuori estensione della battuta. */
+    protected selectOutOfRange(warning: RangeWarning): void {
+        if (!this.score?.find(warning.noteId)) return;
+        this.rangeEnd = null;
+        this.select(warning.noteId);
     }
 
     /** Seleziona la battuta indicata in una segnalazione. */
@@ -1434,6 +1454,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.history = new EditHistory();
         this.dirty = false;
         this.checks = this.score.checks();
+        this.checkRange(this.score);
         this.selectedId = this.score.notes()[0]?.getAttribute('id') ?? null;
         this.emptyMeasureId = null;
         this.rangeEnd = null;
@@ -1792,10 +1813,18 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.afterChange();
     }
 
+    /** Note fuori estensione; l'estensione dipende dalla chiave iniziale, che si può cambiare, e si ricalcola a ogni modifica. */
+    private checkRange(score: ScoreDocument): void {
+        const range = this.data.range ? writtenRange(this.data.range.instrument, score.stateAt(0).clef.sign) : null;
+        this.rangeText = range ? rangeLabel(range) : null;
+        this.rangeWarnings = rangeWarnings(score, range);
+    }
+
     private afterChange(): void {
         const score = this.score!;
         this.dirty = score.snapshot() !== this.initialSnapshot;
         this.checks = score.checks();
+        this.checkRange(score);
         const selectionExists = this.selectedId ? !!score.find(this.selectedId) : !this.emptyMeasureId || !!score.find(this.emptyMeasureId);
         if (!selectionExists) {
             // La nota o la battuta selezionata non esiste più, per esempio dopo «Annulla»: si resta sulla stessa battuta.

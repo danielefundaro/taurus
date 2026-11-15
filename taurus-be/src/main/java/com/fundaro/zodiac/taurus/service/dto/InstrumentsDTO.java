@@ -27,6 +27,11 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
     /** General MIDI drum key: when present the instrument is unpitched percussion. */
     private Integer percussionKey;
 
+    /** Lowest written note in the main transposition, as a MIDI note number (C4 = 60); present with the highest. */
+    private Integer lowestWrittenPitch;
+
+    private Integer highestWrittenPitch;
+
     public Long getUsersCount() {
         return usersCount;
     }
@@ -75,6 +80,22 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
         this.percussionKey = percussionKey;
     }
 
+    public Integer getLowestWrittenPitch() {
+        return lowestWrittenPitch;
+    }
+
+    public void setLowestWrittenPitch(Integer lowestWrittenPitch) {
+        this.lowestWrittenPitch = lowestWrittenPitch;
+    }
+
+    public Integer getHighestWrittenPitch() {
+        return highestWrittenPitch;
+    }
+
+    public void setHighestWrittenPitch(Integer highestWrittenPitch) {
+        this.highestWrittenPitch = highestWrittenPitch;
+    }
+
     /** Whether parts of this instrument play with their own sound and transposition. */
     public boolean isPlaybackConfigured() {
         return percussionKey != null || (soundProgram != null && transpositionSemitones != null);
@@ -105,6 +126,8 @@ public class InstrumentsDTO extends CommonFieldsOpenSearchDTO {
             ", soundBank=" + getSoundBank() +
             ", soundProgram=" + getSoundProgram() +
             ", percussionKey=" + getPercussionKey() +
+            ", lowestWrittenPitch=" + getLowestWrittenPitch() +
+            ", highestWrittenPitch=" + getHighestWrittenPitch() +
             "}";
     }
 }

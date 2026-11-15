@@ -5,6 +5,7 @@ import { delay, finalize, first } from 'rxjs';
 import { ImportsModule } from '../../../imports';
 import { DetailPageBase } from '../../_shared/detail-page.base';
 import { ChildrenEntities, InstrumentPlaybackSuggestion, Instruments } from '../../../module';
+import { keyLabel } from '../../../score-editor/score-input';
 import { DRUM_SOUNDS, GENERAL_MIDI_FAMILIES } from '../../../score-player/general-midi';
 import { ConfirmService, InstrumentsService, ScoreAudioService, ScorePlaybackService, TenantFeatureService, ToastService } from '../../../service';
 
@@ -27,6 +28,8 @@ export class DetailComponent extends DetailPageBase implements OnInit {
 
     protected readonly soundGroups = GENERAL_MIDI_FAMILIES.map((family) => ({ label: family.label, items: family.sounds.map((sound) => ({ label: `${sound.program} · ${sound.name}`, value: sound.program })) }));
     protected readonly drumOptions = DRUM_SOUNDS.map((sound) => ({ label: `${sound.program} · ${sound.name}`, value: sound.program }));
+    /** Note scritte per l'estensione, con il nome: «Mi3». */
+    protected readonly pitchOptions = Array.from({ length: 128 }, (_, key) => ({ label: keyLabel(key), value: key }));
     protected readonly kindOptions = [
         { label: 'Strumento intonato', value: false },
         { label: 'Percussione', value: true }
@@ -68,6 +71,15 @@ export class DetailComponent extends DetailPageBase implements OnInit {
         return instrument.percussionKey !== null && instrument.percussionKey !== undefined
             ? true
             : instrument.soundProgram !== null && instrument.soundProgram !== undefined && instrument.transpositionSemitones !== null && instrument.transpositionSemitones !== undefined;
+    }
+
+    /** Errore dell'estensione: le due note vanno scelte insieme, la grave non sopra l'acuta. */
+    protected get rangeError(): string | undefined {
+        const lowest = this.instrument.lowestWrittenPitch ?? null;
+        const highest = this.instrument.highestWrittenPitch ?? null;
+        if ((lowest === null) !== (highest === null)) return 'Scegli entrambe le note, o nessuna.';
+        if (lowest !== null && highest !== null && lowest > highest) return 'La nota più grave non può essere più acuta della nota più acuta.';
+        return undefined;
     }
 
     public confirmDelete(): void {
@@ -123,6 +135,8 @@ export class DetailComponent extends DetailPageBase implements OnInit {
             this.instrument.soundProgram = null;
             this.instrument.transpositionSemitones = null;
             this.instrument.bassClefTranspositionSemitones = null;
+            this.instrument.lowestWrittenPitch = null;
+            this.instrument.highestWrittenPitch = null;
         } else {
             this.instrument.percussionKey = null;
         }
@@ -156,6 +170,8 @@ export class DetailComponent extends DetailPageBase implements OnInit {
                 this.instrument.soundBank = suggestion.soundBank ?? null;
                 this.instrument.soundProgram = suggestion.soundProgram ?? null;
                 this.instrument.percussionKey = suggestion.percussionKey ?? null;
+                this.instrument.lowestWrittenPitch = suggestion.lowestWrittenPitch ?? null;
+                this.instrument.highestWrittenPitch = suggestion.highestWrittenPitch ?? null;
                 this.isDirty = true;
             });
     }

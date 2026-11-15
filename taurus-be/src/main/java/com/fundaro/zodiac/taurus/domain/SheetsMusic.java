@@ -73,6 +73,10 @@ public class SheetsMusic extends AuditFields implements Serializable {
     @Column(name = "engraved_pages_fingerprint")
     private String engravedPagesFingerprint;
 
+    /** Version of another part this part was derived from for a different instrument; set once, by the derivation. */
+    @Column(name = "derived_from_version_id")
+    private Long derivedFromVersionId;
+
     public String getDescription() {
         return description;
     }
@@ -159,6 +163,14 @@ public class SheetsMusic extends AuditFields implements Serializable {
 
     public String getEngravedPagesFingerprint() {
         return engravedPagesFingerprint;
+    }
+
+    public Long getDerivedFromVersionId() {
+        return derivedFromVersionId;
+    }
+
+    public void setDerivedFromVersionId(Long derivedFromVersionId) {
+        this.derivedFromVersionId = derivedFromVersionId;
     }
 
     public void setEngravedPagesFingerprint(String engravedPagesFingerprint) {

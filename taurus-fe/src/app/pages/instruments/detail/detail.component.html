@@ -3,7 +3,7 @@
 <p-fluid [class.hidden]="loading">
     <app-page-header kicker="Strumento" [heading]="instrument.name || 'Nuovo strumento'" backLink="/instruments"
         [dirty]="isDirty">
-        <div pageActions><p-button label="Salva strumento" icon="pi pi-check" [loading]="saving" [disabled]="!isDirty"
+        <div pageActions><p-button label="Salva strumento" icon="pi pi-check" [loading]="saving" [disabled]="!isDirty || !!rangeError"
                 (onClick)="save()" /></div>
     </app-page-header>
 
@@ -67,6 +67,18 @@
                     <p-inputnumber inputId="bassClefTransposition"
                         [(ngModel)]="instrument.bassClefTranspositionSemitones" (ngModelChange)="markPlaybackDirty()"
                         [min]="-36" [max]="36" [showButtons]="true" />
+                </app-form-field>
+                <app-form-field label="Nota più grave" forId="lowestWrittenPitch" [error]="rangeError"
+                    hint="Nota scritta, nella trasposizione dello strumento.">
+                    <p-select inputId="lowestWrittenPitch" [options]="pitchOptions" [(ngModel)]="instrument.lowestWrittenPitch"
+                        (ngModelChange)="markPlaybackDirty()" optionLabel="label" optionValue="value" [filter]="true"
+                        [showClear]="true" placeholder="Nessuna" appendTo="body" />
+                </app-form-field>
+                <app-form-field label="Nota più acuta" forId="highestWrittenPitch"
+                    hint="Le note fuori estensione si segnalano scrivendo e ricavando le parti.">
+                    <p-select inputId="highestWrittenPitch" [options]="pitchOptions" [(ngModel)]="instrument.highestWrittenPitch"
+                        (ngModelChange)="markPlaybackDirty()" optionLabel="label" optionValue="value" [filter]="true"
+                        [showClear]="true" placeholder="Nessuna" appendTo="body" />
                 </app-form-field>
             </div>
             }

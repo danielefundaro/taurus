@@ -1,5 +1,6 @@
 import { fakeAsync, tick } from '@angular/core/testing';
 import { of, Subject } from 'rxjs';
+import { DerivePartDialogComponent } from '../../../../dialogs/derive-part-dialog/derive-part-dialog.component';
 import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
@@ -101,7 +102,7 @@ describe('ScorePlaybackPanelComponent writing', () => {
 
         component.write(written);
         expect(opened().component).toBe(ScoreEditorDialogComponent);
-        expect(opened().data).toEqual(jasmine.objectContaining({ trackId: 5, scoreId: 1, versionId: 7, mode: 'writing', resume: false }));
+        expect(opened().data).toEqual(jasmine.objectContaining({ trackId: 5, scoreId: 1, versionId: 7, mode: 'writing', resume: false, range: null }));
         close();
         expect(service.playback).toHaveBeenCalledTimes(2);
         expect(toast.success).not.toHaveBeenCalled();
@@ -142,6 +143,63 @@ describe('ScorePlaybackPanelComponent writing', () => {
         expect(partsChanged).toBe(1);
         expect(opened().component).toBe(ScoreEditorDialogComponent);
         expect(opened().data).toEqual(jasmine.objectContaining({ scoreId: 2, versionId: null, mode: 'writing' }));
+    });
+
+    it('derives a part only from a pitched part of one instrument with a transposition', () => {
+        const { component } = setup([]);
+        const clarinet = { id: 3, name: 'Clarinetto', transpositionSemitones: -2, configured: true };
+        expect(component.deriveBlocker(part({ transpositionSemitones: -2 }, { version, instruments: [clarinet] }))).toBeNull();
+        expect(component.deriveBlocker(part({ transpositionSemitones: -2 }, { version }))).toContain('un solo strumento');
+        expect(component.deriveBlocker(part({ transpositionSemitones: -2 }, { version, instruments: [] }))).toContain('un solo strumento');
+        expect(component.deriveBlocker(part({ percussionKeys: [38] }, { version, instruments: [{ id: 5, name: 'Rullante', percussionKey: 38, configured: true }] }))).toBe('Le parti di percussioni non si ricavano');
+        expect(component.deriveBlocker(part({ transpositionSemitones: null }, { version, instruments: [clarinet] }))).toBe('Configura la trasposizione di Clarinetto per ricavarne una parte');
+    });
+
+    it('says which part a derived part comes from and when the source has changed', () => {
+        const source = part({}, { scoreId: 1, description: 'Clarinetto 1°', version: { ...version, id: 9, versionNumber: 3 } });
+        const derived = part({}, { scoreId: 2, order: 2, description: 'Sax contralto', version, derivedFrom: { scoreId: 1, versionId: 8, versionNumber: 2 } });
+        const { component } = setup([source, derived]);
+
+        expect(component.derivedLabel(derived)).toBe('Ricavata da Clarinetto 1° (versione 2)');
+        expect(component.sourceChanged(derived)).toBe('Ora si ascolta la versione 3 di Clarinetto 1°: la parte ricavata non si aggiorna da sola');
+        expect(component.derivedLabel(source)).toBeNull();
+        expect(component.sourceChanged(source)).toBeNull();
+        expect(component.sourceChanged({ ...derived, derivedFrom: { scoreId: 1, versionId: 9, versionNumber: 3 } })).toBeNull();
+        expect(component.derivedLabel({ ...derived, derivedFrom: { scoreId: 7, versionId: 4, versionNumber: 1 } })).toBe('Ricavata da una parte eliminata');
+        expect(component.sourceChanged({ ...derived, derivedFrom: { scoreId: 7, versionId: 4, versionNumber: 1 } })).toBeNull();
+    });
+
+    it('derives a part for another instrument and opens it in the editor', () => {
+        const clarinet = part({ transpositionSemitones: -2 }, { version, instruments: [{ id: 3, name: 'Clarinetto', transpositionSemitones: -2, configured: true }] });
+        const { component, service, close, opened, dialogs } = setup([clarinet]);
+        const versions: number[] = [];
+        component.trackVersionChange.subscribe((value: number) => versions.push(value));
+
+        component.derive(part({}, { version }));
+        expect(dialogs.open).not.toHaveBeenCalled();
+
+        component.derive(clarinet);
+        expect(opened().component).toBe(DerivePartDialogComponent);
+        expect(opened().data).toEqual({ trackId: 5, playback: component.playback, part: clarinet });
+        const created = part({}, { scoreId: 2, order: 2, version: null, draft: { savedBy: 'Mario Rossi', savedAt: '2026-11-15T09:00:00Z', outdated: false } });
+        service.playback.and.returnValue(of(playback([clarinet, created])));
+        close({ scoreId: 2, trackVersion: 3 });
+
+        expect(versions).toEqual([3]);
+        expect(opened().component).toBe(ScoreEditorDialogComponent);
+        expect(opened().data).toEqual(jasmine.objectContaining({ scoreId: 2, versionId: null, mode: 'writing' }));
+
+        // Gli editor controllano l'estensione delle parti di un solo strumento scritte nella sua trasposizione.
+        component.correct(clarinet);
+        expect(opened().data.range).toEqual({ instrumentName: 'Clarinetto', instrument: clarinet.instruments[0] });
+        component.correct({ ...clarinet, settings: { transpositionOverride: 0, soundBankOverride: null, soundProgramOverride: null } });
+        expect(opened().data.range).toBeNull();
+        close();
+
+        const count = dialogs.open.calls.count();
+        component.derive(clarinet);
+        close();
+        expect(dialogs.open.calls.count()).toBe(count + 1);
     });
 
     it('discards the draft of a part after a confirmation', async () => {

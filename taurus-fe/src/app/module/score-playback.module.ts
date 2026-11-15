@@ -63,6 +63,9 @@ export interface PlaybackInstrument {
     soundProgram?: number | null;
     percussionKey?: number | null;
     configured: boolean;
+    /** Estensione scritta nella trasposizione principale, come numeri di nota MIDI; vuota se non configurata. */
+    lowestWrittenPitch?: number | null;
+    highestWrittenPitch?: number | null;
 }
 
 /** Suono e trasposizione risolti per una parte. */
@@ -143,6 +146,15 @@ export interface PartPlayback {
      * pagine non vengono da un'impaginazione o sono cambiate dopo.
      */
     engravedFromVersionId?: number | null;
+    /** Versione di un'altra parte da cui la parte è stata ricavata, solo per archivisti e amministratori. */
+    derivedFrom?: DerivedFrom | null;
+}
+
+/** Origine di una parte ricavata: la parte, che può essere stata eliminata, e la sua versione. */
+export interface DerivedFrom {
+    scoreId: number;
+    versionId: number;
+    versionNumber: number;
 }
 
 /** Blocco di una parte: un solo autore alla volta, nell'editor di scrittura o di correzione. */
@@ -247,6 +259,17 @@ export interface NewWrittenPart {
     trackVersion: number | null;
 }
 
+/** Parte ricavata da una versione di un'altra parte per un altro strumento, trasposta nel browser. */
+export interface DerivedPart {
+    versionId: number;
+    instrumentId: number;
+    description: string | null;
+    /** MusicXML trasposto, che diventa la bozza della parte. */
+    content: string;
+    /** Versione della traccia mostrata all'archivista; `null` per non controllarla. */
+    trackVersion: number | null;
+}
+
 export interface WrittenPart {
     scoreId: number;
     trackVersion: number;
@@ -278,6 +301,8 @@ export interface InstrumentPlaybackSuggestion {
     soundBank?: number | null;
     soundProgram?: number | null;
     percussionKey?: number | null;
+    lowestWrittenPitch?: number | null;
+    highestWrittenPitch?: number | null;
 }
 
 /** Battuta su una pagina della parte: pagina da 1, coordinate in frazioni della pagina. */

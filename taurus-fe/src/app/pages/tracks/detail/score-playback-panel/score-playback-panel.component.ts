@@ -1,9 +1,10 @@
 import { Component, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ChangeDetectionStrategy } from '@angular/core';
 import { DialogService } from 'primeng/dynamicdialog';
 import { finalize, first, Subscription, timer } from 'rxjs';
+import { DerivePartDialogComponent, DerivePartDialogData, DerivePartDialogResult } from '../../../../dialogs/derive-part-dialog/derive-part-dialog.component';
 import { openEngraveDialog, EngraveDialogData } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent, NewPartDialogData, NewPartDialogResult } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
-import { isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData, ScoreEditorDialogResult } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { EditorRange, isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData, ScoreEditorDialogResult } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { ScoreReportsDialogComponent, ScoreReportsDialogData, ScoreReportsDialogResult } from '../../../../dialogs/score-reports-dialog/score-reports-dialog.component';
 import { ScoreUploadDialogComponent, ScoreUploadDialogData } from '../../../../dialogs/score-upload-dialog/score-upload-dialog.component';
@@ -89,6 +90,30 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     /** Le pagine sono impaginate da una versione precedente a quella ascoltata. */
     protected engravingOutdated(part: PartPlayback): boolean {
         return !!part.engravedFromVersionId && !!part.version && part.engravedFromVersionId !== part.version.id;
+    }
+
+    /** Perché la parte non si può ricavare per un altro strumento; `null` se si può. */
+    protected deriveBlocker(part: PartPlayback): string | null {
+        if (part.instruments.length !== 1) return 'Si ricava una parte solo da una parte di un solo strumento';
+        if (part.sound.percussionKeys.length || (part.instruments[0].percussionKey !== null && part.instruments[0].percussionKey !== undefined)) return 'Le parti di percussioni non si ricavano';
+        if (part.sound.transpositionSemitones === null || part.sound.transpositionSemitones === undefined) return `Configura la trasposizione di ${part.instruments[0].name} per ricavarne una parte`;
+        return null;
+    }
+
+    /** «Ricavata da Clarinetto 1° (versione 3)», o da una parte eliminata. */
+    protected derivedLabel(part: PartPlayback): string | null {
+        const origin = part.derivedFrom;
+        if (!origin) return null;
+        const source = this.playback?.parts.find((candidate) => candidate.scoreId === origin.scoreId);
+        return source ? `Ricavata da ${partLabel(source)} (versione ${origin.versionNumber})` : 'Ricavata da una parte eliminata';
+    }
+
+    /** La parte di origine ascolta ora un'altra versione: la versione attuale, per il suggerimento; `null` se è la stessa. */
+    protected sourceChanged(part: PartPlayback): string | null {
+        const origin = part.derivedFrom;
+        const source = origin ? this.playback?.parts.find((candidate) => candidate.scoreId === origin.scoreId) : undefined;
+        if (!origin || !source?.version || source.version.id === origin.versionId) return null;
+        return `Ora si ascolta la versione ${source.version.versionNumber} di ${partLabel(source)}: la parte ricavata non si aggiorna da sola`;
     }
 
     protected get anyAvailable(): boolean {
@@ -191,7 +216,10 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             scoreId: part.scoreId,
             partLabel: partLabel(part),
             settings: part.settings ?? { transpositionOverride: null, soundBankOverride: null, soundProgramOverride: null },
-            instrument: part.instruments[0] ?? null
+            instrument: part.instruments[0] ?? null,
+            sound: part.sound,
+            tempoBpm: this.playback?.tempoBpm ?? null,
+            engravedFromVersionId: this.canWrite ? (part.engravedFromVersionId ?? null) : null
         };
         const ref = this.dialogService.open(ScoreVersionsDialogComponent, { showHeader: false, width: 'min(56rem, 95vw)', modal: true, focusOnShow: false, data });
         ref?.onClose.pipe(first()).subscribe((result: ScoreVersionsDialogResult | undefined) => {
@@ -203,7 +231,7 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     /** Apre l'editor di correzione su una versione della parte, di norma quella ascoltata. */
     protected correct(part: PartPlayback, versionId = part.version?.id): void {
         if (!versionId) return;
-        const data: ScoreEditorDialogData = { trackId: this.trackId, scoreId: part.scoreId, versionId, partLabel: partLabel(part), sound: part.sound };
+        const data: ScoreEditorDialogData = { trackId: this.trackId, scoreId: part.scoreId, versionId, partLabel: partLabel(part), sound: part.sound, range: editorRange(part) };
         const ref = this.dialogService.open(ScoreEditorDialogComponent, {
             showHeader: false,
             width: '100vw',
@@ -239,6 +267,22 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             this.reload((playback) => {
                 const part = playback.parts.find((candidate) => candidate.scoreId === result.scoreId);
                 if (part) this.write(part);
+            });
+        });
+    }
+
+    /** Parte ricavata dalla versione ascoltata per un altro strumento, in fondo alla traccia, aperta nell'editor di scrittura. */
+    protected derive(part: PartPlayback): void {
+        if (!this.playback || !part.version || this.deriveBlocker(part)) return;
+        const data: DerivePartDialogData = { trackId: this.trackId, playback: this.playback, part };
+        const ref = this.dialogService.open(DerivePartDialogComponent, { showHeader: false, width: 'min(44rem, 95vw)', modal: true, focusOnShow: false, data });
+        ref?.onClose.pipe(first()).subscribe((result: DerivePartDialogResult | undefined) => {
+            if (!result) return;
+            this.trackVersionChange.emit(result.trackVersion);
+            this.partsChange.emit();
+            this.reload((playback) => {
+                const created = playback.parts.find((candidate) => candidate.scoreId === result.scoreId);
+                if (created) this.write(created);
             });
         });
     }
@@ -351,6 +395,7 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             versionId: part.version?.id ?? null,
             partLabel: partLabel(part),
             sound: part.sound,
+            range: editorRange(part),
             mode: 'writing',
             engravable: this.canEngrave,
             ...options
@@ -436,4 +481,15 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
                 .subscribe((jobs) => this.applyRecognitions(jobs));
         });
     }
+}
+
+/**
+ * Strumento di cui gli editor controllano l'estensione: solo per una parte di un solo strumento, scritta nella sua
+ * trasposizione, cioè senza una trasposizione diversa scelta per la parte.
+ */
+function editorRange(part: PartPlayback): EditorRange | null {
+    const override = part.settings?.transpositionOverride;
+    if (part.instruments.length !== 1 || (override !== null && override !== undefined)) return null;
+    const [instrument] = part.instruments;
+    return { instrumentName: instrument.name, instrument };
 }

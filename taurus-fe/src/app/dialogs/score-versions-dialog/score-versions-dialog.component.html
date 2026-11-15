@@ -34,7 +34,7 @@
                             <p-button label="Approva" icon="pi pi-check" size="small" [disabled]="busy" (onClick)="approve(version)" />
                         }
                         <p-button label="Correggi" icon="pi pi-pencil" size="small" severity="secondary" outlined [disabled]="busy" (onClick)="correct(version)" />
-                        <p-button label="Scarica" icon="pi pi-download" size="small" severity="secondary" text (onClick)="download(version)" />
+                        <p-button label="Scarica" icon="pi pi-download" size="small" severity="secondary" text ariaHaspopup="menu" (onClick)="openDownloads($event, downloadMenu, version)" />
                     </div>
                 </div>
             }
@@ -59,3 +59,5 @@
         <p-button label="Usa i valori dello strumento" size="small" severity="secondary" text [disabled]="busy" (onClick)="resetSound()" />
     </div>
 </app-dialog-shell>
+
+<p-menu #downloadMenu [model]="downloads" [popup]="true" appendTo="body" ariaLabel="Formati da scaricare" />

@@ -7,6 +7,17 @@
                 <p-button [icon]="playing ? 'pi pi-pause' : 'pi pi-play'" [label]="playing ? 'Pausa' : 'Ascolta'" [disabled]="status !== 'ready'" (onClick)="togglePlay()" />
                 <p-button icon="pi pi-step-backward" severity="secondary" outlined ariaLabel="Torna all'inizio" pTooltip="Torna all'inizio" [disabled]="status !== 'ready'" (onClick)="rewind()" />
                 <p-button icon="pi pi-flag" label="Segnala un errore" severity="secondary" text [disabled]="status !== 'ready'" pTooltip="Segnala a chi gestisce l'archivio una nota o un passaggio sbagliato" (onClick)="reportError()" />
+                @if (canDownload) {
+                    <p-button
+                        icon="pi pi-download"
+                        label="Scarica MIDI"
+                        severity="secondary"
+                        text
+                        [disabled]="status !== 'ready'"
+                        pTooltip="Salva in MIDI le parti che si sentono, con il tempo e i ritornelli scelti, senza metronomo né attacco"
+                        (onClick)="downloadMidi()"
+                    />
+                }
             </div>
             <div class="score-player__position">
                 <span class="score-player__measure">{{ currentMeasure ? 'Battuta ' + currentMeasure : 'Attacco' }}</span>

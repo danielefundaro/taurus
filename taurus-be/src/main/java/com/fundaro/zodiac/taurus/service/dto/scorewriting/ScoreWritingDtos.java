@@ -68,6 +68,17 @@ public final class ScoreWritingDtos {
     public record NewWrittenPartDTO(String description, List<Long> instrumentIds, String content, Long trackVersion) {}
 
     /**
+     * A part derived from a version of another part for a different instrument, to add at the end of the track.
+     *
+     * @param versionId    version of the part the new one is derived from
+     * @param instrumentId instrument of the new part, its only one
+     * @param description  description of the new part, {@code null} for none
+     * @param content      plain MusicXML with a single part, already transposed for the instrument: the first draft
+     * @param trackVersion version of the track shown to the author, {@code null} to skip the check
+     */
+    public record DerivedPartDTO(Long versionId, Long instrumentId, String description, String content, Long trackVersion) {}
+
+    /**
      * A part created for the writing editor.
      *
      * @param scoreId      id of the new part

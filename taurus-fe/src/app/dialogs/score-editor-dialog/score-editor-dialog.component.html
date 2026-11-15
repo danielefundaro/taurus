@@ -734,6 +734,18 @@
                             }
                         </div>
                     }
+                    @if (rangeText) {
+                        @if (rangeWarnings.length) {
+                            <p class="text-sm m-0">Note fuori estensione di {{ data.range?.instrumentName }} ({{ rangeText }}):</p>
+                            <div class="flex flex-wrap gap-1">
+                                @for (item of rangeWarnings; track item.measureIndex) {
+                                    <p-button [label]="item.measureNumber" size="small" severity="warn" outlined [ariaLabel]="'Vai alla nota fuori estensione della battuta ' + item.measureNumber" (onClick)="selectOutOfRange(item)" />
+                                }
+                            </div>
+                        } @else {
+                            <p class="text-sm m-0 text-muted-color"><i class="pi pi-check mr-1" aria-hidden="true"></i>Tutte le note nell'estensione di {{ data.range?.instrumentName }} ({{ rangeText }}).</p>
+                        }
+                    }
                 </div>
 
                 @if (reports.length) {

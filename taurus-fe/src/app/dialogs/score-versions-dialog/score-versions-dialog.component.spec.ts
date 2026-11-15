@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ScoreVersion } from '../../module';
 import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData } from './score-versions-dialog.component';
@@ -10,31 +10,38 @@ describe('ScoreVersionsDialogComponent', () => {
     let dialogRef: jasmine.SpyObj<DynamicDialogRef>;
     let confirmService: jasmine.SpyObj<ConfirmService>;
     let playbackService: jasmine.SpyObj<ScorePlaybackService>;
+    let toast: jasmine.SpyObj<ToastService>;
+    let data: ScoreVersionsDialogData;
     const version: ScoreVersion = { id: 7, scoreId: 9, versionNumber: 2, origin: 'OMR_AUDIVERIS', status: 'UNVERIFIED', measureCount: 2, checks: null as never, createdAt: '2026-10-18T10:00:00Z', current: true, pagesChanged: false };
 
     beforeEach(async () => {
-        const data: ScoreVersionsDialogData = {
+        data = {
             trackId: 4,
             scoreId: 9,
             partLabel: 'Clarinetto piccolo mib',
             settings: { transpositionOverride: null, soundProgramOverride: null, soundBankOverride: null },
-            instrument: { id: 3, name: 'Clarinetto piccolo', transpositionSemitones: 3, soundBank: 0, soundProgram: 71, configured: true }
+            instrument: { id: 3, name: 'Clarinetto piccolo', transpositionSemitones: 3, soundBank: 0, soundProgram: 71, configured: true },
+            sound: { transpositionSemitones: 3, soundProgram: 71, percussionKeys: [], configured: true, conflicting: false },
+            tempoBpm: 96,
+            engravedFromVersionId: null
         };
         dialogRef = jasmine.createSpyObj('DynamicDialogRef', ['close']);
         confirmService = jasmine.createSpyObj('ConfirmService', ['confirmDiscard']);
         // L'utente sceglie di restare nel dialogo.
         confirmService.confirmDiscard.and.callFake((request) => request.reject?.());
-        playbackService = jasmine.createSpyObj('ScorePlaybackService', ['versions', 'updatePartSettings']);
+        playbackService = jasmine.createSpyObj('ScorePlaybackService', ['versions', 'updatePartSettings', 'versionFile', 'editor', 'engravingPdf']);
+        toast = jasmine.createSpyObj('ToastService', ['success', 'warn']);
         playbackService.versions.and.returnValue(of([version]));
         playbackService.updatePartSettings.and.callFake((_trackId, _scoreId, settings) => of(settings));
 
         await TestBed.configureTestingModule({
             imports: [ScoreVersionsDialogComponent],
-            providers: [
+            providers: [
+
                 { provide: DynamicDialogConfig, useValue: { data } },
                 { provide: DynamicDialogRef, useValue: dialogRef },
                 { provide: ScorePlaybackService, useValue: playbackService },
-                { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['success']) },
+                { provide: ToastService, useValue: toast },
                 { provide: ConfirmService, useValue: confirmService }
             ]
         }).compileComponents();
@@ -76,5 +83,69 @@ describe('ScoreVersionsDialogComponent', () => {
         clickClose();
         expect(confirmService.confirmDiscard).toHaveBeenCalledTimes(2);
         expect(dialogRef.close).toHaveBeenCalledWith({ changed: true });
+    });
+
+    describe('downloads', () => {
+        let click: jasmine.Spy;
+        const downloads = (): {
+            downloads: { label?: string; disabled?: boolean; command?: (event: unknown) => void }[];
+            openDownloads(event: Event, menu: { toggle(event: Event): void }, version: ScoreVersion): void;
+            downloadMidi(version: ScoreVersion): Promise<void>;
+        } => fixture.componentInstance as never;
+        const saved = (): string => (click.calls.mostRecent().object as HTMLAnchorElement).download;
+        const run = (label: string): void => downloads().downloads.find((item) => item.label?.startsWith(label))!.command!({});
+        const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve));
+
+        beforeEach(() => {
+            click = spyOn(HTMLAnchorElement.prototype, 'click');
+        });
+
+        it('offers MusicXML and MIDI, and the PDF only for the version the pages come from', () => {
+            const menu = { toggle: jasmine.createSpy('toggle') };
+            const event = new MouseEvent('click');
+            downloads().openDownloads(event, menu, version);
+            expect(menu.toggle).toHaveBeenCalledWith(event);
+            expect(downloads().downloads.map((item) => item.label)).toEqual(['MusicXML per MuseScore (.mxl)', 'MIDI (.mid)']);
+
+            data.engravedFromVersionId = 7;
+            downloads().openDownloads(event, menu, version);
+            expect(downloads().downloads.map((item) => item.label)).toEqual(['MusicXML per MuseScore (.mxl)', 'MIDI (.mid)', 'PDF delle pagine']);
+            data.sound = undefined;
+            downloads().openDownloads(event, menu, version);
+            expect(downloads().downloads[1].disabled).toBeTrue();
+        });
+
+        it('saves the compressed MusicXML and the engraved PDF of the version', async () => {
+            playbackService.versionFile.and.returnValue(of(new Blob(['mxl'])));
+            playbackService.engravingPdf.and.returnValues(of(new Blob(['pdf'])), throwError(() => new Error('gone')));
+            data.engravedFromVersionId = 7;
+            downloads().openDownloads(new MouseEvent('click'), { toggle: () => undefined }, version);
+
+            run('MusicXML');
+            expect(playbackService.versionFile).toHaveBeenCalledWith(4, 9, 7);
+            expect(saved()).toBe('Clarinetto piccolo mib - versione 2.mxl');
+            run('PDF');
+            await settle();
+            expect(playbackService.engravingPdf).toHaveBeenCalledWith(4, 9, 7);
+            expect(saved()).toBe('Clarinetto piccolo mib - versione 2.pdf');
+            run('PDF');
+            await settle();
+            expect(toast.warn).toHaveBeenCalledWith('PDF non scaricato', jasmine.any(String));
+        });
+
+        it('builds the MIDI of the version in the browser, and says when the version cannot be read', async () => {
+            const xml = '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Cl</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>whole</type></note></measure></part></score-partwise>';
+            playbackService.editor.and.returnValues(of({ version, musicXml: xml, pages: [], layout: null }), throwError(() => new Error('offline')));
+
+            await downloads().downloadMidi(version);
+            expect(playbackService.editor).toHaveBeenCalledWith(4, 9, 7);
+            expect(saved()).toBe('Clarinetto piccolo mib - versione 2.mid');
+
+            await downloads().downloadMidi(version);
+            expect(toast.warn).toHaveBeenCalledWith('MIDI non scaricato', jasmine.any(String));
+            data.sound = undefined;
+            await downloads().downloadMidi(version);
+            expect(playbackService.editor).toHaveBeenCalledTimes(2);
+        });
     });
 });

@@ -58,8 +58,18 @@ public final class ScorePlaybackDtos {
         Integer soundBank,
         Integer soundProgram,
         Integer percussionKey,
-        boolean configured
+        boolean configured,
+        Integer lowestWrittenPitch,
+        Integer highestWrittenPitch
     ) {}
+
+    /**
+     * The version a derived part comes from.
+     *
+     * @param scoreId       part of the version, also when it was removed from the track since
+     * @param versionNumber number of the version in its part
+     */
+    public record DerivedFromDTO(Long scoreId, Long versionId, int versionNumber) {}
 
     /**
      * Sound and transposition resolved for a part: part overrides first, then the first assigned instrument.
@@ -130,6 +140,7 @@ public final class ScorePlaybackDtos {
      * @param draft       draft of the writing editor, returned to archivists and administrators only
      * @param engravedFromVersionId version the pages were engraved from, while they still derive from it; returned to
      *                              archivists and administrators only
+     * @param derivedFrom           version the part was derived from, returned to archivists and administrators only
      */
     public record PartPlaybackDTO(
         Long scoreId,
@@ -146,7 +157,8 @@ public final class ScorePlaybackDtos {
         int openReports,
         EditLockDTO editing,
         DraftSummaryDTO draft,
-        Long engravedFromVersionId
+        Long engravedFromVersionId,
+        DerivedFromDTO derivedFrom
     ) {}
 
     /**

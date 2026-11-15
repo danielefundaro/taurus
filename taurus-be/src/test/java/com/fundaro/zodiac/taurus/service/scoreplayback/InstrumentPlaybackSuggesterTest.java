@@ -93,4 +93,48 @@ class InstrumentPlaybackSuggesterTest {
             assertThat(InstrumentPlaybackSuggester.suggest(name)).as(name).isPresent();
         }
     }
+
+    @ParameterizedTest
+    @CsvSource(
+        delimiter = ';',
+        value = {
+            "Clarinetto soprano 1°; 52; 96",
+            "Sax contralto 2°; 58; 89",
+            "Sax baritono; 57; 89",
+            "Euphonium; 48; 84",
+            "Trombone 1°; 40; 77",
+            "Basso tuba; 26; 65",
+            "Corno in Mib; 42; 84",
+        }
+    )
+    void proposesTheWrittenRange(String name, int lowest, int highest) {
+        Suggestion suggestion = InstrumentPlaybackSuggester.suggest(name).orElseThrow();
+
+        assertThat(suggestion.lowestWrittenPitch()).isEqualTo(lowest);
+        assertThat(suggestion.highestWrittenPitch()).isEqualTo(highest);
+        assertThat(suggestion.rangeAppliesTo(suggestion.transposition())).isTrue();
+    }
+
+    @Test
+    void appliesTheRangeOnlyToTheTranspositionOfTheProposal() {
+        Suggestion bass = InstrumentPlaybackSuggester.suggest("Basso").orElseThrow();
+        Suggestion drum = InstrumentPlaybackSuggester.suggest("Tamburo").orElseThrow();
+
+        assertThat(bass.rangeAppliesTo(-14)).isFalse();
+        assertThat(bass.rangeAppliesTo(null)).isFalse();
+        assertThat(drum.lowestWrittenPitch()).isNull();
+        assertThat(drum.rangeAppliesTo(null)).isFalse();
+    }
+
+    @Test
+    void givesEveryPitchedInstrumentOfTheCatalogueAValidRange() {
+        for (InstrumentPlaybackCatalog.Entry entry : InstrumentPlaybackCatalog.entries()) {
+            if (entry.soundProgram() == null) {
+                assertThat(entry.lowestWrittenPitch()).as(entry.keywords().get(0)).isNull();
+                continue;
+            }
+            assertThat(entry.lowestWrittenPitch()).as(entry.keywords().get(0)).isBetween(0, 127);
+            assertThat(entry.highestWrittenPitch()).as(entry.keywords().get(0)).isBetween(entry.lowestWrittenPitch() + 12, 127);
+        }
+    }
 }

@@ -220,6 +220,8 @@ public class TrackInstrumentSuggestionService {
             instrument.setSoundBank(suggestion.soundBank());
             instrument.setSoundProgram(suggestion.soundProgram());
             instrument.setPercussionKey(suggestion.percussionKey());
+            instrument.setLowestWrittenPitch(suggestion.lowestWrittenPitch());
+            instrument.setHighestWrittenPitch(suggestion.highestWrittenPitch());
         });
         // Through the service: the same check on the name, audit and notices as a manual creation.
         return instrumentsService.save(instrument, token).getId();

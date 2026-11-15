@@ -98,4 +98,5 @@
   <include file="config/liquibase/changelog/20261113000001_event_payouts.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261114000001_score_writing.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261114000002_score_engraving.xml" relativeToChangelogFile="false"/>
+  <include file="config/liquibase/changelog/20261115000000_score_derivation.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

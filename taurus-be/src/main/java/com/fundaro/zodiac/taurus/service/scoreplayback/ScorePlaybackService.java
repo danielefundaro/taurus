@@ -9,6 +9,7 @@ import com.fundaro.zodiac.taurus.service.MediaService;
 import com.fundaro.zodiac.taurus.service.UsersService;
 import com.fundaro.zodiac.taurus.service.dto.UsersDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Availability;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.DerivedFromDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackSettingsDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PlaybackVersionDTO;
@@ -90,6 +91,7 @@ public class ScorePlaybackService {
             ? lockService.active(track.getScores().stream().map(SheetsMusic::getId).filter(Objects::nonNull).toList())
             : Map.of();
         Map<Long, DraftSummaryDTO> drafts = viewer == Viewer.MANAGER ? draftService.summaries(track.getScores()) : Map.of();
+        Map<Long, DerivedFromDTO> derivations = viewer == Viewer.MANAGER ? derivations(track.getScores()) : Map.of();
 
         List<PartPlaybackDTO> parts = new ArrayList<>();
         int order = 0;
@@ -115,7 +117,8 @@ public class ScorePlaybackService {
                 openReports.getOrDefault(part.getId(), 0),
                 editing.get(part.getId()),
                 drafts.get(part.getId()),
-                viewer == Viewer.MANAGER ? ScorePlaybackSupport.engravedFromVersionId(part) : null
+                viewer == Viewer.MANAGER ? ScorePlaybackSupport.engravedFromVersionId(part) : null,
+                part.getDerivedFromVersionId() == null ? null : derivations.get(part.getDerivedFromVersionId())
             ));
         }
         Long referenceScoreId = track.getScores().stream().anyMatch(part -> Objects.equals(part.getId(), track.getReferenceSheetMusicId()))
@@ -130,6 +133,16 @@ public class ScorePlaybackService {
             parts,
             viewer == Viewer.MANAGER && recognitionService.isAvailable()
         );
+    }
+
+    /** Versions the parts were derived from, by id; also removed ones, which still tell where a part comes from. */
+    private Map<Long, DerivedFromDTO> derivations(List<SheetsMusic> parts) {
+        List<Long> ids = parts.stream().map(SheetsMusic::getDerivedFromVersionId).filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return versionRepository.findAllById(ids).stream().collect(Collectors.toMap(
+            ScoreVersion::getId,
+            version -> new DerivedFromDTO(version.getSheetMusicId(), version.getId(), version.getVersionNumber())
+        ));
     }
 
     /** Plain MusicXML of the version played for the part. */

@@ -216,6 +216,38 @@ describe('ScoreEditorDialogComponent', () => {
         expect(component.emptyMeasures).toEqual([]);
     });
 
+    it('warns about the notes out of the range of the instrument and selects them from the checks', async () => {
+        fixture.destroy();
+        config.data = { ...config.data, range: { instrumentName: 'Tuba', instrument: { transpositionSemitones: 0, bassClefTranspositionSemitones: 0, lowestWrittenPitch: 50, highestWrittenPitch: 65 } } };
+        fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        const component = fixture.componentInstance as unknown as {
+            rangeText: string | null;
+            rangeWarnings: { measureNumber: string; noteId: string }[];
+            selectionLabel: string;
+            selectMeasure(index: number): void;
+            selectOutOfRange(warning: { measureNumber: string; noteId: string }): void;
+            move(steps: number): void;
+        };
+
+        expect(component.rangeText).toBe('Re3–Fa4');
+        expect(component.rangeWarnings.map((warning) => warning.measureNumber)).toEqual(['1']);
+        expect(fixture.nativeElement.textContent).toContain('Note fuori estensione di Tuba (Re3–Fa4)');
+        component.selectMeasure(1);
+        expect(component.selectionLabel).toBe('Battuta 2 · Mi3 · minima');
+        component.selectOutOfRange(component.rangeWarnings[0]);
+        expect(component.selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
+        component.selectOutOfRange({ measureNumber: '9', noteId: 'missing' });
+        expect(component.selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
+
+        component.move(1);
+        expect(component.rangeWarnings).toEqual([]);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain("Tutte le note nell'estensione di Tuba (Re3–Fa4)");
+    });
+
     it('turns a measure into a multi-measure rest, asking first only when it contains notes', async () => {
         fixture.detectChanges();
         await fixture.whenStable();
