@@ -29,6 +29,7 @@ Documenti collegati: [Ascolto e correzione delle parti](track-score-playback-spe
 - Scrivere o arrangiare una partitura completa e estrarne le parti, ciascuna nella trasposizione del proprio strumento.
 - Impaginare le parti scritte in pagine e PDF, così da usarle in anteprima, presentazione, stampa e preparazione degli eventi come le parti ricavate dai PDF.
 - Non perdere lavoro: bozze salvate in automatico, un solo autore alla volta per parte o partitura, versioni immutabili.
+- Rivedere le modifiche confrontando due versioni, riusare i frammenti che tornano in molte parti e misurare dove sbagliano i motori di riconoscimento.
 
 ## Fuori scope
 
@@ -49,6 +50,8 @@ Documenti collegati: [Ascolto e correzione delle parti](track-score-playback-spe
 3. **Parte semplificata**: per un allievo si parte dalla parte esistente e si semplificano ritmi e passaggi.
 4. **Arrangiamento**: il maestro arrangia un brano per l'organico della banda in partitura, poi estrae le parti.
 5. **Composizione**: un brano nuovo, scritto direttamente in partitura.
+6. **Revisione**: prima di approvare una parte riconosciuta e corretta, l'archivista confronta la correzione con la lettura del motore; il maestro guarda che cosa è cambiato in una parte dopo l'estrazione.
+7. **Segnali e introduzioni**: il segnale d'attenti o il rullo che apre ogni marcia si scrivono una volta e si inseriscono nelle parti di tutti gli strumenti.
 
 ## Decisioni principali
 
@@ -312,6 +315,65 @@ Nel lettore della partitura, sempre per chi gestisce la traccia, **Scarica MIDI*
 
 Il backend non converte in MIDI: il file nasce da ciò che si ascolta e suona come il lettore.
 
+### Confronto tra versioni
+
+Chi gestisce la traccia confronta due versioni di una parte, o due versioni della partitura rigo per rigo, e vede le battute diverse. Serve a rivedere una correzione prima di approvarla, una parte modificata dopo l'estrazione e il lavoro dei motori di riconoscimento.
+
+- **Dove**:
+  - nel dialogo **Versioni e suono**, **Confronta** su una versione la confronta con quella da cui deriva: per una correzione la versione che ha corretto, per le altre la precedente; **Con** sceglie un'altra versione della parte;
+  - nelle **Versioni** della scheda Partitura, lo stesso per le versioni della partitura;
+  - nella scheda Ascolto, «Modificata dopo l'estrazione» ha **Confronta con l'estrazione**, tra l'ultima versione estratta della parte e la corrente; «La parte di origine è cambiata» di una parte ricavata ha **Confronta le versioni di origine**, tra la versione da cui la parte è ricavata e quella che la parte di origine ascolta ora.
+- **Regola**: una battuta è uguale se si ascolta uguale, come nello strumento di [accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori).
+  - Contano la durata della battuta e le note, per inizio, durata, altezza e legatura di valore; non contano grafia degli accidenti, voci, travature e pause.
+  - Le altezze si confrontano come suonano nel lettore, con la trasposizione dello strumento: due versioni della partitura, una in suoni reali e una trasposta, non risultano diverse per la sola conversione.
+  - Le battute si allineano prima del confronto, quindi una battuta aggiunta o tolta conta una volta e non sposta le altre.
+  - Sulle battute allineate si confrontano anche i segni di struttura: ritornelli, volte, segno, coda, Fine, D.C., D.S. e tempo.
+- **Differenze**: una riga per ogni battuta diversa, con i numeri di battuta delle due versioni, per esempio:
+  - «Battuta 12: altezze diverse (La4 invece di Sol4)»;
+  - «Battuta 18: ritmo diverso»;
+  - «Battuta 23: legatura di valore»;
+  - «Battuta 20: solo nella versione 5»;
+  - «Battuta 31: ritornello solo nella versione 5».
+
+  Senza differenze il dialogo dice «Le due versioni si ascoltano uguali: possono cambiare solo grafia, voci e travature».
+- **Vista**: un dialogo a schermo intero con le due versioni affiancate, la più vecchia a sinistra, ognuna con numero, origine, stato e data; sul tablet in verticale e sul telefono le versioni stanno una sotto l'altra.
+  - Le battute diverse sono evidenziate in entrambi gli spartiti, con un colore per quelle cambiate e uno per quelle presenti in una sola versione.
+  - L'elenco delle differenze sta sotto gli spartiti, con il loro numero e **Precedente** e **Successiva**, anche con `←` e `→`; scegliere una differenza porta entrambi gli spartiti alla sua battuta.
+  - Nella partitura **Rigo** sceglie il rigo da confrontare e riporta le differenze di ogni rigo; i righi presenti in una sola versione si dicono senza confronto.
+- **Sola lettura**: il confronto non cambia nulla. Per una parte **Correggi** apre l'editor di correzione sulla versione di destra, alla battuta della differenza scelta.
+
+### Frammenti
+
+Introduzioni, marce d'ordinanza, segnali e rulli di tamburo si scrivono una volta e si inseriscono nelle parti di strumenti diversi.
+
+- **Biblioteca**: i frammenti sono del tenant, con un nome univoco, una categoria (Introduzione, Marcia d'ordinanza, Segnale, Rullo, Altro) e una nota facoltativa. Li usa chi scrive, con `SCORE_WRITING`.
+- **Salvare**: nell'editor di scrittura, nella scheda **Passaggio**, **Salva come frammento** salva le battute intere selezionate, fino a 64.
+  - Il frammento conserva metro e armatura in vigore all'inizio e i loro cambi, note, pause, segni di espressione, ritornelli e volte interni; lettere di prova, tempo, salti e interruzioni restano nella parte, come negli appunti.
+  - **Notazione**: una parte intonata si salva in suoni reali, con la trasposizione del suo strumento compresa l'ottava (in chiave di Fa quella in chiave di basso); una parte di percussione si salva com'è, con il suono di ogni voce. Una parte con più strumenti intonati, o con uno strumento senza trasposizione, non salva frammenti e il comando ne dice il motivo, come per la derivazione.
+  - Nella partitura si salva il rigo attivo.
+- **Inserire**: **Inserisci un frammento**, nella scheda **Battuta**, apre la biblioteca con ricerca e categorie; il frammento scelto ha l'anteprima come sarà scritto nella parte e **Ascolta**.
+  - Il frammento entra come nuove battute prima della battuta selezionata, oppure in fondo con **In fondo alla parte**. Metro e armatura del frammento si scrivono dove cambiano, e dopo il frammento tornano quelli della parte. Si annulla in un passo.
+  - **Trasposizione**: per una parte intonata il frammento si traspone per il suo strumento con il piano della [derivazione](#intervallo-della-derivazione): intervallo dalle trasposizioni, ottava proposta con meno note fuori estensione e da cambiare nell'anteprima, armatura dal circolo delle quinte e intervallo enarmonico quando serve; la chiave è quella della parte. In una partitura in suoni reali il frammento resta in suoni reali, con l'ottava dello strumento come le altre note.
+  - **Percussioni**: un frammento di percussione si inserisce solo in una parte di percussione che ha tutti i suoni delle sue voci, nelle voci con gli stessi suoni; altrimenti la biblioteca dice quali suoni mancano.
+  - **Partitura**: le battute si aggiungono a tutti i righi, come le altre battute, e il frammento si scrive nel rigo attivo.
+- **Gestione**: nella biblioteca **Modifica** cambia nome, categoria e nota, ed **Elimina** toglie il frammento con una conferma. Le parti dove è stato inserito non cambiano, perché l'inserimento lo copia.
+
+### Qualità del riconoscimento
+
+Le correzioni degli archivisti dicono dove sbagliano i motori. Taurus ne conserva i conteggi, non il contenuto, e li mostra a chi gestisce l'archivio.
+
+- **Raccolta**: all'approvazione di una versione di una parte che discende, risalendo le correzioni, da una versione di un motore (origine `OMR_AUDIVERIS` o `OMR_HOMR`), il browser confronta le due versioni con la regola del [confronto](#confronto-tra-versioni) e invia i conteggi.
+  - Ogni battuta della versione approvata cade in un solo tipo: corretta, con altezze diverse, con ritmo diverso, con sole legature di valore diverse, o persa dal motore; a parte si contano le battute in più del motore e i segni di struttura attesi e letti.
+  - Vale per **Approva** nel dialogo delle versioni e per **Salva e approva** nell'editor di correzione. La raccolta segue l'approvazione e, se non riesce, non la annulla.
+  - Per ogni versione del motore conta l'ultima approvazione.
+- **Approvazioni precedenti**: **Raccogli dalle approvazioni precedenti** confronta nel browser, una alla volta, le parti approvate prima della raccolta, con l'avanzamento e **Interrompi**.
+- **Pagina Riconoscimento**: nel menu, dopo Strumenti, per super amministratore, amministratore e archivista con l'ascolto attivo. Nel periodo scelto, gli ultimi 12 mesi o tutto, mostra:
+  - per ogni motore le parti approvate, la quota di battute corrette e quella dei segni di struttura letti, con l'andamento per mese, che mostra l'effetto di un aggiornamento dei motori;
+  - gli errori più frequenti, per tipo e per motore;
+  - le parti con più battute corrette dagli archivisti, con traccia, parte, motore e quota, e **Confronta**, che apre il confronto tra la versione del motore e quella approvata.
+- **Installazione**: le metriche sommano i conteggi di tutti i tenant, senza identificativi né contenuti. Chi gestisce l'installazione le legge con le altre metriche e scrive nel corpus di riferimento nuove parti che imitano gli errori frequenti, come oggi.
+- **Contenuto**: nulla dello spartito esce dal tenant; si conservano solo i conteggi e i collegamenti alle due versioni.
+
 ## Interfaccia utente
 
 L'editor si apre a schermo intero, come quello di correzione.
@@ -326,13 +388,16 @@ L'editor si apre a schermo intero, come quello di correzione.
 - **Spartito** al centro, con il cursore di inserimento visibile come una barra verticale colorata nella posizione dove andrà la prossima nota. Le parti lunghe e le partiture, oltre 100 battute contando ogni rigo mostrato, si dividono in pagine alte quanto l'area dello spartito: all'apertura compaiono subito le prime battute, e le pagine definitive arrivano quando è pronta l'impaginazione completa, mentre si scrive. Dopo una modifica la pagina che la contiene si ridisegna subito e le altre si aggiornano poco dopo; se Verovio non riesce a disegnarla compare «Impossibile disegnare lo spartito dopo questa modifica: annullala».
 - **Barra di stato**: battuta, tempo nella battuta, voce, nota selezionata letta per esteso («Battuta 12 · tempo 3 · Sib4 · croma puntata»), già annunciata a chi usa uno screen reader; controlli in tempo reale.
 - **Tastiera di pianoforte a schermo**, mostrata da sola sui dispositivi touch e a richiesta con **Pianoforte** nella scheda Nota: due ottave dal Do4 in chiave di violino, dal Do3 in chiave di contralto o di tenore e dal Do2 in chiave di basso, da spostare di un'ottava alla volta. Un tocco suona il tasto e lo scrive come una nota della tastiera MIDI: al cursore con la durata corrente durante l'inserimento, al posto dell'altezza della nota selezionata fuori dall'inserimento. Nelle parti di percussione con strumenti mostra un pulsante per strumento, con la sua voce.
-- **Scheda Partitura**: senza partitura, **Nuova partitura**; con la partitura, la versione corrente con stato, numero di battute e data, l'eventuale bozza e chi la sta scrivendo, i righi con lo stato della loro parte, e **Scrivi** o **Riprendi la bozza**, **Estrai le parti**, **Ascolta**, **Versioni** (con **Apri**, **Approva** e **Scarica** in MusicXML o MIDI) ed **Elimina la partitura**. **Ascolta** apre il lettore sulla versione corrente, con una riga del mixer per rigo e lo spartito di un rigo alla volta. Sul telefono la scheda mostra lo stato e **Ascolta**, senza i comandi di scrittura.
+- **Scheda Partitura**: senza partitura, **Nuova partitura**; con la partitura, la versione corrente con stato, numero di battute e data, l'eventuale bozza e chi la sta scrivendo, i righi con lo stato della loro parte, e **Scrivi** o **Riprendi la bozza**, **Estrai le parti**, **Ascolta**, **Versioni** (con **Apri**, **Confronta**, **Approva** e **Scarica** in MusicXML o MIDI) ed **Elimina la partitura**. **Ascolta** apre il lettore sulla versione corrente, con una riga del mixer per rigo e lo spartito di un rigo alla volta. Sul telefono la scheda mostra lo stato e **Ascolta**, senza i comandi di scrittura.
 - **Editor della partitura**: il pannello **Righi** con mostra e nascondi, righi vuoti compressi, aggiunta e rimozione dei righi e il rigo **In evidenza** per l'ascolto; **Suoni reali** e **Trasposta** nella barra superiore.
 - **Ricavata da**: nella scheda Ascolto, per chi gestisce la traccia, una parte ricavata ha l'etichetta «Ricavata da Clarinetto 1° (versione 3)». Se la parte di origine ascolta ora un'altra versione compare l'avviso «La parte di origine è cambiata», con la versione attuale nel suggerimento; se la parte di origine è stata eliminata l'etichetta diventa «Ricavata da una parte eliminata». Una parte ricavata non si aggiorna da sola: si corregge o si ricava di nuovo. Le parti estratte dalla partitura hanno le etichette descritte in [Divergenze](#divergenze).
 - **Controlli**: nel pannello Controlli degli editor di scrittura e di correzione, per una parte con un solo strumento, senza una trasposizione propria e con l'estensione configurata, «Note fuori estensione di Sax contralto (Si♭3–Fa6):» con i numeri delle battute, come per le battute di durata diversa dal metro, oppure «Tutte le note nell'estensione di Sax contralto (Si♭3–Fa6)»; il pulsante seleziona la prima nota fuori estensione della battuta. L'estensione segue la chiave iniziale della parte, come nella derivazione.
 - **Scheda Ascolto**: **Nuova parte scritta**, e per ogni parte **Scrivi** oppure, con una bozza, l'etichetta «Bozza non salvata di …» con **Riprendi la bozza** e **Scarta la bozza**; per le parti con una versione **Ricava una parte**. I comandi stanno accanto a **Correggi** e alle versioni, che sono già nella scheda Ascolto, e sono disattivati finché la traccia ha modifiche da salvare.
 - **Strumenti**: nella sezione Ascolto del dettaglio di uno strumento intonato, **Nota più grave** e **Nota più acuta**, scelte per nome («Mi3»), proposte con suono e trasposizione da **Proponi dal nome**. La pagina degli strumenti ha la scheda **Organico** descritta in [Organico della banda](#organico-della-banda).
 - **Workspace Parti**: l'etichetta «Da impaginare», con **Impagina**.
+- **Confronto**: **Confronta** nel dialogo Versioni e suono e nelle versioni della partitura, **Confronta con l'estrazione** e **Confronta le versioni di origine** nella scheda Ascolto; il dialogo del [confronto](#confronto-tra-versioni) affianca le due versioni con l'elenco delle differenze.
+- **Frammenti**: **Salva come frammento** nella scheda Passaggio e **Inserisci un frammento** nella scheda Battuta dell'editor di scrittura, con la biblioteca dei [frammenti](#frammenti).
+- **Riconoscimento**: la pagina della [qualità del riconoscimento](#qualità-del-riconoscimento), nel menu dopo Strumenti.
 - **Programma dell'evento**: l'etichetta «Da impaginare» e **Impagina** tra gli spartiti di ogni brano, e **Stampa la scaletta** sopra la scaletta.
 - **Impagina**: un dialogo con le opzioni a sinistra e l'anteprima delle pagine a destra, una sotto l'altra sul telefono; durante il job lo stato, al termine le miniature con le scelte di assegnazione, **Scarica il PDF** e **Impagina di nuovo**. Per le parti estratte lo stesso dialogo impagina più parti e mostra lo stato di ognuna.
 
@@ -402,6 +467,9 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Scaricamento MIDI**: `buildPlayback` costruisce anche il file da scaricare, senza metronomo né attacco; per una versione diversa da quella ascoltata il MusicXML arriva dalla lettura dell'editor.
 - **Stampa della scaletta**: `PrinterService.previewProgram` apre l'anteprima con le parti del programma e con quelle da impaginare che l'evento segnala, perché il programma non porta la loro versione. L'anteprima le ordina per strumento e propone il formato marcia, le cui regole di stampa sono in `styles.scss`.
 - **Bozze e blocco**: un servizio che salva la bozza con ritardo, ne conserva una copia in IndexedDB e rinnova il blocco ogni 30 secondi. La copia resta in IndexedDB anche quando il server la rifiuta, fino all'accettazione o allo scarto. L'editor di correzione usa lo stesso servizio per il blocco, senza bozze.
+- **Confronto**: `score-compare.ts` legge le battute come sono scritte, senza eseguire ritornelli e salti, con le regole di lettura del lettore (`musicxml-score.ts`) e le altezze come suonano; le allinea con lo stesso algoritmo di `compare.py` (`difflib.SequenceMatcher` senza `autojunk`, cioè i blocchi comuni più lunghi) e classifica le differenze. I casi di prova sono gli stessi nei due moduli, e una modifica della regola si fa in entrambi. Il dialogo `score-compare-dialog` disegna le due versioni con `ScoreRendererService` ed evidenzia le battute per `id`, come l'editor; nella partitura confronta un rigo alla volta (`rowXml`).
+- **Frammenti**: `score-fragments.ts` costruisce il MusicXML del frammento da un passaggio di battute intere, sopra `copyPassage`, e lo porta in suoni reali con l'intervallo di `score-derivation.ts`; l'inserimento traspone con il piano della derivazione e aggiunge le battute con le operazioni della scrittura.
+- **Raccolta**: `recognition-review.ts` trova la versione del motore risalendo `parentVersionId` e calcola i conteggi con `score-compare.ts`; la pagina `recognition` legge il riepilogo e guida la raccolta delle approvazioni precedenti.
 
 ### Backend
 
@@ -420,6 +488,8 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Estensione**: i due campi dello strumento si controllano con le altre impostazioni dell'ascolto (`PlaybackSettingsValidator`) e con un vincolo del database; la migrazione degli strumenti esistenti usa il catalogo come `InstrumentPlaybackDefaultsChange`.
 - **Organico**: `InstrumentEnsembleService` riscrive le posizioni in una transazione, sotto un lock consultivo del tenant e dopo aver controllato che l'organico letto sia ancora quello salvato; l'eliminazione di uno strumento prende lo stesso lock, lo toglie dall'organico e ricompatta le posizioni. Le posizioni si scrivono solo con le query dell'organico: la colonna non è aggiornabile dall'entità, così la modifica di uno strumento non riscrive un ordine salvato nel frattempo. `InstrumentEnsembleOrder` calcola l'ordine di riferimento dal catalogo; nel frontend `ensemble-order.ts` ordina le parti e i filtri dell'anteprima.
 - **Preparazione degli eventi**: le parti del programma riportano gli identificativi degli strumenti (`instrumentIds`) e se sono da impaginare (`unengraved`), cioè con una versione corrente e senza pagine in nessuno stato. Una pagina ancora in elaborazione non rende la parte da impaginare.
+- **Frammenti**: `score_fragment`, con il MusicXML compresso nella tabella come le bozze, perché piccolo. `ScoreFragmentService` controlla nome, categoria e contenuto: una sola parte, al massimo 64 battute e 1 MB di MusicXML, con i controlli di `MusicXmlInspector`, e per le percussioni i suoni delle voci.
+- **Raccolta**: `score_recognition_review`, una per versione del motore. `ScoreRecognitionReviewService` controlla che la versione approvata sia della parte, approvata e discendente dalla versione del motore indicata, e che i conteggi siano coerenti: i tipi delle battute sommano le battute della versione approvata, le battute in più non superano quelle del motore e i segni letti quelli attesi. Una nuova approvazione sostituisce la raccolta della stessa versione del motore, e le metriche contano solo la prima. Il riepilogo somma le raccolte del tenant per motore, tipo e mese; una parte eliminata resta nei conteggi ed esce dall'elenco delle parti.
 
 ### Servizio musicale
 
@@ -430,6 +500,8 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Interruzioni di pagina**: Verovio le ignora nel suo impaginare automatico e non disegna l'intestazione di una selezione di battute. Il servizio impagina quindi la parte in sezioni tra due interruzioni di pagina: la prima dalla parte tagliata dopo la sua ultima battuta, con l'intestazione, le altre come selezioni della parte intera, che conservano chiave, armatura e tempo in vigore.
 - **Numeri di pagina**: scritti dal servizio nella fascia di 6 mm lasciata libera sopra il margine inferiore, contati su tutte le sezioni.
 - **PDF**: vettoriale, in PDF 1.4, con le pagine nel formato scelto, titolo della traccia e nome della parte nei metadati.
+
+Lo strumento di accuratezza (`accuracy/compare.py`) resta lo strumento di misura del corpus di riferimento e non entra nell'immagine del servizio; il confronto delle versioni nel browser ne riprende la regola e i casi di prova.
 
 Verovio ha la stessa versione nel frontend, nel servizio e nel test di accuratezza, così l'anteprima del browser e le pagine generate coincidono. Le versioni si aggiornano insieme, e `scripts/ops/check-verovio-versions.mjs`, eseguito dalla CI, fallisce se divergono.
 
@@ -449,6 +521,8 @@ Changelog nello schema del tenant. Tutte le nuove tabelle hanno i campi di audit
 | `sheet_music` (esistente) | `engraved_from_version_id` facoltativo: versione da cui derivano le pagine generate; `engraved_pages_fingerprint`: impronta delle pagine assegnate, presente con la versione; `derived_from_version_id` facoltativo: versione di un'altra parte da cui la parte è [ricavata](#parte-ricavata-da-unaltra); `arrangement_row` facoltativo: rigo della partitura della traccia collegato alla parte, univoco tra le parti non eliminate della traccia e scritto solo dalle query della partitura; resta sulla parte eliminata, che così segnala il rigo rimasto senza parte |
 | `instrument` (esistente) | `lowest_written_pitch`, `highest_written_pitch`: [estensione](#estensione-degli-strumenti) scritta come numeri di nota MIDI da 0 a 127, facoltativi ma presenti insieme, proposti dal catalogo di riferimento come suono e trasposizione; `ensemble_position` facoltativo: posizione nell'[organico della banda](#organico-della-banda), da 1, unica nel tenant con il controllo alla fine della transazione e vuota per gli strumenti eliminati |
 | `track` (esistente) | `arranger` facoltativo, già presente accanto a `composer`: mostrato nel dettaglio della traccia e proposto nell'intestazione delle pagine |
+| `score_fragment` | `id`, `name` univoco tra i frammenti non eliminati senza distinguere maiuscole e minuscole, `category` (`INTRODUCTION`, `MARCH`, `SIGNAL`, `ROLL`, `OTHER`), `note`, `kind` (`PITCHED`, in suoni reali, o `PERCUSSION`), `content` (MusicXML compresso di una parte), `measure_count`, `percussion_keys_json` (suoni delle voci di un frammento di percussione), `entity_version`, audit: i [frammenti](#frammenti) del tenant |
+| `score_recognition_review` | `id`, `sheet_music_id`, `engine_version_id` univoco, `approved_version_id`, `engine` (`AUDIVERIS`, `HOMR`), `recognized_at`, `approved_at`, i conteggi delle battute (`reference_measures`, `engine_measures`, `correct_measures`, `pitch_measures`, `rhythm_measures`, `tie_measures`, `missing_measures`, `extra_measures`) e dei segni (`reference_marks`, `found_marks`), audit: la [raccolta](#qualità-del-riconoscimento) di un'approvazione |
 
 Pagine e PDF generati sono media della categoria delle parti (`scores`); `MediaRepository.isUnreferenced` aggiunge i riferimenti dei job, PDF e pagine non assegnate, e con la [partitura](#partitura-e-arrangiamento) quelli delle sue versioni. La pulizia delle versioni non elimina una versione da cui derivano le pagine di una parte o da cui è ricavata una parte, né una con un'impaginazione in coda, in corso o non assegnata. Le versioni della partitura seguono la stessa pulizia: si conservano le ultime 20, la corrente, quelle approvate e quelle da cui derivano versioni di parti ancora presenti. La pulizia notturna toglie anche le bozze delle partiture eliminate e di quelle delle tracce eliminate. I vincoli sul tipo di bersaglio di bozze e blocchi accettano `ARRANGEMENT`. La funzionalità `SCORE_WRITING` richiede una colonna del flag nel registro dei tenant, come le altre funzionalità.
 
@@ -471,12 +545,30 @@ Sotto `/api/tracks/{trackId}`, per super amministratore, amministratore e archiv
 | `POST /scores/{scoreId}/score-versions/{versionId}/engravings/{jobId}/apply` | assegna le pagine del job: `target` `REPLACE`, al posto delle pagine della parte, o `NEW_PART`, e `trackVersion` facoltativa; restituisce la parte e la nuova versione della traccia |
 | `GET /scores/{scoreId}/score-versions/{versionId}/engravings/pdf` | scaricamento del PDF dell'ultima impaginazione della versione |
 | `GET /scores/{scoreId}/score-versions/{versionId}/file` (esistente) | scaricamento del MusicXML; il MIDI si costruisce nel browser (vedi [Scaricamento](#scaricamento)) |
+| `PUT /scores/{scoreId}/score-versions/{versionId}/recognition-review` | conteggi del confronto tra la versione approvata e quella del motore (`engineVersionId` e i conteggi); risponde 204, con `SCORE_PLAYBACK` |
 
 `GET /api/instruments/playback-suggestion` aggiunge alla proposta l'estensione (`lowestWrittenPitch`, `highestWrittenPitch`), e lo strumento la salva con gli altri campi. L'organico si salva con `PUT /api/instruments/ensemble`, per chi gestisce gli strumenti: riceve l'elenco ordinato degli strumenti che ne fanno parte (`instrumentIds`) e quello letto (`previousInstrumentIds`), e risponde `version.conflict` (409) se nel frattempo l'organico è cambiato. `PUT` risponde con l'organico salvato, `instrument.ensemble.invalid` (400) per uno strumento inesistente, eliminato o ripetuto. `GET /api/instruments/ensemble`, per tutti gli utenti autenticati, restituisce gli strumenti dell'organico nel loro ordine (`id`, `name`, `ensemblePosition`, `family`), vuoto senza organico: lo usano l'anteprima e la stampa. `GET /api/instruments/ensemble/reference` restituisce tutti gli strumenti del tenant nell'ordine di riferimento, con la famiglia riconosciuta e la posizione attuale, senza salvarlo; gli strumenti espongono `ensemblePosition` in sola lettura.
+
+La qualità del riconoscimento sta sotto `/api/score-recognition`, per super amministratore, amministratore e archivista con `SCORE_PLAYBACK`:
+
+| Metodo e percorso | Descrizione |
+| --- | --- |
+| `GET /report?from=` | riepilogo per motore, tipo e mese dalla data indicata, e le parti con più battute corrette |
+| `GET /pending?limit=` | versioni approvate che discendono da una versione di un motore e non hanno ancora la raccolta, con traccia, parte e le due versioni |
+
+I frammenti stanno sotto `/api/score-fragments`, per gli stessi ruoli con `SCORE_WRITING`:
+
+| Metodo e percorso | Descrizione |
+| --- | --- |
+| `GET`, `POST /` | elenco con nome, categoria, nota, tipo, battute e suoni delle percussioni; creazione con il MusicXML |
+| `GET /{fragmentId}/content` | MusicXML del frammento |
+| `PUT`, `DELETE /{fragmentId}` | modifica di nome, categoria e nota con `entityVersion`; eliminazione logica |
 
 Il blocco di una parte (`/scores/{scoreId}/edit-lock`) richiede solo l'ascolto (`SCORE_PLAYBACK`), perché lo usa anche l'editor di correzione; con `SCORE_WRITING` disattivata restano disponibili solo il blocco e il salvataggio delle correzioni.
 
 Errori nuovi, secondo lo [standard](application-errors-standard.md): `scoreWriting.locked` (409, con nome e ora di chi scrive; anche per bozze e versioni inviate senza il blocco), `scoreWriting.draftOutdated` (409), `scoreWriting.instrumentNotFound` (400, per uno strumento inesistente o eliminato nella parte scritta da zero o ricavata, o in un rigo della partitura), `scoreWriting.derivationUnavailable` (422, con `reason`: `notSingleInstrument` per una parte di origine con più strumenti o senza strumenti, `percussion` per una parte di percussione, `targetPercussion` per uno strumento di destinazione a percussione), `scoreWriting.instrumentNotConfigured` (422, con `instrument`, per un rigo da trasporre nell'estrazione il cui strumento non ha trasposizione), `scoreWriting.arrangementExists` (409, la traccia ha già una partitura), `scoreWriting.arrangementNotFound` (404), `scoreWriting.arrangementOutdated` (409, estrazione da una versione della partitura che non è più la corrente), `scoreWriting.extractionInvalid` (400, con `reason`: `empty` senza righi, `unknownRow`, `duplicateRow`, `duplicateTarget` per due righi verso la stessa parte, anche alla creazione della partitura, `instrumentsMismatch` per una parte con strumenti diversi da quelli del rigo), `instrument.ensemble.invalid` (400, per uno strumento inesistente, eliminato o ripetuto nell'organico), `scoreWriting.engravingUnavailable` (503, senza servizio musicale), `scoreWriting.engravingOptionsInvalid` (400, con `field`), `scoreWriting.engravingRunning` (409, un'impaginazione della parte è già in coda o in corso), `scoreWriting.engravingNotFound` (404), `scoreWriting.engravingNotReady` (409, job non terminato, già assegnato o con le pagine ormai sostituite). Una parte scritta da zero o ricavata, un'estrazione o un'assegnazione di pagine su una traccia modificata nel frattempo riceve `version.conflict` (409); un'estrazione verso una parte bloccata da un'altra persona riceve `scoreWriting.locked`. Un'estensione incompleta, fuori da 0–127 o con la nota grave più acuta di quella acuta riceve `scorePlayback.settings.invalid` (422), come le altre impostazioni dell'ascolto. Bozze e versioni della partitura ricevono `scoreWriting.contentInvalid` anche con `reason` `tooManyRows` (con `maxRows`), `rowsMismatch` per righi che non sono le parti del documento, `unevenMeasures` e `rowInstruments`; nell'estrazione l'errore del contenuto di una parte riporta il rigo (`row`).
+
+Errori della fase 5: `scoreWriting.fragmentNotFound` (404), `scoreWriting.fragmentNameExists` (409), `scoreWriting.fragmentInvalid` (422, con `reason`: `malformed`, `severalParts`, `tooManyMeasures`, `tooLarge`, `percussionSounds`) e `scorePlayback.recognitionReviewInvalid` (400, con `reason`: `notApproved`, `notFromEngine`, `inconsistentCounts`).
 
 Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOptions`, `tooManyPages`, `tooLarge`, `engineFailed`, `engineTimeout`, `serviceUnavailable` quando non risponde) o del backend (`versionNotFound` per una versione o una parte eliminata nel frattempo, `interrupted`, `unexpected`); un risultato senza pagine o con un numero di pagine diverso da quello dichiarato vale `engineFailed`.
 
@@ -484,11 +576,12 @@ Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOption
 
 - Scrittura, bozze, blocchi, estrazione e impaginazione sono riservati a super amministratore, amministratore e archivista, sui percorsi di gestione; utenti ed esterni continuano a vedere solo le versioni, con le regole di visibilità dell'ascolto.
 - Bozze e blocchi stanno nello schema del tenant; il blocco riporta il nome di chi scrive solo agli utenti dello stesso tenant.
+- Confronto e qualità del riconoscimento sono per super amministratore, amministratore e archivista con l'ascolto (`SCORE_PLAYBACK`), perché servono anche alla correzione; i frammenti per gli stessi ruoli con la scrittura. Frammenti e raccolte stanno nello schema del tenant, e le metriche dell'installazione non portano identificativi.
 - Le bozze di un utente cancellato restano finché il bersaglio esiste, perché il contenuto è musica dell'archivio e non un dato personale; il nome dell'autore nel blocco scompare alla scadenza.
 
 ## Osservabilità e sicurezza
 
-- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` (`done` o il codice dell'errore), la durata dell'impaginazione (`taurus.score.engraving.duration`) `taurus.score.engravings.applied{target}` (`replace`, `newPart`, `emptyPart` per le pagine assegnate al termine del job) e `taurus.score.arrangement.extractions{target}` (`existing`, `newPart`), una per parte estratta.
+- Metriche: `taurus.score.writing.saves{origin}`, `taurus.score.writing.drafts{outcome}`, `taurus.score.writing.locks{outcome}` (`acquired`, `takenOver`, `expired`), `taurus.score.engravings{outcome}` (`done` o il codice dell'errore), la durata dell'impaginazione (`taurus.score.engraving.duration`) `taurus.score.engravings.applied{target}` (`replace`, `newPart`, `emptyPart` per le pagine assegnate al termine del job) e `taurus.score.arrangement.extractions{target}` (`existing`, `newPart`), una per parte estratta. Con la fase 5 `taurus.score.recognition.measures{engine,outcome}` (`correct`, `pitch`, `rhythm`, `tie`, `missing`, `extra`) e `taurus.score.recognition.marks{engine,outcome}` (`found`, `missed`) sommano i conteggi delle raccolte, e `taurus.score.fragments.saves` conta i frammenti salvati.
 - Log con identificativi di parte, partitura, versione e job; mai il contenuto MusicXML.
 - Gli stessi limiti di sicurezza dei file MusicXML caricati (entità e DTD disattivate, limiti di dimensione); bozze entro lo stesso limite dei caricamenti (`application.score-playback.max-upload-bytes`, 10 MB di MusicXML non compresso) e al più un salvataggio ogni due secondi per bozza (`application.score-writing.draft-min-interval`), che una sola finestra alla volta può scrivere perché serve il blocco. La partitura ha un limite proprio per bozze e versioni, 30 MB di MusicXML non compresso e 60 righi (`application.score-writing.max-arrangement-bytes`, `application.score-writing.max-arrangement-rows`); ogni parte estratta resta entro il limite delle parti.
 - Il servizio musicale resta sulla rete interna con la chiave condivisa; l'impaginazione ha un tempo massimo come il riconoscimento.
@@ -503,6 +596,9 @@ Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOption
 | Apertura di una partitura di 30 parti | meno di 3 secondi |
 | Salvataggio di una bozza | non blocca la scrittura |
 | Impaginazione di una parte di due pagine | meno di 15 secondi |
+| Confronto di due versioni di una parte di 300 battute | meno di 0,1 s per il calcolo e di 1 s per il dialogo con i due disegni |
+| Raccolta all'approvazione | non ritarda l'approvazione |
+| Pagina Riconoscimento con 5.000 parti approvate | meno di 0,5 s per il riepilogo |
 
 Le misure seguono il metodo della [fase 4 dell'ascolto](track-score-playback-spec.md#copertura-della-fase-4), anche con il processore rallentato quattro volte.
 
@@ -524,6 +620,7 @@ Misure del 16/11/2026 nel browser (Chrome 157 senza interfaccia, sul computer di
 
 - **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura; preparazione dell'MEI, opzioni, sezioni e numeri di pagina dell'impaginazione, dialogo con il job simulato, parti da impaginare nella scheda Ascolto, nel Workspace Parti, nell'anteprima e nel programma dell'evento, stampa della scaletta per strumento e nel formato marcia; intervallo e ottava della derivazione (dal clarinetto in Si♭ al sax contralto in Mi♭, chiave di basso, intervallo enarmonico, cambio di chiave), note fuori estensione nel dialogo e negli editor, MIDI scaricato senza metronomo né attacco; organico con ordine di riferimento e posizione di famiglia, anteprima e stampa ordinate con l'organico; partitura dall'organico e dalle parti, con battute e ritornelli diversi e parti di percussione con più strumenti; operazioni su tutti i righi, conversione tra suoni reali e trasposizione e ritorno, cronologia per battute, parti estratte con struttura, intestazione e trasposizione e stati dei righi, dialogo dell'estrazione, impaginazione di più parti ed etichette delle parti estratte e delle pagine da assegnare nella scheda Ascolto.
 - **Validità**: ogni documento prodotto dai test viene validato contro lo schema XSD di MusicXML 4.0; un campione si apre in MuseScore durante la verifica manuale.
+- **Fase 5**: confronto con gli stessi casi di `test_accuracy_compare.py` (battute perse, lette due volte e cambiate, legature, struttura, partitura in suoni reali e trasposta), dialogo del confronto con le battute evidenziate e la navigazione, frammenti salvati e inseriti con trasposizione, ottava, cambi di metro e armatura, percussioni con suoni mancanti e annullamento, raccolta all'approvazione e dalle approvazioni precedenti; nel backend raccolta con versioni non approvate, non discendenti dal motore e conteggi incoerenti, sostituzione della raccolta, riepilogo per motore e mese, frammenti con nome ripetuto, contenuti non validi, autorizzazioni e isolamento tenant.
 - **Andata e ritorno**: scrivere, salvare, riaprire e scaricare produce lo stesso MusicXML, senza attributi di lavoro.
 - **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, salvato con il controllo dell'organico letto e ricompattato con gli strumenti eliminati, bozze e versioni scritte o corrette rifiutate senza il blocco, partitura una per traccia con bozza, blocco e versioni, estrazione dalla versione corrente verso parti con gli stessi strumenti o parti nuove, rifiutata per righi e parti ripetuti, parti bloccate e strumenti non configurati, con il collegamento dei righi e l'impaginazione assegnata alle parti senza pagine, derivazione con la bozza e la versione di origine, rifiutata per parti con più strumenti e di percussione, per versioni di altre parti e per strumenti inesistenti, versione di origine conservata dalla pulizia, estensione controllata e compilata dalla migrazione solo con la trasposizione del catalogo, job di impaginazione con il servizio simulato, parti da impaginare nel programma e nella criticità degli spartiti della preparazione degli eventi, autorizzazioni e isolamento tenant.
 - **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend. I test che disegnano richiedono la libreria Cairo, installata dalla CI, che con `TAURUS_OMR_REQUIRE_CAIRO=true` li fa fallire invece di saltarli se manca; la pagina di riferimento si confronta a un quarto della dimensione, perché contino l'impaginazione e non le sfumature dei bordi.
@@ -553,6 +650,9 @@ Misure del 16/11/2026 nel browser (Chrome 157 senza interfaccia, sul computer di
 - [ ] Dalla preparazione di un evento la scaletta si stampa per strumento nel formato marcia, due pagine di 18 × 13 cm per foglio A4, e le parti da impaginare sono indicate nel programma e nella criticità degli spartiti.
 - [ ] Una partitura nuova segue l'ordine dell'organico, e la stampa ordina le parti allo stesso modo; senza organico la stampa non cambia.
 - [ ] Il MusicXML scaricato si apre in MuseScore senza avvisi.
+- [ ] Il confronto tra la versione di un motore e quella approvata indica le stesse battute diverse di `python -m accuracy compare`, e due versioni della partitura che differiscono solo per la conversione in suoni reali risultano uguali.
+- [ ] Un segnale salvato da una parte di tromba in Si♭ si inserisce in una parte di sax contralto in Mi♭ suonando le stesse note, nell'ottava proposta; un rullo si inserisce solo nelle parti di percussione che hanno il tamburo.
+- [ ] Dopo l'approvazione di una parte riconosciuta e corretta, la pagina Riconoscimento ne conta le battute per il motore, e nulla dello spartito esce dal tenant.
 - [ ] Nessun dato di un tenant è accessibile da un altro tenant.
 
 ## Piano di implementazione
@@ -565,6 +665,8 @@ Misure del 16/11/2026 nel browser (Chrome 157 senza interfaccia, sul computer di
 6. **Qualificazione**: misure su partiture grandi, prove con archivisti e su tablet, runbook.
 
 La fase 4 si sviluppa in sei incrementi: l'organico della banda, con l'anteprima e la stampa ordinate; la partitura nel backend, con tabelle, versioni, bozza, blocco ed estrazione; il documento a più parti e la scheda Partitura, con la nuova partitura dall'organico e dalle parti, l'editor della partitura e la cronologia per battute; la conversione tra suoni reali e trasposizione, con l'ascolto e i controlli per rigo; l'estrazione, le divergenze e l'impaginazione delle parti estratte; il disegno per pagina in un Web Worker, con le misure delle prestazioni.
+
+La fase 5 si sviluppa in tre incrementi: il confronto tra versioni, con il confronto per battute nel browser e i comandi nei dialoghi delle versioni e nella scheda Ascolto; la qualità del riconoscimento, con la raccolta all'approvazione e dalle approvazioni precedenti, le metriche e la pagina Riconoscimento; i frammenti, con la biblioteca, il salvataggio e l'inserimento con la trasposizione.
 
 L'impaginazione viene subito dopo la scrittura perché una parte scritta, per esempio al posto di una perduta, serve soprattutto a essere stampata. Per questo la fase 1 non si rilascia da sola: `SCORE_WRITING` diventa attivabile per i tenant quando anche la fase 2 è completa.
 
@@ -634,13 +736,23 @@ Decise il 15/11/2026, nel dettaglio della fase 4:
 6. **Collegamento tra righi e parti**: la parte ricorda il rigo della partitura da cui si estrae (`arrangement_row`) e la versione estratta quella della partitura (`arrangement_version_id`), così lo stato di ogni rigo si ricava senza una mappa delle corrispondenze nelle versioni, che sarebbero immutabili.
 7. **Impaginazione delle parti estratte**: un'impaginazione per parte con le stesse opzioni, assegnata al termine alle parti senza pagine; per quelle con pagine si sceglie, come sempre, se sostituirle.
 
+## Decisioni della quinta revisione
+
+Decise il 16/11/2026, nel dettaglio della fase 5:
+
+1. **Confronto nel browser**: una versione TypeScript del confronto per battute di `compare.py`, con la stessa regola e gli stessi casi di prova, così il confronto funziona anche senza il servizio musicale e la raccolta lo usa all'approvazione. Scartati il confronto nel servizio musicale, che mancherebbe senza il servizio, e una terza versione in Java da tenere allineata.
+2. **Due spartiti affiancati**: le due versioni una accanto all'altra, con le battute diverse evidenziate e l'elenco delle differenze. Scartati uno spartito solo con la battuta dell'altra versione sotto, che ne mostra una battuta alla volta, e il solo elenco testuale, poco leggibile per chi non conosce la notazione testuale.
+3. **Frammenti in suoni reali**: il frammento si salva in suoni reali e si traspone all'inserimento con il piano della derivazione; le percussioni si salvano con i suoni delle voci. Scartati il frammento salvato com'è scritto, da trasporre a mano a ogni inserimento, e una versione per strumento, più lavoro per ogni frammento.
+4. **Solo i conteggi dei riconoscimenti**: all'approvazione si salvano i conteggi per tipo di errore, mostrati nella pagina Riconoscimento e sommati dalle metriche dell'installazione; le nuove parti del corpus le scrive chi sviluppa, imitando gli errori. Scartati un pacchetto con pagine e versioni per il corpus, che porterebbe lo spartito fuori dal tenant, e le sole metriche, che l'archivista non vedrebbe.
+5. **Funzionalità**: confronto e raccolta richiedono solo l'ascolto, perché servono anche alla correzione; i frammenti richiedono la scrittura.
+
 ## Estensioni approvate
 
 Le proposte della prima bozza, approvate nella seconda revisione. Ognuna si dettaglia prima della fase che la contiene, indicata tra parentesi.
 
 - **Organico della banda per tenant** (fase 4): un modello con gli strumenti e l'ordine in partitura, usato per le nuove partiture e per ordinare le parti in stampa; descritto in [Organico della banda](#organico-della-banda).
-- **Confronto tra versioni** (fase 5): una vista che evidenzia le battute diverse tra due versioni, riusando il confronto per battute già scritto per l'[accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori); utile per rivedere correzioni, estrazioni e approvazioni.
+- **Confronto tra versioni** (fase 5): una vista che evidenzia le battute diverse tra due versioni, riusando il confronto per battute già scritto per l'[accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori); utile per rivedere correzioni, estrazioni e approvazioni; descritto in [Confronto tra versioni](#confronto-tra-versioni).
 - **Parti di studio** (fase 2): l'ascolto della propria parte con le altre attenuate e il tempo rallentato è già possibile con il lettore; si aggiunge la stampa con le battute numerate, come opzione dell'impaginazione. Verovio numera già la prima battuta di ogni rigo, che diventa il valore proposto per tutte le parti; per le parti di studio l'opzione **Su ogni battuta** numera ogni battuta.
-- **Frammenti riutilizzabili** (fase 5): introduzioni, marce d'ordinanza, segnali e rulli di tamburo salvati una volta e inseriti nelle parti.
+- **Frammenti riutilizzabili** (fase 5): introduzioni, marce d'ordinanza, segnali e rulli di tamburo salvati una volta e inseriti nelle parti; descritti in [Frammenti](#frammenti).
 - **Impaginazione per l'evento** (fase 2): dalla preparazione di un evento, la stampa di tutte le parti di una scaletta già impaginate per strumento, nel formato marcia; descritta in [Stampa della scaletta](#stampa-della-scaletta).
-- **Raccolta dai riconoscimenti** (fase 5): le battute che gli archivisti correggono più spesso indicano i difetti dei motori e possono diventare nuove parti del corpus di accuratezza.
+- **Raccolta dai riconoscimenti** (fase 5): le battute che gli archivisti correggono più spesso indicano i difetti dei motori e possono diventare nuove parti del corpus di accuratezza; descritta in [Qualità del riconoscimento](#qualità-del-riconoscimento).
