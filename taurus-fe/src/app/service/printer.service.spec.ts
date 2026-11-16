@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { Albums, ChildrenEntities } from '../module';
+import { InstrumentsService } from './instruments.service';
 import { PrinterService } from './printer.service';
 import { TracksService } from './tracks.service';
 
@@ -25,6 +26,7 @@ describe('PrinterService album preview', () => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: TracksService, useValue: { getById } },
+                { provide: InstrumentsService, useValue: { ensemble: () => of([]) } },
                 { provide: Router, useValue: { navigate } }
             ]
         });
@@ -85,6 +87,7 @@ describe('PrinterService event program preview', () => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: TracksService, useValue: { getById: jasmine.createSpy('getById') } },
+                { provide: InstrumentsService, useValue: { ensemble: () => of([{ id: 8, name: 'Flicorno' }]) } },
                 { provide: Router, useValue: { navigate } }
             ]
         });
@@ -104,6 +107,7 @@ describe('PrinterService event program preview', () => {
         expect(service.scores).not.toBe(parts);
         expect(parts.map((part) => service.isUnengraved(part))).toEqual([false, true]);
         expect(navigate).toHaveBeenCalledWith(['preview']);
+        expect(service.ensemble).toEqual([8]);
 
         service.retry();
         expect(navigate).toHaveBeenCalledTimes(1);
@@ -121,5 +125,63 @@ describe('PrinterService event program preview', () => {
         service.previewProgram('Sfilata', [{ id: 6, media: [] }], [6]);
         service.clear();
         expect([service.byInstrument, service.previewSource, service.isUnengraved({ id: 6, media: [] })]).toEqual([false, 'Traccia', false]);
+    });
+});
+
+describe('PrinterService ensemble order', () => {
+    let navigate: jasmine.Spy;
+    let ensemble: jasmine.Spy;
+    let getById: jasmine.Spy;
+    let service: PrinterService;
+
+    const part = (id: number, ...instruments: number[]) => ({ id, instruments: instruments.map((index) => ({ index })), media: [] });
+
+    beforeEach(() => {
+        navigate = jasmine.createSpy('navigate').and.returnValue(Promise.resolve(true));
+        ensemble = jasmine.createSpy('ensemble').and.returnValue(
+            of([
+                { id: 20, name: 'Flauto' },
+                { id: 30, name: 'Tromba' }
+            ])
+        );
+        getById = jasmine.createSpy('getById');
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: TracksService, useValue: { getById } },
+                { provide: InstrumentsService, useValue: { ensemble } },
+                { provide: Router, useValue: { navigate } }
+            ]
+        });
+        service = TestBed.inject(PrinterService);
+    });
+
+    it('orders the parts of a track by the first of their instruments in the ensemble', () => {
+        service.preview({ name: 'Marcia', scores: [part(1, 30), part(2), part(3, 99, 20), part(4, 30)] } as never);
+
+        expect(service.scores.map((score) => score.id)).toEqual([3, 1, 4, 2]);
+        expect(service.ensemble).toEqual([20, 30]);
+        expect(navigate).toHaveBeenCalledWith(['preview']);
+    });
+
+    it('orders the parts within each track of an album and keeps the order of the tracks', () => {
+        const value = album();
+        value.tracks = [{ index: 1 } as ChildrenEntities, { index: 2 } as ChildrenEntities];
+        getById.and.callFake((id: number) => of({ scores: id === 1 ? [part(1, 30), part(2, 20)] : [part(3, 30), part(4, 20)] }));
+
+        service.preview(value);
+
+        expect(service.scores.map((score) => score.id)).toEqual([2, 1, 4, 3]);
+    });
+
+    it('opens the preview in the order of the parts when the ensemble cannot be read', () => {
+        ensemble.and.returnValue(throwError(() => new Error('non disponibile')));
+
+        service.preview({ name: 'Marcia', scores: [part(1, 30), part(2, 20)] } as never);
+
+        expect(service.scores.map((score) => score.id)).toEqual([1, 2]);
+        expect(service.ensemble).toEqual([]);
+        expect(navigate).toHaveBeenCalledWith(['preview']);
+        service.clear();
+        expect(service.ensemble).toEqual([]);
     });
 });

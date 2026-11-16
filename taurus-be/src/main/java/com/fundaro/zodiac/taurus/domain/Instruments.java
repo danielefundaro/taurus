@@ -37,6 +37,13 @@ public class Instruments extends CommonFieldsOpenSearch {
     @Column(name = "highest_written_pitch")
     private Integer highestWrittenPitch;
 
+    /**
+     * Position in the ensemble of the band, from 1 without gaps; {@code null} outside the ensemble. Only the ensemble
+     * queries of the repository write it, so saving an instrument never overwrites a new order.
+     */
+    @Column(name = "ensemble_position", insertable = false, updatable = false)
+    private Integer ensemblePosition;
+
     public Integer getTranspositionSemitones() {
         return transpositionSemitones;
     }
@@ -93,6 +100,14 @@ public class Instruments extends CommonFieldsOpenSearch {
         this.highestWrittenPitch = highestWrittenPitch;
     }
 
+    public Integer getEnsemblePosition() {
+        return ensemblePosition;
+    }
+
+    public void setEnsemblePosition(Integer ensemblePosition) {
+        this.ensemblePosition = ensemblePosition;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -130,6 +145,7 @@ public class Instruments extends CommonFieldsOpenSearch {
             ", percussionKey=" + getPercussionKey() +
             ", lowestWrittenPitch=" + getLowestWrittenPitch() +
             ", highestWrittenPitch=" + getHighestWrittenPitch() +
+            ", ensemblePosition=" + getEnsemblePosition() +
             "}";
     }
 }

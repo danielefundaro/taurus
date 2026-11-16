@@ -1,5 +1,6 @@
 import { resolveOptions } from '../score-editor/score-engraving';
-import { forDisplay, ScoreRendererService, withoutPartNames } from './score-renderer.service';
+import { ScoreLayoutClient } from '../score-editor/score-layout-client';
+import { drawingOptions, forDisplay, ScoreRendererService, withoutPartNames } from './score-renderer.service';
 
 const MEI_NS = 'http://www.music-encoding.org/ns/mei';
 
@@ -101,6 +102,66 @@ describe('ScoreRendererService.engrave', () => {
         const refused = new FakeToolkit(mei(1));
         refused.accept = false;
         await expectAsync(engraver(refused).engrave('<score-partwise/>', resolveOptions({}))).toBeRejectedWithError('Spartito non leggibile');
+    });
+});
+
+describe('ScoreRendererService.render', () => {
+    function renderer(toolkit: FakeToolkit): ScoreRendererService {
+        const service = new ScoreRendererService();
+        spyOn(service as unknown as { ready: () => Promise<FakeToolkit> }, 'ready').and.resolveTo(toolkit);
+        return service;
+    }
+    const score = `<score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Flauto</part-name></score-part></part-list><part id="P1"><measure number="1"/></part></score-partwise>`;
+
+    it('condenses the empty rows of a score and keeps their names', async () => {
+        const toolkit = new FakeToolkit(mei(1));
+
+        const pages = await renderer(toolkit).render(score, 1000, 50, { condense: true, partNames: true });
+
+        expect(pages.length).toBe(1);
+        expect(toolkit.options['condense']).toBe('auto');
+        expect(toolkit.options['condenseFirstPage']).toBeTrue();
+        expect(toolkit.loaded[0]).toContain('<part-name>Flauto</part-name>');
+    });
+
+    it('resets the compression and drops the names for a single part', async () => {
+        const toolkit = new FakeToolkit(mei(1));
+
+        await renderer(toolkit).render(score, 1000);
+
+        expect(toolkit.options['condense']).toBe('none');
+        expect(toolkit.options['condenseFirstPage']).toBeFalse();
+        expect(toolkit.loaded[0]).not.toContain('Flauto');
+    });
+
+    it('draws a prepared document as it is and refuses an unreadable one', async () => {
+        const toolkit = new FakeToolkit(mei(1));
+        const service = renderer(toolkit);
+
+        await service.renderPrepared(score, 1000, 50, { encodedBreaks: true });
+        expect(toolkit.loaded[0]).toBe(score);
+        expect(toolkit.options['breaks']).toBe('smart');
+
+        toolkit.accept = false;
+        await expectAsync(service.renderPrepared(score, 1000, 50)).toBeRejectedWithError('Spartito non leggibile');
+    });
+
+    it('gives a worker of its own for the layout in background, started only by the first request', () => {
+        const create = spyOn(window, 'Worker');
+
+        expect(new ScoreRendererService().layoutWorker()).toEqual(jasmine.any(ScoreLayoutClient));
+        expect(create).not.toHaveBeenCalled();
+    });
+});
+
+describe('drawingOptions', () => {
+    it('follows the width and the size, in one page or in pages of the given height', () => {
+        const scroll = drawingOptions(1000, 50);
+        expect(scroll).toEqual(jasmine.objectContaining({ pageWidth: 2000, pageHeight: 60000, scale: 50, breaks: 'auto', condense: 'none', condenseFirstPage: false, header: 'none', footer: 'none' }));
+        expect(scroll['breaksSmartSb']).toBeUndefined();
+
+        const paged = drawingOptions(200, 50, { pageHeight: 600, encodedBreaks: true, condense: true });
+        expect(paged).toEqual(jasmine.objectContaining({ pageWidth: 600, pageHeight: 1200, breaks: 'smart', breaksSmartSb: 0, condense: 'auto', condenseFirstPage: true }));
     });
 });
 

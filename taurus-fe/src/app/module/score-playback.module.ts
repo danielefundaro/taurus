@@ -1,6 +1,6 @@
 /** Ascolto e correzione delle parti: dati scambiati con il backend. */
 
-export type ScoreVersionOrigin = 'OMR_AUDIVERIS' | 'OMR_HOMR' | 'UPLOAD_MUSICXML' | 'UPLOAD_MIDI' | 'CORRECTION' | 'WRITING';
+export type ScoreVersionOrigin = 'OMR_AUDIVERIS' | 'OMR_HOMR' | 'UPLOAD_MUSICXML' | 'UPLOAD_MIDI' | 'CORRECTION' | 'WRITING' | 'ARRANGEMENT';
 export type ScoreVersionStatus = 'UNVERIFIED' | 'APPROVED';
 export type PlaybackAvailability = 'AVAILABLE' | 'NOT_AVAILABLE';
 export type RecognitionJobStatus = 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
@@ -148,6 +148,16 @@ export interface PartPlayback {
     engravedFromVersionId?: number | null;
     /** Versione di un'altra parte da cui la parte è stata ricavata, solo per archivisti e amministratori. */
     derivedFrom?: DerivedFrom | null;
+    /** Pagine impaginate che aspettano di essere assegnate, solo per archivisti e amministratori. */
+    pendingPages?: PendingPages | null;
+}
+
+/** Pagine impaginate da una versione della parte, da mettere al posto delle sue o in una parte nuova. */
+export interface PendingPages {
+    jobId: number;
+    versionId: number;
+    versionNumber: number;
+    pageCount: number;
 }
 
 /** Origine di una parte ricavata: la parte, che può essere stata eliminata, e la sua versione. */

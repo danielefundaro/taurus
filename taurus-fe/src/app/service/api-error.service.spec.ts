@@ -184,6 +184,14 @@ describe('ApiErrorService', () => {
         expect(service.resolve(response(400, { message: 'error.inventory.qr.size.invalid', args: { sizes: [256, 512, 1024] } })).detail).toBe('La dimensione del QR code deve essere di 256, 512 o 1024 pixel');
     });
 
+    it('explains the problems of a score and of an extraction', () => {
+        expect(apiErrorMessage('scoreWriting.contentInvalid', { reason: 'tooManyRows', maxRows: 60 })).toBe('La partitura non può avere più di 60 righi');
+        expect(apiErrorMessage('scoreWriting.contentInvalid', { reason: 'unevenMeasures', row: 'P2' })).toBe('Tutti i righi della partitura devono avere lo stesso numero di battute');
+        expect(apiErrorMessage('scoreWriting.extractionInvalid', { reason: 'duplicateTarget' })).toBe('Due righi non possono andare nella stessa parte');
+        expect(apiErrorMessage('scoreWriting.extractionInvalid', { reason: 'other' })).toBe('Estrazione non valida: riaprire il dialogo');
+        expect(apiErrorMessage('scoreWriting.instrumentNotConfigured', { instrument: 'Clarinetto 1°' })).toBe('Clarinetto 1° non ha la trasposizione: configurarla per estrarne la parte');
+    });
+
     it('builds the sheet rule messages from the duration messages', () => {
         const args = { minimum: '2027-01-31', maximum: '2028-01-31', minMonths: 12, maxMonths: 24, deliveredOn: '2026-01-31', sheetNumber: '2026/002' };
 

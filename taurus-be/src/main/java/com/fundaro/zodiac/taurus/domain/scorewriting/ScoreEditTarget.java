@@ -1,6 +1,7 @@
 package com.fundaro.zodiac.taurus.domain.scorewriting;
 
-/** What an edit lock or a draft refers to: a part of a track; the scores of phase 4 will add their own type. */
+/** What an edit lock or a draft refers to: a part of a track or the score of a track. */
 public enum ScoreEditTarget {
     PART,
+    ARRANGEMENT,
 }

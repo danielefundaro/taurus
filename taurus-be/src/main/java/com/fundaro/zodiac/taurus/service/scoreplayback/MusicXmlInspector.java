@@ -4,7 +4,9 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.fundaro.zodiac.taurus.service.scoreplayback.MusicXmlDocuments.child;
 import static com.fundaro.zodiac.taurus.service.scoreplayback.MusicXmlDocuments.childElements;
@@ -25,8 +27,22 @@ public final class MusicXmlInspector {
         Element root = document.getDocumentElement();
         List<Element> parts = children(root, "part");
         if (parts.isEmpty()) throw new MusicXmlDocuments.MusicXmlException("noParts");
-        Element part = parts.get(0);
+        return inspect(parts.get(0));
+    }
 
+    /**
+     * The checks of every part of a document with several parts, such as a score, by part id in the order of the file;
+     * a part repeated with the same id keeps the checks of the first one.
+     */
+    public static Map<String, ScoreChecks> inspectParts(Document document) {
+        Map<String, ScoreChecks> checks = new LinkedHashMap<>();
+        for (Element part : children(document.getDocumentElement(), "part")) {
+            checks.putIfAbsent(part.getAttribute("id"), inspect(part));
+        }
+        return checks;
+    }
+
+    private static ScoreChecks inspect(Element part) {
         Counter counter = new Counter();
         for (Element measure : children(part, "measure")) {
             counter.inspectMeasure(measure);

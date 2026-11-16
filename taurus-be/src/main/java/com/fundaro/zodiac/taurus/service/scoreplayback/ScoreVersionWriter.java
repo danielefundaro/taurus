@@ -25,7 +25,7 @@ import java.util.Objects;
 @Component
 public class ScoreVersionWriter {
 
-    static final String MEDIA_CATEGORY = "score-versions";
+    public static final String MEDIA_CATEGORY = "score-versions";
 
     private final ScorePlaybackSupport support;
     private final ScoreVersionRepository versionRepository;
@@ -51,6 +51,7 @@ public class ScoreVersionWriter {
      * @param pagesFingerprint pages of the part the version was produced from
      * @param parentVersionId  version a correction starts from
      * @param layout           position of the measures on the pages, stored as JSON; {@code null} when unknown
+     * @param arrangementVersionId version of the score of the track a version extracted from it comes from
      */
     public record NewVersion(
         SheetsMusic part,
@@ -64,8 +65,27 @@ public class ScoreVersionWriter {
         Long parentVersionId,
         Object layout,
         boolean approved,
-        String actor
-    ) {}
+        String actor,
+        Long arrangementVersionId
+    ) {
+        /** A version that does not come from the score of the track. */
+        public NewVersion(
+            SheetsMusic part,
+            Document document,
+            ScoreVersionOrigin origin,
+            String fileName,
+            String sourceFileName,
+            String sourcePartName,
+            String pagesFingerprint,
+            Long recognitionJobId,
+            Long parentVersionId,
+            Object layout,
+            boolean approved,
+            String actor
+        ) {
+            this(part, document, origin, fileName, sourceFileName, sourcePartName, pagesFingerprint, recognitionJobId, parentVersionId, layout, approved, actor, null);
+        }
+    }
 
     /** A created version with the checks computed on its content. */
     public record Written(ScoreVersion version, ScoreChecks checks) {}
@@ -89,6 +109,7 @@ public class ScoreVersionWriter {
         version.setPagesFingerprint(request.pagesFingerprint());
         version.setRecognitionJobId(request.recognitionJobId());
         version.setParentVersionId(request.parentVersionId());
+        version.setArrangementVersionId(request.arrangementVersionId());
         version.setSourceFileName(truncate(request.sourceFileName()));
         version.setSourcePartName(truncate(request.sourcePartName()));
         version.setMeasureCount(checks.measureCount());
@@ -103,7 +124,7 @@ public class ScoreVersionWriter {
         return new Written(version, checks);
     }
 
-    static void approve(ScoreVersion version, String actor) {
+    public static void approve(ScoreVersion version, String actor) {
         version.setStatus(ScoreVersionStatus.APPROVED);
         version.setApprovedBy(actor);
         version.setApprovedAt(ZonedDateTime.now());

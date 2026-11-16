@@ -40,5 +40,15 @@ public interface ScoreDraftRepository extends JpaRepository<ScoreDraft, Long> {
     )
     int deleteOrphanPartDrafts();
 
+    /** Removes the drafts of scores that no longer exist, were removed or belong to a removed track. */
+    @Modifying
+    @Query(
+        value = "delete from score_draft draft where draft.target_type = 'ARRANGEMENT' and not exists (" +
+            "select 1 from track_arrangement arrangement join track on track.id = arrangement.track_id and track.deleted = false " +
+            "where arrangement.id = draft.target_id and arrangement.deleted = false)",
+        nativeQuery = true
+    )
+    int deleteOrphanArrangementDrafts();
+
     record DraftSummary(Long targetId, String savedBy, ZonedDateTime savedAt, Long baseVersionId) {}
 }

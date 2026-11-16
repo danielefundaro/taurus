@@ -1,0 +1,99 @@
+<app-dialog-shell
+    #shell
+    [heading]="heading"
+    [subtitle]="subtitle"
+    confirmLabel="Estrai"
+    [cancelLabel]="step === 'done' ? 'Chiudi' : 'Annulla'"
+    [dismissOnly]="step === 'done'"
+    [saving]="busy"
+    [invalidCount]="errors.length"
+    [dirty]="dirty"
+    (cancel)="cancel()"
+    (confirm)="extract()"
+>
+    @if (step === 'choose') {
+        <div class="flex flex-col gap-4">
+            @if (data.arrangement.draft) {
+                <app-inline-alert
+                    severity="info"
+                    heading="La bozza non si estrae"
+                    [detail]="'Si estraggono i righi della versione ' + version + ', l\'ultima salvata. Per estrarre le modifiche della bozza, salvala prima nell\'editor della partitura.'"
+                />
+            }
+            @if (problem) {
+                <app-inline-alert severity="error" heading="Parti non estratte" [detail]="problem" />
+            }
+            @if (shell.validationAttempted && errors.length) {
+                <app-inline-alert severity="warn" heading="Scelta da completare" [detail]="errors[0]" />
+            }
+            <p class="text-sm text-muted-color m-0">
+                Sono scelti i righi nuovi e da estrarre. L'estrazione sostituisce la versione ascoltata della parte, così i righi aggiornati e quelli con la parte modificata dopo l'estrazione si scelgono a mano. Riceve il rigo solo una parte con gli
+                stessi strumenti.
+            </p>
+            <ul class="flex flex-col gap-2 list-none p-0 m-0" aria-label="Righi da estrarre">
+                @for (choice of choices; track choice.row.id) {
+                    <li class="flex flex-col gap-2 rounded-lg border border-surface px-3 py-2">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <p-checkbox [inputId]="'extract-' + choice.row.id" [binary]="true" [(ngModel)]="choice.selected" (ngModelChange)="changedSelection()" [disabled]="!!blocker(choice) || busy" />
+                            <label [for]="'extract-' + choice.row.id" class="flex flex-col min-w-0 flex-1 cursor-pointer">
+                                <span class="font-medium truncate">{{ choice.name }}</span>
+                                @if (choice.instruments && choice.instruments !== choice.name) {
+                                    <span class="text-sm text-muted-color truncate">{{ choice.instruments }}</span>
+                                }
+                            </label>
+                            <p-tag [severity]="status[choice.row.status].severity" [value]="status[choice.row.status].label" />
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 sm:pl-8">
+                            <label class="text-sm" [for]="'extract-target-' + choice.row.id">Parte</label>
+                            <p-select
+                                [inputId]="'extract-target-' + choice.row.id"
+                                class="w-full sm:w-80"
+                                [options]="choice.targets"
+                                [(ngModel)]="choice.target"
+                                (ngModelChange)="changedTarget(choice)"
+                                optionLabel="label"
+                                optionValue="value"
+                                [disabled]="!!choice.rowBlocker || busy"
+                                appendTo="body"
+                            />
+                        </div>
+                        @if (blocker(choice); as reason) {
+                            <span class="text-sm text-orange-600 sm:pl-8" role="note">{{ reason }}</span>
+                        }
+                    </li>
+                }
+            </ul>
+            <span class="text-sm text-muted-color" role="status">{{ selectedCount === 1 ? '1 rigo scelto' : selectedCount + ' righi scelti' }}</span>
+        </div>
+    } @else {
+        <div class="flex flex-col gap-4">
+            <ul class="flex flex-col gap-1 list-none p-0 m-0" aria-label="Parti estratte">
+                @for (part of extracted; track part.scoreId) {
+                    <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface px-3 py-2">
+                        <span class="flex flex-col min-w-0">
+                            <span class="font-medium truncate">{{ part.partLabel }}</span>
+                            @if (part.row !== part.partLabel) {
+                                <span class="text-sm text-muted-color truncate">Dal rigo {{ part.row }}</span>
+                            }
+                        </span>
+                        @if (part.created) {
+                            <p-tag severity="info" value="Parte nuova, senza pagine" />
+                        } @else if (!part.hasPages) {
+                            <p-tag severity="warn" value="Senza pagine" />
+                        }
+                    </li>
+                }
+            </ul>
+            @if (data.canEngrave) {
+                <p class="text-sm text-muted-color m-0">
+                    Impagina le parti con le stesse opzioni: una parte senza pagine riceve le sue al termine, mentre per le altre le pagine restano da assegnare nella scheda Ascolto, per sostituirle o aggiungerle in una parte nuova.
+                </p>
+                <div>
+                    <p-button label="Impagina le parti" icon="pi pi-file-pdf" (onClick)="engrave()" />
+                </div>
+            } @else {
+                <p class="text-sm text-muted-color m-0">Le parti si leggono e si ascoltano subito; finché non si impaginano non compaiono in anteprima, in presentazione né in stampa.</p>
+            }
+        </div>
+    }
+</app-dialog-shell>

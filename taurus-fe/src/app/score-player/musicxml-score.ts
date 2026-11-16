@@ -57,11 +57,25 @@ const DYNAMICS: Readonly<Record<string, number>> = { ppp: 30, pp: 40, p: 55, mp:
 const DEFAULT_VELOCITY = 85;
 
 export function parseMusicXml(xml: string, partIndex = 0): ScorePart {
-    const document = new DOMParser().parseFromString(xml, 'application/xml');
-    if (document.getElementsByTagName('parsererror').length > 0) throw new Error('MusicXML non leggibile');
-    const root = document.documentElement;
+    const root = parseDocument(xml);
     const partElement = childElements(root, 'part')[partIndex];
     if (!partElement) throw new Error('Parte non presente');
+    return parsePart(root, partElement);
+}
+
+/** Tutte le parti di un file, lette una volta sola: per ascoltare insieme i righi di una partitura. */
+export function parseMusicXmlParts(xml: string): ScorePart[] {
+    const root = parseDocument(xml);
+    return childElements(root, 'part').map((partElement) => parsePart(root, partElement));
+}
+
+function parseDocument(xml: string): Element {
+    const document = new DOMParser().parseFromString(xml, 'application/xml');
+    if (document.getElementsByTagName('parsererror').length > 0) throw new Error('MusicXML non leggibile');
+    return document.documentElement;
+}
+
+function parsePart(root: Element, partElement: Element): ScorePart {
     const partId = partElement.getAttribute('id') ?? '';
     const scorePart = Array.from(root.getElementsByTagName('score-part')).find((element) => element.getAttribute('id') === partId);
 

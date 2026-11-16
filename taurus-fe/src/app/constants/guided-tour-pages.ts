@@ -379,6 +379,16 @@ export const GUIDED_TOUR_PAGES: readonly GuidedTourPageDefinition[] = [
                 introducedIn: 2
             },
             {
+                id: 'page.track.arrangement',
+                roles: CATALOG,
+                requires: [TenantFeature.SCORE_PLAYBACK, TenantFeature.SCORE_WRITING],
+                anchors: ['track.tabArrangement'],
+                icon: 'pi pi-th-large',
+                title: 'Partitura',
+                body: "Nella scheda Partitura crei la partitura del brano dall'organico o dalle parti e scrivi tutti i righi insieme.",
+                introducedIn: 6
+            },
+            {
                 id: 'page.track.pdf',
                 roles: CATALOG,
                 anchors: ['track.tabPdf'],
@@ -856,6 +866,16 @@ export const GUIDED_TOUR_PAGES: readonly GuidedTourPageDefinition[] = [
                 title: 'Da configurare',
                 body: "Mostra solo gli strumenti ancora da configurare per l'ascolto e aprili per scegliere il suono.",
                 introducedIn: 2
+            },
+            {
+                id: 'page.instruments.ensemble',
+                roles: CATALOG,
+                anchors: ['instruments.ensemble'],
+                icon: 'pi pi-list',
+                title: 'Organico',
+                body: "Nella scheda Organico metti in ordine gli strumenti che suonano nella banda: l'anteprima e la stampa seguono lo stesso ordine.",
+                points: [{ text: "Comincia da «Proponi l'ordine di riferimento»" }],
+                introducedIn: 5
             }
         ]
     },

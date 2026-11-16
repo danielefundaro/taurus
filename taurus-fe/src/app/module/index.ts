@@ -26,6 +26,7 @@ export * from './operational-dashboard';
 export * from './page.module';
 export * from './payout.module';
 export * from './preferences.module';
+export * from './score-arrangement.module';
 export * from './score-playback.module';
 export * from './sheets-music.module';
 export * from './signature.module';

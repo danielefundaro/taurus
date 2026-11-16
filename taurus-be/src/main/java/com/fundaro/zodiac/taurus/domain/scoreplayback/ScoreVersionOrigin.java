@@ -9,4 +9,6 @@ public enum ScoreVersionOrigin {
     CORRECTION,
     /** Written in the music writing editor. */
     WRITING,
+    /** Extracted from the score of the track. */
+    ARRANGEMENT,
 }

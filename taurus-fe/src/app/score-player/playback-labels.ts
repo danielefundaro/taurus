@@ -82,6 +82,7 @@ export function originLabel(origin: ScoreVersionOrigin): string {
         UPLOAD_MUSICXML: 'File MusicXML',
         UPLOAD_MIDI: 'File MIDI',
         CORRECTION: 'Correzione',
-        WRITING: 'Scrittura'
+        WRITING: 'Scrittura',
+        ARRANGEMENT: 'Estrazione dalla partitura'
     }[origin];
 }

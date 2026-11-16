@@ -81,6 +81,10 @@ public class ScoreEngravingJob extends TenantAuditedEntity {
     @Column(name = "applied_sheet_music_id")
     private Long appliedSheetMusicId;
 
+    /** The pages go to the part when the job ends, if the part has no pages then; otherwise they wait as usual. */
+    @Column(name = "assign_to_empty_part", nullable = false, updatable = false)
+    private boolean assignToEmptyPart;
+
     public Long getSheetMusicId() {
         return sheetMusicId;
     }
@@ -215,5 +219,13 @@ public class ScoreEngravingJob extends TenantAuditedEntity {
 
     public void setAppliedSheetMusicId(Long appliedSheetMusicId) {
         this.appliedSheetMusicId = appliedSheetMusicId;
+    }
+
+    public boolean isAssignToEmptyPart() {
+        return assignToEmptyPart;
+    }
+
+    public void setAssignToEmptyPart(boolean assignToEmptyPart) {
+        this.assignToEmptyPart = assignToEmptyPart;
     }
 }

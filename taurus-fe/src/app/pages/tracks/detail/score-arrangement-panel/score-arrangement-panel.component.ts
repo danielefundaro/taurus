@@ -1,0 +1,348 @@
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { DialogService } from 'primeng/dynamicdialog';
+import { first, firstValueFrom } from 'rxjs';
+import { openEngraveDialog } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
+import { ExtractedPartToEngrave, ExtractPartsDialogComponent, ExtractPartsDialogData, ExtractPartsDialogResult } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
+import { NewArrangementDialogComponent, NewArrangementDialogData, NewArrangementDialogResult } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
+import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
+import { editLockMessage } from '../../../../constants';
+import { ImportsModule } from '../../../../imports';
+import { Arrangement, ArrangementRowStatus, ArrangementVersion, DraftSummary, EditLock, TrackPlayback } from '../../../../module';
+import { ArrangementService, ConfirmService, ScorePlaybackService, ToastService, withErrorSummary } from '../../../../service';
+
+/** Telefono: la scheda mostra solo lo stato della partitura, che si scrive da un computer o da un tablet. */
+const PHONE_QUERY = '(max-width: 768px)';
+
+const ROW_STATUS: Record<ArrangementRowStatus, { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' }> = {
+    NEW: { label: 'Nuova', severity: 'secondary' },
+    TO_EXTRACT: { label: 'Da estrarre', severity: 'info' },
+    UP_TO_DATE: { label: 'Aggiornata', severity: 'success' },
+    MODIFIED: { label: "Modificata dopo l'estrazione", severity: 'warn' },
+    PART_DELETED: { label: 'Parte eliminata', severity: 'danger' }
+};
+
+function moment(value: string | null | undefined): string {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return `${date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' })} ${date.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/**
+ * Partitura della traccia, per chi gestisce la traccia con la scrittura attiva: la crea dall'organico o dalle parti, la
+ * apre nell'editor della partitura, ne mostra i righi con lo stato delle loro parti, ne estrae le parti e le impagina,
+ * mostra le versioni da approvare o scaricare e la elimina. Sul telefono mostra solo lo stato.
+ */
+@Component({
+    selector: 'app-score-arrangement-panel',
+    standalone: true,
+    imports: [ImportsModule],
+    templateUrl: './score-arrangement-panel.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    providers: [DialogService]
+})
+export class ScoreArrangementPanelComponent implements OnChanges {
+    @Input({ required: true }) trackId!: number;
+    /** La traccia ha modifiche non salvate: le parti nuove non sono ancora sul server. */
+    @Input() trackDirty = false;
+    /** Compositore e arrangiatore della traccia, scritti nelle parti estratte e proposti nell'intestazione delle pagine. */
+    @Input() composer?: string | null;
+    @Input() arranger?: string | null;
+    @Output() trackVersionChange = new EventEmitter<number>();
+    /** L'estrazione o l'impaginazione hanno cambiato le parti: la pagina le ricarica. */
+    @Output() partsChange = new EventEmitter<void>();
+
+    protected arrangement: Arrangement | null = null;
+    protected versions: ArrangementVersion[] | null = null;
+    protected loading = false;
+    protected failed = false;
+    protected opening = false;
+    protected readonly phone = typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
+    protected readonly rowStatus = ROW_STATUS;
+    protected readonly moment = moment;
+
+    constructor(
+        private readonly arrangementService: ArrangementService,
+        private readonly playbackService: ScorePlaybackService,
+        private readonly dialogService: DialogService,
+        private readonly confirmService: ConfirmService,
+        private readonly toastService: ToastService,
+        private readonly changeDetector: ChangeDetectorRef
+    ) {}
+
+    ngOnChanges(changes: SimpleChanges): void {
+        if (changes['trackId'] && this.trackId) void this.reload();
+    }
+
+    /** «Bozza non salvata di Mario Rossi, 14/11/2026 10:32». */
+    protected draftLabel(draft: DraftSummary): string {
+        const when = moment(draft.savedAt);
+        return `Bozza non salvata${draft.savedBy ? ` di ${draft.savedBy}` : ''}${when ? `, ${when}` : ''}`;
+    }
+
+    /** «In modifica da Mario Rossi dalle 10:32». */
+    protected editingLabel(editing: EditLock): string {
+        return editLockMessage(editing.ownerName, editing.since, false);
+    }
+
+    /** Qualcun altro sta scrivendo la partitura. */
+    protected get editedElsewhere(): boolean {
+        return !!this.arrangement?.editing && !this.arrangement.editing.mine;
+    }
+
+    protected instrumentsLabel(row: Arrangement['rows'][number]): string {
+        return row.instruments.map((instrument) => instrument.name).join(', ');
+    }
+
+    /** Partitura nuova dall'organico o dalle parti della traccia, aperta subito nell'editor. */
+    protected async create(): Promise<void> {
+        if (this.opening) return;
+        this.opening = true;
+        this.changeDetector.markForCheck();
+        let playback;
+        try {
+            playback = await firstValueFrom(this.playbackService.playback(this.trackId));
+        } catch {
+            this.toastService.error('Partitura non disponibile', 'Le parti della traccia non si possono leggere: riprovare più tardi.');
+            return;
+        } finally {
+            this.opening = false;
+            this.changeDetector.markForCheck();
+        }
+        const data: NewArrangementDialogData = { trackId: this.trackId, playback };
+        const ref = this.dialogService.open(NewArrangementDialogComponent, { showHeader: false, width: 'min(48rem, 95vw)', modal: true, focusOnShow: false, data });
+        ref?.onClose.pipe(first()).subscribe((result: NewArrangementDialogResult | undefined) => {
+            if (!result) return;
+            this.arrangement = result.arrangement;
+            this.versions = null;
+            this.changeDetector.markForCheck();
+            this.write(true);
+        });
+    }
+
+    /** Apre la partitura nell'editor: dalla versione corrente o, con `resume`, dalla bozza senza chiedere. */
+    protected write(resume = false): void {
+        const arrangement = this.arrangement;
+        if (!arrangement) return;
+        const data: ScoreEditorDialogData = {
+            trackId: this.trackId,
+            scoreId: 0,
+            versionId: arrangement.currentVersion?.id ?? null,
+            partLabel: 'Partitura',
+            sound: { percussionKeys: [], configured: false, conflicting: false },
+            mode: 'writing',
+            resume,
+            arrangement: {
+                version: arrangement.currentVersion ?? null,
+                rows: arrangement.rows.map((row) => ({ id: row.id, name: row.name, instruments: row.instruments }))
+            }
+        };
+        const ref = this.dialogService.open(ScoreEditorDialogComponent, {
+            showHeader: false,
+            width: '100vw',
+            height: '100vh',
+            modal: true,
+            closeOnEscape: false,
+            focusOnShow: false,
+            focusTrap: false,
+            data,
+            style: { 'max-height': '100vh', 'border-radius': '0' },
+            contentStyle: { padding: '0', overflow: 'hidden', height: '100vh' }
+        });
+        ref?.onClose.pipe(first()).subscribe((version: ArrangementVersion | undefined) => {
+            if (version && 'versionNumber' in version) this.toastService.success('Partitura salvata', `La versione ${version.versionNumber} è ora quella corrente.`);
+            this.versions = null;
+            void this.reload();
+        });
+    }
+
+    protected discardDraft(): void {
+        const draft = this.arrangement?.draft;
+        if (!draft) return;
+        this.confirmService.confirmDestructive({
+            title: 'Scartare la bozza?',
+            consequence: `${this.draftLabel(draft)} della partitura andrà persa: non si potrà recuperare.`,
+            actionLabel: 'Scarta la bozza',
+            accept: () =>
+                void this.arrangementService.discardDraft(this.trackId).then(
+                    () => {
+                        this.toastService.success('Bozza scartata', 'La partitura torna alla versione corrente.');
+                        void this.reload();
+                    },
+                    // L'avviso dell'errore è già mostrato; la partitura si ricarica per mostrare chi sta scrivendo.
+                    () => void this.reload()
+                )
+        });
+    }
+
+    /** Perché le parti non si estraggono; `null` se si può. */
+    protected get extractBlocker(): string | null {
+        if (!this.arrangement?.currentVersion) return 'Salva una versione della partitura per estrarne le parti';
+        if (this.trackDirty) return 'Salva la traccia prima di estrarre le parti';
+        return null;
+    }
+
+    /** Estrae le parti dalla versione corrente; al termine le parti scelte si impaginano con le stesse opzioni. */
+    protected async extract(): Promise<void> {
+        const arrangement = this.arrangement;
+        if (!arrangement?.currentVersion || this.extractBlocker || this.opening) return;
+        this.opening = true;
+        this.changeDetector.markForCheck();
+        let playback: TrackPlayback;
+        try {
+            playback = await firstValueFrom(this.playbackService.playback(this.trackId));
+        } catch {
+            this.toastService.error('Parti non estratte', 'Le parti della traccia non si possono leggere: riprovare più tardi.');
+            return;
+        } finally {
+            this.opening = false;
+            this.changeDetector.markForCheck();
+        }
+        const data: ExtractPartsDialogData = {
+            trackId: this.trackId,
+            arrangement,
+            playback,
+            header: { title: playback.trackName ?? '', composer: this.composer ?? '', arranger: this.arranger ?? '' },
+            canEngrave: playback.recognitionAvailable
+        };
+        const ref = this.dialogService.open(ExtractPartsDialogComponent, { showHeader: false, width: 'min(48rem, 95vw)', modal: true, focusOnShow: false, data });
+        ref?.onClose.pipe(first()).subscribe((closed: ExtractPartsDialogResult | undefined) => {
+            if (!closed) return;
+            this.trackVersionChange.emit(closed.result.trackVersion);
+            this.partsChange.emit();
+            void this.reload();
+            if (closed.engrave?.length) this.engrave(closed.engrave, playback.trackName ?? '', closed.result.trackVersion);
+        });
+    }
+
+    /** Un solo dialogo di opzioni, con l'anteprima della prima parte, per un'impaginazione di ogni parte. */
+    private engrave(parts: ExtractedPartToEngrave[], title: string, trackVersion: number): void {
+        const [lead] = parts;
+        openEngraveDialog(this.dialogService, {
+            trackId: this.trackId,
+            scoreId: lead.scoreId,
+            versionId: lead.versionId,
+            partLabel: lead.partLabel,
+            header: { title, composer: this.composer ?? '', arranger: this.arranger ?? '', partName: lead.partLabel },
+            hasPages: lead.hasPages,
+            trackVersion,
+            parts
+        })
+            .pipe(first())
+            // Le pagine assegnate da sole cambiano la traccia: la pagina la rilegge.
+            .subscribe(() => this.partsChange.emit());
+    }
+
+    /** Ascolta la versione corrente: tutti i righi insieme, ognuno con il suono del suo strumento, con il mixer. */
+    protected async listen(): Promise<void> {
+        const arrangement = this.arrangement;
+        const version = arrangement?.currentVersion;
+        if (!arrangement || !version || this.opening) return;
+        this.opening = true;
+        this.changeDetector.markForCheck();
+        let playback: TrackPlayback;
+        try {
+            // Dalla traccia vengono il titolo e il tempo dell'ascolto.
+            playback = await firstValueFrom(this.playbackService.playback(this.trackId));
+        } catch {
+            this.toastService.error('Ascolto non disponibile', 'La traccia non si può leggere: riprovare più tardi.');
+            return;
+        } finally {
+            this.opening = false;
+            this.changeDetector.markForCheck();
+        }
+        const data: ScorePlayerDialogData = {
+            trackId: this.trackId,
+            playback,
+            mode: 'arrangement',
+            arrangement: { versionId: version.id, rows: arrangement.rows.map((row) => ({ id: row.id, name: row.name, instruments: row.instruments })) }
+        };
+        this.dialogService.open(ScorePlayerDialogComponent, {
+            header: `Partitura · versione ${version.versionNumber}${playback.trackName ? ` · ${playback.trackName}` : ''}`,
+            width: '96vw',
+            height: '94vh',
+            modal: true,
+            closable: true,
+            maximizable: false,
+            focusOnShow: false,
+            data,
+            contentStyle: { padding: '0', overflow: 'hidden', height: 'calc(94vh - 60px)' }
+        });
+    }
+
+    /** Mostra o nasconde le versioni della partitura. */
+    protected async toggleVersions(): Promise<void> {
+        if (this.versions) {
+            this.versions = null;
+            this.changeDetector.markForCheck();
+            return;
+        }
+        try {
+            this.versions = await this.arrangementService.versions(this.trackId);
+        } catch {
+            this.versions = null;
+        }
+        this.changeDetector.markForCheck();
+    }
+
+    protected async approve(version: ArrangementVersion): Promise<void> {
+        try {
+            await this.arrangementService.approve(this.trackId, version.id, withErrorSummary('Versione non approvata'));
+            this.toastService.success('Versione approvata', `La versione ${version.versionNumber} della partitura è approvata.`);
+            this.versions = await this.arrangementService.versions(this.trackId);
+            await this.reload();
+        } catch {
+            // L'avviso dell'errore è già mostrato.
+        }
+        this.changeDetector.markForCheck();
+    }
+
+    /** Scarica la versione come MusicXML compresso, da aprire in MuseScore. */
+    protected async download(version: ArrangementVersion): Promise<void> {
+        try {
+            const blob = await this.arrangementService.file(this.trackId, version.id);
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `partitura-versione-${version.versionNumber}.mxl`;
+            link.click();
+            window.setTimeout(() => URL.revokeObjectURL(url));
+        } catch {
+            this.toastService.error('File non scaricato', 'Riprovare più tardi.');
+        }
+    }
+
+    /** Elimina la partitura con versioni e bozza, dopo una conferma; le parti della traccia restano. */
+    protected remove(): void {
+        if (!this.arrangement) return;
+        this.confirmService.confirmDestructive({
+            title: 'Eliminare la partitura?',
+            consequence: 'La partitura, le sue versioni e la bozza andranno perse: non si potranno recuperare. Le parti della traccia restano, senza il collegamento ai righi.',
+            actionLabel: 'Elimina la partitura',
+            accept: () =>
+                void this.arrangementService.delete(this.trackId, undefined, withErrorSummary('Partitura non eliminata')).then(
+                    () => {
+                        this.toastService.success('Partitura eliminata', 'Le parti della traccia restano.');
+                        this.versions = null;
+                        void this.reload();
+                    },
+                    () => void this.reload()
+                )
+        });
+    }
+
+    private async reload(): Promise<void> {
+        this.loading = true;
+        this.changeDetector.markForCheck();
+        try {
+            this.arrangement = await this.arrangementService.arrangement(this.trackId);
+            this.failed = false;
+        } catch {
+            this.failed = true;
+        } finally {
+            this.loading = false;
+            this.changeDetector.markForCheck();
+        }
+    }
+}

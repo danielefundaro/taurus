@@ -5,12 +5,16 @@ import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dy
 import { of, Subject, throwError } from 'rxjs';
 import { EngravingJob, EngravingTarget, ScoreEditorData } from '../../module';
 import { ResolvedOptions } from '../../score-editor/score-engraving';
+import { engravingErrorLabel } from '../../score-player/playback-labels';
 import { MediaService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
 import { EngraveDialogComponent, EngraveDialogData, ENGRAVING_POLL_MS, openEngraveDialog, PREVIEW_DELAY_MS } from './engrave-dialog.component';
 
 /** Parte protetta del dialogo usata dalle prove. */
 interface Dialog {
-    step: 'loading' | 'options' | 'running' | 'done';
+    step: 'loading' | 'options' | 'running' | 'done' | 'batch';
+    batch: { part: { scoreId: number; partLabel: string }; job: EngravingJob | null }[];
+    batchSummary: string;
+    batchStatus(entry: Dialog['batch'][number]): { label: string; severity: string; active: boolean };
     options: ResolvedOptions;
     job: EngravingJob | null;
     failure: string | null;
@@ -312,6 +316,85 @@ describe('EngraveDialogComponent', () => {
         dialog.downloadPdf();
         flushMicrotasks();
         expect(toast.warn).toHaveBeenCalledWith('PDF non scaricato', jasmine.any(String));
+        fixture.destroy();
+    }));
+
+    it('engraves several parts with the same options, each with its own name, and follows every job', fakeAsync(() => {
+        config.data = {
+            ...config.data,
+            parts: [
+                { scoreId: 9, versionId: 70, partLabel: 'Flicorno tenore', hasPages: false },
+                { scoreId: 10, versionId: 71, partLabel: 'Basso', hasPages: true },
+                { scoreId: 11, versionId: 72, partLabel: 'Rullante', hasPages: false }
+            ]
+        };
+        // Il basso è già in impaginazione: si segue il suo job.
+        playback.engrave.and.callFake((_track: number, scoreId: number) => (scoreId === 10 ? throwError(() => new HttpErrorResponse({ status: 409 })) : of(job({ id: scoreId * 10, scoreId }))));
+        playback.engraving.and.callFake((_track: number, scoreId: number) => of(job({ id: scoreId * 10, scoreId, status: 'RUNNING' })));
+        const dialog = open();
+        const labels = () => dialog.batch.map((entry) => dialog.batchStatus(entry).label);
+
+        expect(playback.engraving).not.toHaveBeenCalled();
+        expect(dialog.step).toBe('options');
+        expect(dialog.heading).toBe('Impagina 3 parti');
+        expect(dialog.subtitle).toContain("l'anteprima è di Flicorno tenore");
+        expect(fixture.nativeElement.querySelector('#engravePartName')).toBeNull();
+        tick(0);
+
+        void dialog.generate();
+        flushMicrotasks();
+        fixture.detectChanges();
+
+        expect(playback.engrave.calls.allArgs().map(([, scoreId, versionId, options, , assign]) => [scoreId, versionId, options.header?.partName, assign])).toEqual([
+            [9, 70, 'Flicorno tenore', true],
+            [10, 71, 'Basso', true],
+            [11, 72, 'Rullante', true]
+        ]);
+        expect(playback.engrave.calls.argsFor(2)[3].header?.title).toBe('Marcia reale');
+        expect(dialog.step).toBe('batch');
+        expect(labels()).toEqual(['In coda', 'In corso', 'In coda']);
+        expect(dialog.batchSummary).toBe('Impaginazioni terminate: 0 su 3');
+        expect(dialog.subtitle).toContain('una parte alla volta');
+
+        playback.engraving.and.callFake((_track: number, scoreId: number) =>
+            of(
+                scoreId === 9
+                    ? job({ id: 90, scoreId, status: 'DONE', appliedAt: '2026-11-15T10:00:00Z', appliedScoreId: 9 })
+                    : scoreId === 10
+                      ? job({ id: 100, scoreId, status: 'DONE', pages: [31, 32] })
+                      : job({ id: 110, scoreId, status: 'FAILED', errorCode: 'unreadableScore' })
+            )
+        );
+        tick(ENGRAVING_POLL_MS);
+        fixture.detectChanges();
+
+        expect(labels()).toEqual(['Pagine assegnate', 'Pagine da assegnare nella scheda Ascolto', engravingErrorLabel('unreadableScore')]);
+        expect(dialog.batchSummary).toBe('Impaginazioni terminate: 3 su 3');
+        expect(fixture.nativeElement.textContent).toContain('Pagine da assegnare nella scheda Ascolto');
+        const calls = playback.engraving.calls.count();
+        tick(ENGRAVING_POLL_MS * 2);
+        expect(playback.engraving.calls.count()).toBe(calls);
+        fixture.destroy();
+    }));
+
+    it('starts no other part after an error other than an engraving already running', fakeAsync(() => {
+        config.data = {
+            ...config.data,
+            parts: [
+                { scoreId: 9, versionId: 70, partLabel: 'Flicorno tenore', hasPages: false },
+                { scoreId: 10, versionId: 71, partLabel: 'Basso', hasPages: true }
+            ]
+        };
+        playback.engrave.and.returnValue(throwError(() => new HttpErrorResponse({ status: 503 })));
+        const dialog = open();
+        tick(0);
+
+        void dialog.generate();
+        flushMicrotasks();
+
+        expect(playback.engrave).toHaveBeenCalledTimes(1);
+        expect(dialog.batch.map((entry) => dialog.batchStatus(entry).label)).toEqual(['Non avviata', 'Non avviata']);
+        expect(dialog.batchSummary).toBe('Nessuna impaginazione avviata');
         fixture.destroy();
     }));
 

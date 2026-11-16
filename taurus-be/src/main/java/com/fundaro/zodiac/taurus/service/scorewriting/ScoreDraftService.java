@@ -34,12 +34,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * The drafts of the writing editor: one for each part, saved automatically by the session that holds the edit lock.
- * A draft is not a version and never expires; saving a version, discarding it or removing the part removes it.
+ * The drafts of the writing editor: one for each part and one for the score of a track, saved automatically by the
+ * session that holds the edit lock. A draft is not a version and never expires; saving a version, discarding it or
+ * removing the part or the score removes it.
  */
 @Service
 @Transactional
@@ -99,41 +102,99 @@ public class ScoreDraftService {
     public DraftSavedDTO save(Long trackId, Long scoreId, DraftRequestDTO request, AbstractAuthenticationToken token) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
         if (request == null) throw rejected(invalidContent("empty"));
-        lockService.requireHeld(part.getId(), request.editSession(), token);
-        Content content;
+        return save(
+            PART,
+            part.getId(),
+            new DraftWrite(request.editSession(), request.baseVersionId(), request.entityVersion()),
+            () -> readContent(request.content()).stored(),
+            baseVersionId -> versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(baseVersionId, part.getId()).isPresent(),
+            token
+        );
+    }
+
+    /**
+     * Saves the draft of a part or a score, found by the caller, for the session that holds its edit lock.
+     *
+     * @param content           reads and checks the content, after the lock
+     * @param baseVersionExists tells whether the version the writing started from is a version of the target
+     * @throws RequestAlertException {@code scoreWriting.locked}, {@code scoreWriting.draftConflict},
+     *                               {@code scoreWriting.draftTooFrequent}, {@code scorePlayback.version.notFound} and the
+     *                               errors of the content
+     */
+    public DraftSavedDTO save(
+        ScoreEditTarget type,
+        Long targetId,
+        DraftWrite write,
+        Supplier<StoredContent> content,
+        Predicate<Long> baseVersionExists,
+        AbstractAuthenticationToken token
+    ) {
+        lockService.requireHeld(type, targetId, write.editSession(), token);
+        StoredContent stored;
         try {
-            content = readContent(request.content());
+            stored = content.get();
         } catch (RequestAlertException exception) {
             throw rejected(exception);
         }
-        if (request.baseVersionId() != null && versionRepository.findByIdAndSheetMusicIdAndDeletedFalse(request.baseVersionId(), part.getId()).isEmpty()) {
+        if (write.baseVersionId() != null && !baseVersionExists.test(write.baseVersionId())) {
             throw rejected(new RequestAlertException(HttpStatus.NOT_FOUND, "Score version not found", ENTITY, "scorePlayback.version.notFound"));
         }
 
         String actor = actor(token);
         ZonedDateTime now = ZonedDateTime.now();
-        ScoreDraft draft = repository.findByTargetTypeAndTargetId(PART, part.getId()).orElse(null);
+        ScoreDraft draft = repository.findByTargetTypeAndTargetId(type, targetId).orElse(null);
         if (draft == null) {
-            if (request.entityVersion() != null) throw rejected(conflict());
+            if (write.entityVersion() != null) throw rejected(conflict());
             draft = new ScoreDraft();
             draft.initializeAudit(actor);
-            draft.setTargetType(PART);
-            draft.setTargetId(part.getId());
+            draft.setTargetType(type);
+            draft.setTargetId(targetId);
         } else {
-            if (!Objects.equals(request.entityVersion(), draft.getEntityVersion())) throw rejected(conflict());
+            if (!Objects.equals(write.entityVersion(), draft.getEntityVersion())) throw rejected(conflict());
             if (now.isBefore(draft.getSavedAt().plus(properties.getScoreWriting().getDraftMinInterval()))) {
                 throw rejected(new RequestAlertException(HttpStatus.TOO_MANY_REQUESTS, "Draft saved too often", ENTITY, "scoreWriting.draftTooFrequent"));
             }
             draft.touchAudit(actor);
         }
-        draft.setBaseVersionId(request.baseVersionId());
-        draft.setContent(content.compressed());
-        draft.setMeasureCount(content.measureCount());
+        draft.setBaseVersionId(write.baseVersionId());
+        draft.setContent(stored.compressed());
+        draft.setRowsJson(stored.rowsJson());
+        draft.setMeasureCount(stored.measureCount());
         draft.setSavedBy(actor);
         draft.setSavedAt(now);
         ScoreDraft saved = repository.saveAndFlush(draft);
         metrics.draft("saved");
         return new DraftSavedDTO(saved.getEntityVersion(), saved.getSavedAt());
+    }
+
+    /**
+     * The draft of a part or a score with its plain MusicXML and the name of its author; empty when there is none.
+     */
+    @Transactional(readOnly = true)
+    public Optional<StoredDraft> read(ScoreEditTarget type, Long targetId) {
+        return repository.findByTargetTypeAndTargetId(type, targetId).map(draft -> new StoredDraft(
+            new String(MusicXmlDocuments.toXml(MusicXmlDocuments.read(draft.getContent())), StandardCharsets.UTF_8),
+            draft.getRowsJson(),
+            draft.getBaseVersionId(),
+            draft.getMeasureCount(),
+            names(List.of(draft.getSavedBy())).get(draft.getSavedBy()),
+            draft.getSavedAt(),
+            draft.getEntityVersion()
+        ));
+    }
+
+    /**
+     * Who saved the draft of a score and when, without its content; empty when there is none.
+     *
+     * @param currentVersionId current version of the score, to tell whether another version was saved meanwhile
+     */
+    @Transactional(readOnly = true)
+    public Optional<DraftSummaryDTO> summary(ScoreEditTarget type, Long targetId, Long currentVersionId) {
+        return repository.findSummaries(type, List.of(targetId)).stream().findFirst().map(draft -> new DraftSummaryDTO(
+            names(List.of(draft.savedBy())).get(draft.savedBy()),
+            draft.savedAt(),
+            !Objects.equals(currentVersionId, draft.baseVersionId())
+        ));
     }
 
     /**
@@ -144,18 +205,29 @@ public class ScoreDraftService {
      */
     public void discard(Long trackId, Long scoreId, String session, AbstractAuthenticationToken token) {
         SheetsMusic part = support.requirePart(support.requireTrack(trackId, Viewer.MANAGER), scoreId);
-        lockService.requireNotHeldByOthers(part.getId(), session, token);
-        if (repository.deleteAllByTargets(PART, List.of(part.getId())) > 0) metrics.draft("discarded");
+        discard(PART, part.getId(), session, token);
+    }
+
+    /** Discards the draft of a part or a score, found by the caller, while nobody else is writing it. */
+    public void discard(ScoreEditTarget type, Long targetId, String session, AbstractAuthenticationToken token) {
+        lockService.requireNotHeldByOthers(type, targetId, session, token);
+        if (repository.deleteAllByTargets(type, List.of(targetId)) > 0) metrics.draft("discarded");
     }
 
     /** Stores the first draft of a part just created for the writing editor, which nobody can be writing yet. */
     void start(Long partId, Content content, AbstractAuthenticationToken token) {
+        start(PART, partId, content.stored(), token);
+    }
+
+    /** Stores the first draft of a part or a score just created, which nobody can be writing yet. */
+    public void start(ScoreEditTarget type, Long targetId, StoredContent content, AbstractAuthenticationToken token) {
         String actor = actor(token);
         ScoreDraft draft = new ScoreDraft();
         draft.initializeAudit(actor);
-        draft.setTargetType(PART);
-        draft.setTargetId(partId);
+        draft.setTargetType(type);
+        draft.setTargetId(targetId);
         draft.setContent(content.compressed());
+        draft.setRowsJson(content.rowsJson());
         draft.setMeasureCount(content.measureCount());
         draft.setSavedBy(actor);
         draft.setSavedAt(ZonedDateTime.now());
@@ -165,7 +237,12 @@ public class ScoreDraftService {
 
     /** Removes the draft of a part that received a new version from the writing editor. */
     public void remove(Long partId) {
-        repository.deleteAllByTargets(PART, List.of(partId));
+        remove(PART, partId);
+    }
+
+    /** Removes the draft of a part or a score. */
+    public void remove(ScoreEditTarget type, Long targetId) {
+        repository.deleteAllByTargets(type, List.of(targetId));
     }
 
     /** The drafts of the given parts, by part, without their content. */
@@ -211,7 +288,46 @@ public class ScoreDraftService {
         int measureCount() {
             return part.measureCount();
         }
+
+        StoredContent stored() {
+            return new StoredContent(compressed, part.measureCount(), null);
+        }
     }
+
+    /**
+     * The content of a draft, checked and ready to store.
+     *
+     * @param compressed   compressed MusicXML
+     * @param measureCount measures of the content
+     * @param rowsJson     rows of a score as JSON, {@code null} for a part
+     */
+    public record StoredContent(byte[] compressed, int measureCount, String rowsJson) {}
+
+    /**
+     * What the editor sends with a draft.
+     *
+     * @param editSession   session of the editor, which must hold the lock
+     * @param baseVersionId version the writing started from, {@code null} without versions
+     * @param entityVersion version of the draft the editor is replacing, {@code null} when it starts a new draft
+     */
+    public record DraftWrite(String editSession, Long baseVersionId, Long entityVersion) {}
+
+    /**
+     * A stored draft, read back.
+     *
+     * @param content  plain MusicXML
+     * @param rowsJson rows of a score as JSON, {@code null} for a part
+     * @param savedBy  name of the author of the last save, {@code null} when unknown
+     */
+    public record StoredDraft(
+        String content,
+        String rowsJson,
+        Long baseVersionId,
+        int measureCount,
+        String savedBy,
+        ZonedDateTime savedAt,
+        long entityVersion
+    ) {}
 
     static RequestAlertException invalidContent(String reason) {
         return new RequestAlertException(HttpStatus.UNPROCESSABLE_CONTENT, "Invalid written score", ENTITY, "scoreWriting.contentInvalid")

@@ -17,8 +17,8 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Nightly removal of the expired edit locks, with the names of their authors, of the drafts of parts that no longer
- * exist, and of the engraved pages and PDFs nobody will use: pages never assigned after the retention, and the files of
+ * Nightly removal of the expired edit locks, with the names of their authors, of the drafts of parts and scores that no
+ * longer exist, and of the engraved pages and PDFs nobody will use: pages never assigned after the retention, and the files of
  * parts that no longer exist. Runs for every active tenant, also when the features are off, so that nothing outlives its
  * part.
  */
@@ -86,7 +86,7 @@ public class ScoreWritingCleanup {
         return transactions.execute(tenant, () -> {
             ZonedDateTime now = ZonedDateTime.now();
             int locks = lockRepository.deleteExpired(now);
-            int drafts = draftRepository.deleteOrphanPartDrafts();
+            int drafts = draftRepository.deleteOrphanPartDrafts() + draftRepository.deleteOrphanArrangementDrafts();
             List<Long> releasable = engravingRepository.findReleasableIds(now.minus(properties.getScoreWriting().getEngraving().getUnappliedRetention()));
             int engravedFiles = releasable.isEmpty() ? 0 : engravingFiles.release(engravingRepository.findAllById(releasable), tenant, SYSTEM);
             return new Removed(locks, drafts, engravedFiles);

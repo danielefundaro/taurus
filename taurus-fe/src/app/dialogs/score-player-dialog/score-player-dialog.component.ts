@@ -2,22 +2,26 @@ import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, Host
 import { DialogService, DynamicDialogConfig } from 'primeng/dynamicdialog';
 import { first, firstValueFrom } from 'rxjs';
 import { ImportsModule } from '../../imports';
-import { PartPlayback, TrackPlayback } from '../../module';
+import { ArrangementRow, PartPlayback, TrackPlayback } from '../../module';
+import { isConcertScore, rowName, rowSound, rowXml } from '../../score-editor/score-arrangement';
+import { ScoreDocument } from '../../score-editor/score-document';
 import { fileName, midiFile, saveFile } from '../../score-player/midi-download';
 import { BuiltPlayback, buildPlayback, PlaybackChannel, PlaybackPartInput } from '../../score-player/playback-builder';
-import { parseMusicXml, ScorePart } from '../../score-player/musicxml-score';
+import { parseMusicXml, parseMusicXmlParts, ScorePart } from '../../score-player/musicxml-score';
 import { measureElements } from '../../score-player/notation';
 import { partSound, quartersAt, secondsAt, segmentIndexAt } from '../../score-player/timeline';
-import { ScoreAudioService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
+import { ArrangementService, ScoreAudioService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
 import { checksSummary, partLabel } from '../../score-player/playback-labels';
 import { ScoreReportDialogComponent, ScoreReportDialogData } from '../score-report-dialog/score-report-dialog.component';
 
 export interface ScorePlayerDialogData {
     trackId: number;
     playback: TrackPlayback;
-    /** `part`: una sola parte; `score`: tutte le parti disponibili con il mixer. */
-    mode: 'part' | 'score';
+    /** `part`: una sola parte; `score`: tutte le parti disponibili con il mixer; `arrangement`: i righi della partitura. */
+    mode: 'part' | 'score' | 'arrangement';
     scoreId?: number;
+    /** `arrangement`: la versione della partitura da ascoltare e i suoi righi, con gli strumenti. */
+    arrangement?: { versionId: number; rows: readonly ArrangementRow[] };
 }
 
 interface MixerRow {
@@ -80,6 +84,8 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
 
     private readonly scores = new Map<number, ScorePart>();
     private readonly xml = new Map<number, string>();
+    /** MusicXML della partitura: lo spartito di un rigo si ricava quando si mostra. */
+    private arrangementXml?: string;
     private built?: BuiltPlayback;
     private channels = new Map<string, PlaybackChannel>();
     private measures: (Element | undefined)[] = [];
@@ -96,12 +102,17 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
         private readonly zone: NgZone,
         private readonly changeDetector: ChangeDetectorRef,
         private readonly dialogService: DialogService,
-        private readonly toastService: ToastService
+        private readonly toastService: ToastService,
+        private readonly arrangementService: ArrangementService
     ) {
         this.data = config.data!;
     }
 
     async ngOnInit(): Promise<void> {
+        if (this.data.mode === 'arrangement') {
+            await this.prepare(() => this.loadArrangement());
+            return;
+        }
         const parts = this.data.playback.parts;
         const selected = this.data.mode === 'part' ? parts.filter((part) => part.scoreId === this.data.scoreId) : parts;
         const available = selected.filter((part) => part.availability === 'AVAILABLE');
@@ -113,12 +124,19 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
             this.fail('Ascolto non ancora disponibile');
             return;
         }
-        try {
+        await this.prepare(async () => {
             const files = await Promise.all(available.map((part) => firstValueFrom(this.playbackService.playbackFile(this.data.trackId, part.scoreId))));
             available.forEach((part, index) => {
                 this.xml.set(part.scoreId, files[index]);
                 this.scores.set(part.scoreId, parseMusicXml(files[index]));
             });
+        });
+    }
+
+    /** Legge gli spartiti con `load`, poi prepara suoni, disegno e ascolto. */
+    private async prepare(load: () => Promise<void>): Promise<void> {
+        try {
+            await load();
             this.lengthsDiffer = new Set(Array.from(this.scores.values()).map((score) => score.measures.length)).size > 1;
             // Sul telefono il primo scaricamento del SoundFont dipende dalla rete: il testo ne indica la dimensione.
             this.loadingMessage = 'Caricamento dei suoni: la prima volta si scaricano circa 40 MB…';
@@ -131,6 +149,28 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
             this.fail("Impossibile preparare l'ascolto: riprovare più tardi");
         }
         this.changeDetector.markForCheck();
+    }
+
+    /**
+     * Partitura: un rigo per riga del mixer, con il suono del suo strumento nella notazione della partitura; lo spartito
+     * mostrato è quello di un rigo alla volta.
+     */
+    private async loadArrangement(): Promise<void> {
+        const { versionId, rows } = this.data.arrangement!;
+        const xml = await this.arrangementService.content(this.data.trackId, versionId);
+        const score = ScoreDocument.open(xml);
+        const concertPitch = isConcertScore(score);
+        const parts = parseMusicXmlParts(xml);
+        const playbacks = parts.map((_, index): PartPlayback => {
+            const instruments = [...(rows[index]?.instruments ?? [])];
+            return { scoreId: -(index + 1), order: index + 1, description: rowName(score, index), instruments, ownPart: false, sound: rowSound(instruments, concertPitch), availability: 'AVAILABLE', hasPages: false, openReports: 0 };
+        });
+        playbacks.forEach((part, index) => this.scores.set(part.scoreId, parts[index]));
+        this.arrangementXml = xml;
+        this.rows = playbacks.map((part) => ({ part, label: partLabel(part), volume: 80, muted: false, solo: false }));
+        this.notationParts = playbacks;
+        this.notationScoreId = playbacks[0]?.scoreId ?? null;
+        if (!playbacks.length) throw new Error('Partitura senza righi');
     }
 
     ngOnDestroy(): void {
@@ -307,7 +347,7 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
         if (!this.notation) this.changeDetector.detectChanges();
         const host = this.notation?.nativeElement;
         if (!host) return;
-        const xml = this.notationScoreId !== null ? this.xml.get(this.notationScoreId) : undefined;
+        const xml = this.notationScoreId !== null ? this.notationXml(this.notationScoreId) : undefined;
         this.measures = [];
         this.highlighted = undefined;
         if (!xml) {
@@ -326,6 +366,15 @@ export class ScorePlayerDialogComponent implements OnInit, OnDestroy {
         } finally {
             this.notationLoading = false;
         }
+    }
+
+    /** Lo spartito della parte, o del rigo della partitura, ricavato la prima volta che si mostra. */
+    private notationXml(scoreId: number): string | undefined {
+        const known = this.xml.get(scoreId);
+        if (known !== undefined || !this.arrangementXml || scoreId >= 0) return known;
+        const xml = rowXml(this.arrangementXml, -scoreId - 1);
+        this.xml.set(scoreId, xml);
+        return xml;
     }
 
     private startFrames(): void {

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261115100000-1" author="taurus">
+    <comment>
+      Position of the instrument in the ensemble of the band, from 1 without gaps; empty for instruments outside the
+      ensemble and for deleted ones. Uniqueness is checked at the end of the transaction, so a new order can be written
+      one instrument at a time.
+    </comment>
+    <addColumn tableName="instrument">
+      <column name="ensemble_position" type="integer"/>
+    </addColumn>
+    <sql><![CDATA[
+      ALTER TABLE instrument
+        ADD CONSTRAINT ck_instrument_ensemble_position CHECK (
+          ensemble_position IS NULL OR (ensemble_position >= 1 AND deleted = FALSE)
+        );
+      ALTER TABLE instrument
+        ADD CONSTRAINT uq_instrument_ensemble_position UNIQUE (ensemble_position) DEFERRABLE INITIALLY DEFERRED;
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        ALTER TABLE instrument DROP CONSTRAINT uq_instrument_ensemble_position;
+        ALTER TABLE instrument DROP CONSTRAINT ck_instrument_ensemble_position;
+        ]]></sql>
+      <dropColumn tableName="instrument" columnName="ensemble_position"/>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

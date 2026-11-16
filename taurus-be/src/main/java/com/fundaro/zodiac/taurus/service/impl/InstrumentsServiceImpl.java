@@ -85,6 +85,18 @@ public class InstrumentsServiceImpl extends CommonOpenSearchServiceImpl<Instrume
     }
 
     /**
+     * A deleted instrument leaves the ensemble, and the instruments after it move up: the lock of the ensemble keeps the
+     * positions consistent with a concurrent save of the ensemble.
+     */
+    @Override
+    public InstrumentsDTO delete(Long id, AbstractAuthenticationToken token) {
+        getRepository().lockTenantEnsemble();
+        Integer position = id == null ? null : getRepository().findByIdAndDeletedFalse(id).map(Instruments::getEnsemblePosition).orElse(null);
+        if (position != null) getRepository().leaveEnsemble(id, position);
+        return super.delete(id, token);
+    }
+
+    /**
      * L'elenco degli strumenti mostra quanti utenti hanno assegnato ciascuno
      * strumento. Il conteggio non sta sull'entità — la relazione è dichiarata
      * dalla parte degli utenti — e viene quindi recuperato con una sola query

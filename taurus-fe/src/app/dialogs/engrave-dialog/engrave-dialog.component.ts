@@ -20,7 +20,7 @@ import {
     responsivePage
 } from '../../score-editor/score-engraving';
 import { engravingErrorLabel } from '../../score-player/playback-labels';
-import { MediaService, ScorePlaybackService, ScoreRendererService, ToastService, withErrorSummary } from '../../service';
+import { MediaService, ScorePlaybackService, ScoreRendererService, ToastService, withErrorSummary, withHandledErrors } from '../../service';
 
 export interface EngraveDialogData {
     trackId: number;
@@ -35,6 +35,26 @@ export interface EngraveDialogData {
     hasPages: boolean;
     /** Versione della traccia letta da chi impagina, per non assegnare le pagine a una traccia cambiata nel frattempo. */
     trackVersion?: number | null;
+    /**
+     * Più parti da impaginare con le stesse opzioni, come le parti estratte dalla partitura: l'anteprima è della parte di
+     * `scoreId` e `versionId`, la prima, e ogni parte ha il suo nome nell'intestazione. Le pagine di una parte senza
+     * pagine le sono assegnate al termine del job; le altre restano da assegnare.
+     */
+    parts?: EngraveBatchPart[];
+}
+
+/** Una parte dell'impaginazione di più parti. */
+export interface EngraveBatchPart {
+    scoreId: number;
+    versionId: number;
+    partLabel: string;
+    hasPages: boolean;
+}
+
+/** Lo stato dell'impaginazione di una parte tra più parti: il job, o `null` se non è partito. */
+interface BatchEntry {
+    part: EngraveBatchPart;
+    job: EngravingJob | null;
 }
 
 /** Pagine assegnate: la parte che le ha ricevute e la nuova versione della traccia. */
@@ -44,7 +64,7 @@ export interface EngraveDialogResult {
     target: EngravingTarget;
 }
 
-type Step = 'loading' | 'options' | 'running' | 'done';
+type Step = 'loading' | 'options' | 'running' | 'done' | 'batch';
 
 /** Attesa tra due letture dello stato dell'impaginazione. */
 export const ENGRAVING_POLL_MS = 3000;
@@ -87,6 +107,8 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
     protected thumbnails: string[] = [];
     protected busy = false;
     protected dirty = false;
+    /** Le impaginazioni avviate per più parti. */
+    protected batch: BatchEntry[] = [];
 
     private musicXml: string | null = null;
     private previewHtml = '';
@@ -117,7 +139,11 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
 
     async ngOnInit(): Promise<void> {
         const { trackId, scoreId, versionId } = this.data;
-        const [editor, job] = await Promise.all([firstValueFrom(this.playbackService.editor(trackId, scoreId, versionId)).catch(() => null), firstValueFrom(this.playbackService.engraving(trackId, scoreId, versionId)).catch(() => null)]);
+        // Le parti appena estratte non hanno impaginazioni da riprendere: si parte dalle opzioni.
+        const [editor, job] = await Promise.all([
+            firstValueFrom(this.playbackService.editor(trackId, scoreId, versionId)).catch(() => null),
+            this.batchParts ? Promise.resolve(null) : firstValueFrom(this.playbackService.engraving(trackId, scoreId, versionId)).catch(() => null)
+        ]);
         if (this.destroyed) return;
         this.musicXml = editor?.musicXml ?? null;
         if (!this.musicXml) this.previewError = 'Anteprima non disponibile: la versione non si legge. Le pagine si possono comunque generare.';
@@ -133,11 +159,23 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
         this.revokeThumbnails();
     }
 
+    /** Le parti dell'impaginazione di più parti; `null` per una parte sola. */
+    protected get batchParts(): EngraveBatchPart[] | null {
+        return this.data.parts?.length ? this.data.parts : null;
+    }
+
     protected get heading(): string {
-        return `Impagina ${this.data.partLabel}`;
+        const parts = this.batchParts;
+        if (parts && parts.length > 1) return `Impagina ${parts.length} parti`;
+        return `Impagina ${parts?.[0].partLabel ?? this.data.partLabel}`;
     }
 
     protected get subtitle(): string {
+        if (this.batchParts) {
+            return this.step === 'batch'
+                ? 'Il servizio musicale genera le pagine una parte alla volta: puoi chiudere e tornare più tardi.'
+                : `Le stesse opzioni per tutte le parti; l'anteprima è di ${this.data.partLabel}, e ogni parte ha il suo nome nell'intestazione.`;
+        }
         const version = this.data.versionNumber ? `Versione ${this.data.versionNumber}` : 'Versione ascoltata';
         switch (this.step) {
             case 'running':
@@ -167,6 +205,30 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
         return this.job?.status === 'RUNNING' ? 'Impaginazione in corso…' : 'Impaginazione in coda…';
     }
 
+    /** Lo stato dell'impaginazione di una parte tra più parti, con il colore dell'etichetta. */
+    protected batchStatus(entry: BatchEntry): { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary'; active: boolean } {
+        const job = entry.job;
+        if (!job) return { label: 'Non avviata', severity: 'danger', active: false };
+        switch (job.status) {
+            case 'QUEUED':
+                return { label: 'In coda', severity: 'secondary', active: true };
+            case 'RUNNING':
+                return { label: 'In corso', severity: 'info', active: true };
+            case 'FAILED':
+                return { label: engravingErrorLabel(job.errorCode), severity: 'danger', active: false };
+            default:
+                if (job.appliedAt) return { label: 'Pagine assegnate', severity: 'success', active: false };
+                return job.pages.length ? { label: 'Pagine da assegnare nella scheda Ascolto', severity: 'warn', active: false } : { label: 'Pagine generate', severity: 'secondary', active: false };
+        }
+    }
+
+    /** «Impaginazioni terminate: 2 su 3», mentre i job vanno avanti. */
+    protected get batchSummary(): string {
+        if (this.batch.every((entry) => !entry.job)) return 'Nessuna impaginazione avviata';
+        const finished = this.batch.filter((entry) => !this.batchStatus(entry).active).length;
+        return `Impaginazioni terminate: ${finished} su ${this.batch.length}`;
+    }
+
     protected get pageCountLabel(): string {
         const count = this.job?.pages.length ?? 0;
         return count === 1 ? '1 pagina generata' : `${count} pagine generate`;
@@ -190,6 +252,10 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
     /** Avvia l'impaginazione; se un'altra è già in coda o in corso per la parte, ne segue lo stato. */
     protected async generate(): Promise<void> {
         if (this.problem || this.tooManyPages || this.busy) return;
+        if (this.batchParts) {
+            await this.generateAll(this.batchParts);
+            return;
+        }
         this.busy = true;
         this.changeDetector.markForCheck();
         const { trackId, scoreId, versionId } = this.data;
@@ -244,6 +310,53 @@ export class EngraveDialogComponent implements OnInit, OnDestroy {
                 URL.revokeObjectURL(url);
             })
             .catch(() => this.toastService.warn('PDF non scaricato', 'Il PDF di questa impaginazione non è più disponibile: impagina di nuovo la versione.'));
+    }
+
+    /**
+     * Avvia un'impaginazione per ogni parte, con le pagine assegnate da sole alle parti senza pagine. Una parte già in
+     * impaginazione si segue; al primo altro errore, già mostrato, le parti che restano non partono.
+     */
+    private async generateAll(parts: EngraveBatchPart[]): Promise<void> {
+        this.busy = true;
+        this.changeDetector.markForCheck();
+        const { trackId } = this.data;
+        const entries: BatchEntry[] = parts.map((part) => ({ part, job: null }));
+        try {
+            for (const entry of entries) {
+                const { scoreId, versionId, partLabel } = entry.part;
+                const options = requestOptions({ ...this.options, header: { ...this.options.header, partName: partLabel } });
+                try {
+                    entry.job = await firstValueFrom(this.playbackService.engrave(trackId, scoreId, versionId, options, withHandledErrors(['scoreWriting.engravingRunning'], withErrorSummary('Impaginazione non avviata')), true));
+                } catch (error) {
+                    if (!(error instanceof HttpErrorResponse && error.status === 409)) break;
+                    entry.job = await firstValueFrom(this.playbackService.engraving(trackId, scoreId, versionId)).catch(() => null);
+                }
+            }
+        } finally {
+            this.busy = false;
+        }
+        this.dirty = false;
+        this.batch = entries;
+        this.step = 'batch';
+        this.pollBatch();
+        this.changeDetector.markForCheck();
+    }
+
+    /** Rilegge le impaginazioni in coda o in corso finché non terminano tutte. */
+    private pollBatch(): void {
+        clearTimeout(this.pollTimer);
+        if (!this.batch.some((entry) => this.batchStatus(entry).active)) return;
+        this.pollTimer = setTimeout(async () => {
+            const { trackId } = this.data;
+            this.batch = await Promise.all(
+                this.batch.map(async (entry) =>
+                    this.batchStatus(entry).active ? { ...entry, job: (await firstValueFrom(this.playbackService.engraving(trackId, entry.part.scoreId, entry.part.versionId)).catch(() => entry.job)) ?? entry.job } : entry
+                )
+            );
+            if (this.destroyed) return;
+            this.changeDetector.markForCheck();
+            this.pollBatch();
+        }, ENGRAVING_POLL_MS);
     }
 
     /** Mostra il passo che corrisponde allo stato dell'impaginazione. */

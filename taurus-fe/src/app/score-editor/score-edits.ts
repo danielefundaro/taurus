@@ -127,7 +127,7 @@ const MAX_MULTI_REST = 200;
 /** Apre il MusicXML di una versione per la correzione. */
 export function openScore(xml: string, prefix?: string): ScoreDocument {
     const score = ScoreDocument.open(xml, prefix);
-    makeAccidentalsExplicit(score);
+    score.everyPart(() => makeAccidentalsExplicit(score));
     return score;
 }
 
@@ -819,7 +819,8 @@ function tempoTextOf(measure: Element): string | null {
     return words.filter(Boolean).join(' ') || null;
 }
 
-function multiRestCount(measure: Element): number {
+/** Battute di una pausa di più battute che apre la battuta; 1 se non ne apre una. */
+export function multiRestCount(measure: Element): number {
     for (const attributes of children(measure, 'attributes')) {
         const count = integer(child(child(attributes, 'measure-style'), 'multiple-rest'));
         if (count && count > 1) return count;

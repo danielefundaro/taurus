@@ -1,0 +1,25 @@
+.ensemble-list__row {
+    background: var(--p-content-background);
+}
+
+.ensemble-list__handle {
+    cursor: grab;
+}
+
+.ensemble-list__row.cdk-drag-preview {
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
+}
+
+.ensemble-list__row.cdk-drag-placeholder {
+    opacity: 0.4;
+}
+
+.ensemble-list.cdk-drop-list-dragging .ensemble-list__row:not(.cdk-drag-placeholder) {
+    transition: transform 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ensemble-list.cdk-drop-list-dragging .ensemble-list__row:not(.cdk-drag-placeholder) {
+        transition: none;
+    }
+}

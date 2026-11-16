@@ -1,30 +1,40 @@
-import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
-import { RouterModule } from '@angular/router';
+import { Component, OnInit, ChangeDetectionStrategy, ViewChild } from '@angular/core';
+import { ActivatedRoute, RouterModule } from '@angular/router';
 import { SelectItem } from 'primeng/api';
 import { DialogService } from 'primeng/dynamicdialog';
 import { delay, finalize, first, forkJoin } from 'rxjs';
 import { AddInstrumentsDialogComponent } from '../../dialogs/add-instruments-dialog/add-instruments-dialog.component';
+import { HasUnsavedChanges } from '../../guard/unsaved-changes.guard';
 import { ImportsModule } from '../../imports';
 import { Instruments, InstrumentsCriteria, Page } from '../../module';
 import { BooleanFilter, StringFilter } from '../../module/criteria/filter';
 import { ConfirmService, InstrumentsService, ListLayout, ListLayoutService, TenantFeatureService, ToastService } from '../../service';
 import { ListPageBase } from '../_shared/list-page.base';
+import { EnsembleComponent } from './ensemble/ensemble.component';
+
+/** Le schede della pagina: `?tab=ensemble` apre direttamente l'organico. */
+export type InstrumentsTab = 'list' | 'ensemble';
 
 @Component({
     selector: 'app-instruments',
-    imports: [RouterModule, ImportsModule],
+    imports: [RouterModule, ImportsModule, EnsembleComponent],
     templateUrl: './instruments.component.html',
     styleUrl: './instruments.component.scss',
     changeDetection: ChangeDetectionStrategy.Eager,
     providers: [InstrumentsService, DialogService]
 })
-export class InstrumentsComponent extends ListPageBase implements OnInit {
+export class InstrumentsComponent extends ListPageBase implements OnInit, HasUnsavedChanges {
     protected sortOptions!: SelectItem[];
     protected layout: ListLayout = 'list';
     protected instruments: Instruments[];
     protected selectedInstruments: Instruments[] = [];
     /** Mostra solo gli strumenti senza suono e trasposizione per l'ascolto. */
     protected onlyUnconfigured = false;
+    /** La scheda Organico si costruisce la prima volta che si apre e poi resta, con le sue modifiche. */
+    protected ensembleOpened = false;
+    private currentTab: InstrumentsTab = 'list';
+
+    @ViewChild(EnsembleComponent) private ensemble?: EnsembleComponent;
 
     constructor(
         private readonly instrumentsService: InstrumentsService,
@@ -32,7 +42,8 @@ export class InstrumentsComponent extends ListPageBase implements OnInit {
         private readonly dialogService: DialogService,
         private readonly confirmService: ConfirmService,
         private readonly listLayoutService: ListLayoutService,
-        private readonly tenantFeatureService: TenantFeatureService
+        private readonly tenantFeatureService: TenantFeatureService,
+        private readonly route: ActivatedRoute
     ) {
         super();
         this.instruments = [];
@@ -45,6 +56,25 @@ export class InstrumentsComponent extends ListPageBase implements OnInit {
             { label: 'Nome Z-A', value: '!name' }
         ];
         this.listLayoutService.observe('instruments', (value) => (this.layout = value));
+        if (this.route.snapshot.queryParamMap.get('tab') === 'ensemble') this.activeTab = 'ensemble';
+    }
+
+    /** Le modifiche non salvate dell'organico: la guardia chiede conferma prima di lasciare la pagina. */
+    get isDirty(): boolean {
+        return this.ensemble?.isDirty ?? false;
+    }
+
+    get dirtyUnitLabels(): string[] {
+        return this.isDirty ? ['organico'] : [];
+    }
+
+    protected get activeTab(): InstrumentsTab {
+        return this.currentTab;
+    }
+
+    protected set activeTab(tab: InstrumentsTab) {
+        this.currentTab = tab;
+        if (tab === 'ensemble') this.ensembleOpened = true;
     }
 
     protected get scorePlaybackEnabled(): boolean {

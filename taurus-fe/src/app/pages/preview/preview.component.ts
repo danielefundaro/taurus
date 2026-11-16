@@ -8,6 +8,7 @@ import { ImportsModule } from '../../imports';
 import { SheetsMusic } from '../../module';
 import { unengravedLabel } from '../../score-editor/score-engraving';
 import { MediaService, PrinterService, ScorePlaybackService, ToastService } from '../../service';
+import { keysByEnsemble } from '../../service/ensemble-order';
 
 type PrintSheetOrientation = 'portrait' | 'landscape';
 
@@ -45,7 +46,10 @@ const DESKTOP_VIEWPORT = '(min-width: 961px)';
 export class PreviewComponent implements OnInit, OnDestroy {
     protected mediaStreams: string[];
     protected instruments: { [key: string]: string };
-    /** Chiavi degli strumenti nell'ordine delle parti della traccia, cioè dei loro primi spartiti. */
+    /**
+     * Chiavi degli strumenti nell'ordine dell'organico della banda; gli strumenti fuori dall'organico seguono nell'ordine
+     * delle parti, cioè dei loro primi spartiti.
+     */
     protected instrumentKeys: string[] = [];
     protected selectedInstruments: { [key: string]: boolean };
     protected selectAll: boolean;
@@ -111,6 +115,7 @@ export class PreviewComponent implements OnInit, OnDestroy {
 
             score.instruments?.forEach((instrument) => this.addInstrument(String(instrument.index), instrument.name!));
         });
+        this.instrumentKeys = keysByEnsemble(this.instrumentKeys, this.printerService.ensemble ?? []);
 
         this.selectedInstruments = this.getInstrumentIndices(true);
 
@@ -438,8 +443,8 @@ export class PreviewComponent implements OnInit, OnDestroy {
     }
 
     /**
-     * Nella scaletta di un evento le parti seguono gli strumenti, nell'ordine dei filtri, e per ognuno l'ordine dei
-     * brani: una parte con più strumenti si stampa una volta, sotto il primo strumento scelto.
+     * Nella scaletta di un evento le parti seguono gli strumenti, nell'ordine dei filtri e quindi dell'organico, e per
+     * ognuno l'ordine dei brani: una parte con più strumenti si stampa una volta, sotto il primo strumento scelto.
      */
     private ordered(scores: SheetsMusic[]): SheetsMusic[] {
         if (!this.printerService.byInstrument) return scores;

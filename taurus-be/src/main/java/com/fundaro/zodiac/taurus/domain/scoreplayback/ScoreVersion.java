@@ -59,6 +59,10 @@ public class ScoreVersion extends TenantAuditedEntity {
     @Column(name = "layout_json", updatable = false, columnDefinition = "text")
     private String layoutJson;
 
+    /** Version of the score of the track the version was extracted from, for the origin {@code ARRANGEMENT}. */
+    @Column(name = "arrangement_version_id", updatable = false)
+    private Long arrangementVersionId;
+
     @Column(name = "approved_by")
     private String approvedBy;
 
@@ -167,6 +171,14 @@ public class ScoreVersion extends TenantAuditedEntity {
 
     public void setLayoutJson(String layoutJson) {
         this.layoutJson = layoutJson;
+    }
+
+    public Long getArrangementVersionId() {
+        return arrangementVersionId;
+    }
+
+    public void setArrangementVersionId(Long arrangementVersionId) {
+        this.arrangementVersionId = arrangementVersionId;
     }
 
     public String getApprovedBy() {

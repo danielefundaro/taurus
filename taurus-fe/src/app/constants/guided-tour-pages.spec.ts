@@ -36,7 +36,7 @@ const STEP_COUNTS: Record<string, [number[], number[]]> = {
         [3, 3, 3, 0, 3, 2, 2]
     ],
     '/tracks/:id': [
-        [5, 5, 5, 0, 5, 4, 4],
+        [6, 6, 6, 0, 6, 4, 4],
         [4, 4, 4, 0, 4, 3, 3]
     ],
     '/albums': [
@@ -76,8 +76,8 @@ const STEP_COUNTS: Record<string, [number[], number[]]> = {
         [0, 0, 0, 0, 0, 0, 0]
     ],
     '/instruments': [
-        [2, 2, 2, 0, 2, 0, 0],
-        [1, 1, 1, 0, 1, 0, 0]
+        [3, 3, 3, 0, 3, 0, 0],
+        [2, 2, 2, 0, 2, 0, 0]
     ],
     '/instruments/:id': [
         [2, 2, 2, 0, 2, 0, 0],

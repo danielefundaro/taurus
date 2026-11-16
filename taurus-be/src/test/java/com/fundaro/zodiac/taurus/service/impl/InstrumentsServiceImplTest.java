@@ -7,6 +7,7 @@ import com.fundaro.zodiac.taurus.service.dto.InstrumentsDTO;
 import com.fundaro.zodiac.taurus.service.mapper.InstrumentsMapper;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -18,6 +19,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -114,6 +117,28 @@ class InstrumentsServiceImplTest {
         service.update(1L, ranged(1L, null, null), token());
         assertThat(entity.getLowestWrittenPitch()).isNull();
         assertThat(entity.getHighestWrittenPitch()).isNull();
+    }
+
+    /** A deleted instrument leaves the ensemble before it is marked deleted, and the instruments after it move up. */
+    @Test
+    void aDeletedInstrumentLeavesTheEnsemble() {
+        Instruments member = entity(1L, "Tromba 1°");
+        member.setEnsemblePosition(3);
+        Instruments outside = entity(2L, "Voce");
+        when(repository.save(member)).thenReturn(member);
+        when(repository.save(outside)).thenReturn(outside);
+
+        service.delete(1L, token());
+        service.delete(2L, token());
+
+        InOrder order = inOrder(repository);
+        order.verify(repository).lockTenantEnsemble();
+        order.verify(repository).leaveEnsemble(1L, 3);
+        order.verify(repository).save(member);
+        verify(repository, never()).leaveEnsemble(2L, 0);
+        verify(repository, times(1)).leaveEnsemble(any(), anyInt());
+        assertThat(member.getDeleted()).isTrue();
+        assertThat(outside.getDeleted()).isTrue();
     }
 
     private static InstrumentsDTO ranged(Long id, Integer lowest, Integer highest) {

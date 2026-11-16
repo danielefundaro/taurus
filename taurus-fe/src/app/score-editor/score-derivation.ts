@@ -149,21 +149,27 @@ export function fifthsLabel(fifths: number): string {
  */
 export function derivedPartXml(xml: string, sourceTransposition: number, target: RangeInstrument, clef: string, octave: number, partName: string): string {
     const score = openScore(xml);
-    const plan = planDerivation(score, sourceTransposition, target, clef);
-    if (plan.error) throw new EditError(plan.error);
-    const chosen = plan.octaves.find((candidate) => candidate.octave === octave);
-    if (!chosen?.possible) throw new EditError("L'ottava scelta darebbe note fuori dalle altezze scrivibili");
-    const { steps, semitones, fifths } = chosen.interval;
-    if (steps !== 0 || semitones !== 0 || fifths !== 0) {
-        // L'intervallo con segno si applica verso l'alto: gradi e semitoni negativi scendono.
-        const interval: TranspositionInterval = { value: 'derivation', label: chosen.label, steps, semitones, fifths };
-        if (pitchedNotes(score).length) transposePassage(score, null, interval, 1);
-        else transposeKeys(score, fifths);
-    }
+    applyDerivation(score, planDerivation(score, sourceTransposition, target, clef), octave);
     if (clef !== initialClef(score)) replaceClefs(score, clefSpec(clef));
     renamePart(score, partName);
     removeSourceInstruments(score);
     return score.cleanXml();
+}
+
+/**
+ * Traspone la parte, o il rigo attivo della partitura, con l'intervallo dell'ottava scelta del piano, armature comprese;
+ * una parte senza note sposta solo le armature.
+ */
+export function applyDerivation(score: ScoreDocument, plan: DerivationPlan, octave: number): void {
+    if (plan.error) throw new EditError(plan.error);
+    const chosen = plan.octaves.find((candidate) => candidate.octave === octave);
+    if (!chosen?.possible) throw new EditError("L'ottava scelta darebbe note fuori dalle altezze scrivibili");
+    const { steps, semitones, fifths } = chosen.interval;
+    if (steps === 0 && semitones === 0 && fifths === 0) return;
+    // L'intervallo con segno si applica verso l'alto: gradi e semitoni negativi scendono.
+    const interval: TranspositionInterval = { value: 'derivation', label: chosen.label, steps, semitones, fifths };
+    if (pitchedNotes(score).length) transposePassage(score, null, interval, 1);
+    else transposeKeys(score, fifths);
 }
 
 /**

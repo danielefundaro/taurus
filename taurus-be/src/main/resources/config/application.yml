@@ -289,6 +289,9 @@ application:
     enabled: ${SCORE_WRITING_ENABLED:false}
     lock-timeout: PT2M
     draft-min-interval: PT2S
+    # Scores: plain MusicXML of drafts and versions, and rows.
+    max-arrangement-bytes: 31457280
+    max-arrangement-rows: 60
     # Engraving jobs; the connection to the music service is application.omr.
     engraving:
       timeout: PT3M

@@ -4,7 +4,7 @@
     [subtitle]="subtitle"
     confirmLabel="Genera pagine"
     [cancelLabel]="step === 'options' || step === 'loading' ? 'Annulla' : 'Chiudi'"
-    [dismissOnly]="step === 'running' || step === 'done'"
+    [dismissOnly]="step === 'running' || step === 'done' || step === 'batch'"
     [saving]="busy"
     [invalidCount]="invalidCount"
     [dirty]="dirty"
@@ -20,6 +20,20 @@
                 <i class="pi pi-spin pi-spinner text-3xl text-primary" aria-hidden="true"></i>
                 <strong>{{ statusLabel }}</strong>
                 <span class="text-sm text-muted-color">Una parte di due pagine richiede di solito meno di 15 secondi. Lo stato si aggiorna da solo.</span>
+            </div>
+        }
+        @case ('batch') {
+            <div class="flex flex-col gap-3">
+                <span class="text-sm text-muted-color" role="status" aria-live="polite">{{ batchSummary }}</span>
+                <ul class="flex flex-col gap-1 list-none p-0 m-0" aria-label="Impaginazioni delle parti">
+                    @for (entry of batch; track entry.part.scoreId) {
+                        <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-surface px-3 py-2">
+                            <span class="font-medium">{{ entry.part.partLabel }}</span>
+                            <p-tag [severity]="batchStatus(entry).severity" [value]="batchStatus(entry).label" [icon]="batchStatus(entry).active ? 'pi pi-spin pi-spinner' : ''" />
+                        </li>
+                    }
+                </ul>
+                <p class="text-sm text-muted-color m-0">Una parte senza pagine riceve le sue al termine. Le pagine delle parti che ne avevano già restano da assegnare: si scelgono con «Impagina» nella scheda Ascolto, per 7 giorni.</p>
             </div>
         }
         @case ('done') {
@@ -116,9 +130,13 @@
                             <app-form-field label="Arrangiatore" forId="engraveArranger">
                                 <input pInputText id="engraveArranger" name="arranger" class="w-full" [(ngModel)]="options.header.arranger" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
                             </app-form-field>
-                            <app-form-field class="sm:col-span-2" label="Nome della parte" forId="engravePartName" hint="In grassetto a sinistra; non si ripete accanto ai righi.">
-                                <input pInputText id="engravePartName" name="partName" class="w-full" [(ngModel)]="options.header.partName" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
-                            </app-form-field>
+                            @if (!batchParts) {
+                                <app-form-field class="sm:col-span-2" label="Nome della parte" forId="engravePartName" hint="In grassetto a sinistra; non si ripete accanto ai righi.">
+                                    <input pInputText id="engravePartName" name="partName" class="w-full" [(ngModel)]="options.header.partName" (ngModelChange)="changed()" [maxlength]="limits.header" autocomplete="off" />
+                                </app-form-field>
+                            } @else {
+                                <p class="sm:col-span-2 text-sm text-muted-color m-0">Il nome di ogni parte, in grassetto a sinistra, è quello della parte.</p>
+                            }
                         </div>
                     </fieldset>
 

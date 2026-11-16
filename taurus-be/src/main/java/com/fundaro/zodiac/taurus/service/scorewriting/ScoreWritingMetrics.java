@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Locale;
 
-/** Saves, drafts, edit locks and engravings of the music editors; tags never carry tenant data or contents. */
+/** Saves, drafts, edit locks, engravings and extractions of the music editors; tags never carry tenant data or contents. */
 @Component
 public class ScoreWritingMetrics {
 
@@ -46,8 +46,13 @@ public class ScoreWritingMetrics {
         registry.timer("taurus.score.engraving.duration").record(duration);
     }
 
-    /** Engraved pages assigned to a part: target {@code replace} or {@code newPart}. */
+    /** Engraved pages assigned to a part: target {@code replace}, {@code newPart} or {@code emptyPart}, when the job assigns them. */
     public void engravingApplied(String target) {
         registry.counter("taurus.score.engravings.applied", "target", target).increment();
+    }
+
+    /** A part extracted from the score of its track: target {@code existing} or {@code newPart}. */
+    public void extraction(String target) {
+        registry.counter("taurus.score.arrangement.extractions", "target", target).increment();
     }
 }

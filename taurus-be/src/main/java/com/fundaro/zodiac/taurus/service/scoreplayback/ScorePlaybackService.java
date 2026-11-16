@@ -4,7 +4,10 @@ import com.fundaro.zodiac.taurus.domain.SheetsMusic;
 import com.fundaro.zodiac.taurus.domain.Tracks;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreRecognitionJob;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersion;
+import com.fundaro.zodiac.taurus.domain.scorewriting.ScoreEngravingJob;
+import com.fundaro.zodiac.taurus.domain.scorewriting.ScoreEngravingJobStatus;
 import com.fundaro.zodiac.taurus.repository.scoreplayback.ScoreVersionRepository;
+import com.fundaro.zodiac.taurus.repository.scorewriting.ScoreEngravingJobRepository;
 import com.fundaro.zodiac.taurus.service.MediaService;
 import com.fundaro.zodiac.taurus.service.UsersService;
 import com.fundaro.zodiac.taurus.service.dto.UsersDTO;
@@ -12,6 +15,7 @@ import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Ava
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.DerivedFromDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PartPlaybackSettingsDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PendingPagesDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.PlaybackVersionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scorewriting.ScoreWritingDtos.DraftSummaryDTO;
@@ -26,6 +30,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -52,6 +57,7 @@ public class ScorePlaybackService {
     private final ScoreErrorReportService reportService;
     private final ScoreEditLockService lockService;
     private final ScoreDraftService draftService;
+    private final ScoreEngravingJobRepository engravingJobRepository;
 
     public ScorePlaybackService(
         ScorePlaybackSupport support,
@@ -61,7 +67,8 @@ public class ScorePlaybackService {
         ScoreRecognitionService recognitionService,
         ScoreErrorReportService reportService,
         ScoreEditLockService lockService,
-        ScoreDraftService draftService
+        ScoreDraftService draftService,
+        ScoreEngravingJobRepository engravingJobRepository
     ) {
         this.support = support;
         this.versionRepository = versionRepository;
@@ -71,6 +78,7 @@ public class ScorePlaybackService {
         this.reportService = reportService;
         this.lockService = lockService;
         this.draftService = draftService;
+        this.engravingJobRepository = engravingJobRepository;
     }
 
     public TrackPlaybackDTO overview(Long trackId, AbstractAuthenticationToken token) {
@@ -92,6 +100,7 @@ public class ScorePlaybackService {
             : Map.of();
         Map<Long, DraftSummaryDTO> drafts = viewer == Viewer.MANAGER ? draftService.summaries(track.getScores()) : Map.of();
         Map<Long, DerivedFromDTO> derivations = viewer == Viewer.MANAGER ? derivations(track.getScores()) : Map.of();
+        Map<Long, PendingPagesDTO> pending = viewer == Viewer.MANAGER ? pendingPages(track) : Map.of();
 
         List<PartPlaybackDTO> parts = new ArrayList<>();
         int order = 0;
@@ -118,7 +127,8 @@ public class ScorePlaybackService {
                 editing.get(part.getId()),
                 drafts.get(part.getId()),
                 viewer == Viewer.MANAGER ? ScorePlaybackSupport.engravedFromVersionId(part) : null,
-                part.getDerivedFromVersionId() == null ? null : derivations.get(part.getDerivedFromVersionId())
+                part.getDerivedFromVersionId() == null ? null : derivations.get(part.getDerivedFromVersionId()),
+                pending.get(part.getId())
             ));
         }
         Long referenceScoreId = track.getScores().stream().anyMatch(part -> Objects.equals(part.getId(), track.getReferenceSheetMusicId()))
@@ -133,6 +143,27 @@ public class ScorePlaybackService {
             parts,
             viewer == Viewer.MANAGER && recognitionService.isAvailable()
         );
+    }
+
+    /** The latest engraving of each part whose pages wait to be assigned, by part. */
+    private Map<Long, PendingPagesDTO> pendingPages(Tracks track) {
+        Set<Long> partIds = track.getScores().stream().map(SheetsMusic::getId).collect(Collectors.toSet());
+        Map<Long, ScoreEngravingJob> latest = new HashMap<>();
+        for (ScoreEngravingJob job : engravingJobRepository.findAllByTrackIdAndStatusAndAppliedAtIsNullAndDeletedFalse(track.getId(), ScoreEngravingJobStatus.DONE)) {
+            if (!partIds.contains(job.getSheetMusicId()) || job.getPageMediaIds().isEmpty()) continue;
+            latest.merge(job.getSheetMusicId(), job, (first, second) -> first.getId() > second.getId() ? first : second);
+        }
+        if (latest.isEmpty()) return Map.of();
+        Map<Long, ScoreVersion> versions = versionRepository
+            .findAllByIdInAndDeletedFalse(latest.values().stream().map(ScoreEngravingJob::getScoreVersionId).toList())
+            .stream()
+            .collect(Collectors.toMap(ScoreVersion::getId, Function.identity()));
+        Map<Long, PendingPagesDTO> pending = new HashMap<>();
+        latest.forEach((partId, job) -> {
+            ScoreVersion version = versions.get(job.getScoreVersionId());
+            if (version != null) pending.put(partId, new PendingPagesDTO(job.getId(), version.getId(), version.getVersionNumber(), job.getPageMediaIds().size()));
+        });
+        return pending;
     }
 
     /** Versions the parts were derived from, by id; also removed ones, which still tell where a part comes from. */

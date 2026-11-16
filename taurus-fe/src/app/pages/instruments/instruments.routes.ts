@@ -10,6 +10,7 @@ export default [
         path: '',
         component: InstrumentsComponent,
         canActivate: [canActivateAuthRole],
+        canDeactivate: [canDeactivateUnsavedChanges],
         data: { role: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST] },
     },
     {

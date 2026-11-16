@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261115200000-1" author="taurus">
+    <comment>
+      The score of a track: all its parts in systems, from which the parts are extracted. At most one for each track
+      among those not removed; removing it soft-deletes it with its versions.
+    </comment>
+    <createTable tableName="track_arrangement">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="track_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="current_version_id" type="bigint"/>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="track_arrangement" baseColumnNames="track_id"
+                             referencedTableName="track" referencedColumnNames="id"
+                             constraintName="fk_track_arrangement_track" onDelete="RESTRICT"/>
+    <sql><![CDATA[
+      CREATE UNIQUE INDEX uq_track_arrangement_track ON track_arrangement (track_id) WHERE deleted = FALSE;
+      ]]></sql>
+  </changeSet>
+
+  <changeSet id="20261115200000-2" author="taurus">
+    <comment>
+      Immutable versions of a score: compressed MusicXML with one part for each row, stored as media of the parts. The
+      rows give, for each part of the file, its id, its name and the instruments of the row.
+    </comment>
+    <createTable tableName="arrangement_version">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="arrangement_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="version_number" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="status" type="varchar(16)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="media_asset_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="parent_version_id" type="bigint"/>
+      <column name="rows_json" type="text">
+        <constraints nullable="false"/>
+      </column>
+      <column name="concert_pitch" type="boolean">
+        <constraints nullable="false"/>
+      </column>
+      <column name="measure_count" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="checks_json" type="text">
+        <constraints nullable="false"/>
+      </column>
+      <column name="approved_by" type="varchar(255)"/>
+      <column name="approved_at" type="timestamp with time zone"/>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="arrangement_version" baseColumnNames="arrangement_id"
+                             referencedTableName="track_arrangement" referencedColumnNames="id"
+                             constraintName="fk_arrangement_version_arrangement" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="arrangement_version" baseColumnNames="media_asset_id"
+                             referencedTableName="media_asset" referencedColumnNames="id"
+                             constraintName="fk_arrangement_version_media_asset" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="arrangement_version" baseColumnNames="parent_version_id"
+                             referencedTableName="arrangement_version" referencedColumnNames="id"
+                             constraintName="fk_arrangement_version_parent" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="track_arrangement" baseColumnNames="current_version_id"
+                             referencedTableName="arrangement_version" referencedColumnNames="id"
+                             constraintName="fk_track_arrangement_current_version" onDelete="SET NULL"/>
+    <sql><![CDATA[
+      ALTER TABLE arrangement_version
+        ADD CONSTRAINT ck_arrangement_version_status CHECK (status IN ('UNVERIFIED', 'APPROVED')),
+        ADD CONSTRAINT ck_arrangement_version_approval
+          CHECK ((status = 'APPROVED') = (approved_by IS NOT NULL AND approved_at IS NOT NULL));
+      CREATE UNIQUE INDEX uq_arrangement_version_number ON arrangement_version (arrangement_id, version_number) WHERE deleted = FALSE;
+      CREATE INDEX idx_arrangement_version_arrangement ON arrangement_version (arrangement_id, deleted);
+      CREATE INDEX idx_arrangement_version_media_asset ON arrangement_version (media_asset_id);
+      ]]></sql>
+  </changeSet>
+
+  <changeSet id="20261115200000-3" author="taurus">
+    <comment>
+      Versions of the parts extracted from a score, which remember the version of the score they come from, and the row
+      of the score each part is extracted from: unique among the active parts of a track.
+    </comment>
+    <sql><![CDATA[
+      ALTER TABLE score_version DROP CONSTRAINT ck_score_version_origin;
+      ALTER TABLE score_version
+        ADD CONSTRAINT ck_score_version_origin
+          CHECK (origin IN ('OMR_AUDIVERIS', 'OMR_HOMR', 'UPLOAD_MUSICXML', 'UPLOAD_MIDI', 'CORRECTION', 'WRITING', 'ARRANGEMENT'));
+      ]]></sql>
+    <addColumn tableName="score_version">
+      <column name="arrangement_version_id" type="bigint"/>
+    </addColumn>
+    <addForeignKeyConstraint baseTableName="score_version" baseColumnNames="arrangement_version_id"
+                             referencedTableName="arrangement_version" referencedColumnNames="id"
+                             constraintName="fk_score_version_arrangement_version" onDelete="RESTRICT"/>
+    <addColumn tableName="sheet_music">
+      <column name="arrangement_row" type="varchar(64)"/>
+    </addColumn>
+    <sql><![CDATA[
+      ALTER TABLE score_version
+        ADD CONSTRAINT ck_score_version_arrangement
+          CHECK ((origin = 'ARRANGEMENT') = (arrangement_version_id IS NOT NULL));
+      CREATE INDEX idx_score_version_arrangement_version ON score_version (arrangement_version_id)
+        WHERE arrangement_version_id IS NOT NULL;
+      CREATE UNIQUE INDEX uq_sheet_music_arrangement_row ON sheet_music (track_id, arrangement_row)
+        WHERE deleted = FALSE AND arrangement_row IS NOT NULL;
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        DROP INDEX uq_sheet_music_arrangement_row;
+        DROP INDEX idx_score_version_arrangement_version;
+        ALTER TABLE score_version DROP CONSTRAINT ck_score_version_arrangement;
+        ]]></sql>
+      <dropColumn tableName="sheet_music" columnName="arrangement_row"/>
+      <dropForeignKeyConstraint baseTableName="score_version" constraintName="fk_score_version_arrangement_version"/>
+      <dropColumn tableName="score_version" columnName="arrangement_version_id"/>
+      <sql><![CDATA[
+        ALTER TABLE score_version DROP CONSTRAINT ck_score_version_origin;
+        ALTER TABLE score_version
+          ADD CONSTRAINT ck_score_version_origin
+            CHECK (origin IN ('OMR_AUDIVERIS', 'OMR_HOMR', 'UPLOAD_MUSICXML', 'UPLOAD_MIDI', 'CORRECTION', 'WRITING'));
+        ]]></sql>
+    </rollback>
+  </changeSet>
+
+  <changeSet id="20261115200000-4" author="taurus">
+    <comment>
+      Drafts and edit locks of a score too. The draft of a score keeps the instruments of its rows, which the MusicXML
+      does not carry.
+    </comment>
+    <addColumn tableName="score_draft">
+      <column name="rows_json" type="text"/>
+    </addColumn>
+    <sql><![CDATA[
+      ALTER TABLE score_draft DROP CONSTRAINT ck_score_draft_target_type;
+      ALTER TABLE score_draft
+        ADD CONSTRAINT ck_score_draft_target_type CHECK (target_type IN ('PART', 'ARRANGEMENT')),
+        ADD CONSTRAINT ck_score_draft_rows CHECK ((target_type = 'ARRANGEMENT') = (rows_json IS NOT NULL));
+      ALTER TABLE score_edit_lock DROP CONSTRAINT ck_score_edit_lock_target_type;
+      ALTER TABLE score_edit_lock
+        ADD CONSTRAINT ck_score_edit_lock_target_type CHECK (target_type IN ('PART', 'ARRANGEMENT'));
+      ]]></sql>
+    <rollback>
+      <sql><![CDATA[
+        DELETE FROM score_edit_lock WHERE target_type = 'ARRANGEMENT';
+        DELETE FROM score_draft WHERE target_type = 'ARRANGEMENT';
+        ALTER TABLE score_edit_lock DROP CONSTRAINT ck_score_edit_lock_target_type;
+        ALTER TABLE score_edit_lock ADD CONSTRAINT ck_score_edit_lock_target_type CHECK (target_type IN ('PART'));
+        ALTER TABLE score_draft DROP CONSTRAINT ck_score_draft_rows;
+        ALTER TABLE score_draft DROP CONSTRAINT ck_score_draft_target_type;
+        ALTER TABLE score_draft ADD CONSTRAINT ck_score_draft_target_type CHECK (target_type IN ('PART'));
+        ]]></sql>
+      <dropColumn tableName="score_draft" columnName="rows_json"/>
+    </rollback>
+  </changeSet>
+</databaseChangeLog>

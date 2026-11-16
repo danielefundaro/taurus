@@ -64,6 +64,30 @@ describe('Track DetailComponent', () => {
         expect(open(false)).toBe('details');
     });
 
+    it('opens the score tab from a deep link only for managers, with playback and writing enabled', () => {
+        const route = { params: of({ id: 8 }), snapshot: { queryParamMap: { get: () => 'arrangement' } } };
+        const open = (role: RoleEnums, playback: boolean, writing: boolean) => {
+            const tracksService = jasmine.createSpyObj('TracksService', ['getById', 'getUploadJobs']);
+            const instrumentsService = jasmine.createSpyObj('InstrumentsService', ['getAll']);
+            tracksService.getById.and.returnValue(of(new Tracks()));
+            tracksService.getUploadJobs.and.returnValue(of([]));
+            instrumentsService.getAll.and.returnValue(of({ content: [], totalElements: 0 }));
+            const keycloakService = { currentUserRole: role, isUser: role === RoleEnums.USER, isUserExternal: false };
+            const component = new DetailComponent(tracksService, instrumentsService, null!, keycloakService as any, null!, route as any, null!, null!, null!, {
+                scorePlaybackEnabled: () => playback,
+                scoreWritingEnabled: () => writing,
+                loaded: () => true
+            } as any, telemetry());
+            component.ngOnInit();
+            return component['activeTab'];
+        };
+
+        expect(open(RoleEnums.ARCHIVIST, true, true)).toBe('arrangement');
+        expect(open(RoleEnums.ARCHIVIST, true, false)).toBe('details');
+        expect(open(RoleEnums.ARCHIVIST, false, true)).toBe('details');
+        expect(open(RoleEnums.USER, true, true)).toBe('details');
+    });
+
     it('opens the playback tab of a deep link once the tenant features arrive', () => {
         const route = { params: of({ id: 8 }), snapshot: { queryParamMap: { get: () => 'playback' } } };
         const keycloakService = { currentUserRole: RoleEnums.USER, isUser: true, isUserExternal: false };
