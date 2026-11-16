@@ -656,6 +656,8 @@ L'impaginazione si misura nel servizio musicale ricostruito il 16/11/2026, con V
 
 L'obiettivo di 15 s è raggiunto con largo margine. Il job del backend aggiunge l'attesa in coda e il salvataggio delle pagine; in esercizio la durata del servizio è in `taurus_score_engraving_duration_seconds`.
 
+La misura si ripete con `python -m accuracy engraving` nel modulo `taurus-omr`, che costruisce le stesse parti. Nella CI `tests/test_accuracy.py` impagina le parti sull'immagine appena costruita e fallisce se quella di due pagine A4 supera l'obiettivo. I tempi cambiano con il carico del computer: in una seconda serie della stessa sera le due pagine hanno richiesto 7,8 s.
+
 Rispetto agli obiettivi:
 
 - **Tasto con 30 righi**: 0,40 s, mentre l'obiettivo è 150 ms.
