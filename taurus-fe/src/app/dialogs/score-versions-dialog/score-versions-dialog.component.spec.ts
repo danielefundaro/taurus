@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { of, Subject, throwError } from 'rxjs';
 import { ScoreVersion } from '../../module';
-import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
+import { ConfirmService, ScorePlaybackService, ScoreRecognitionService, ToastService } from '../../service';
 import { ScoreCompareDialogComponent } from '../score-compare-dialog/score-compare-dialog.component';
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData } from './score-versions-dialog.component';
 
@@ -12,6 +12,7 @@ describe('ScoreVersionsDialogComponent', () => {
     let confirmService: jasmine.SpyObj<ConfirmService>;
     let playbackService: jasmine.SpyObj<ScorePlaybackService>;
     let toast: jasmine.SpyObj<ToastService>;
+    let recognition: jasmine.SpyObj<ScoreRecognitionService>;
     let data: ScoreVersionsDialogData;
     const version: ScoreVersion = { id: 7, scoreId: 9, versionNumber: 2, origin: 'OMR_AUDIVERIS', status: 'UNVERIFIED', measureCount: 2, checks: null as never, createdAt: '2026-10-18T10:00:00Z', current: true, pagesChanged: false };
 
@@ -30,7 +31,9 @@ describe('ScoreVersionsDialogComponent', () => {
         confirmService = jasmine.createSpyObj('ConfirmService', ['confirmDiscard']);
         // L'utente sceglie di restare nel dialogo.
         confirmService.confirmDiscard.and.callFake((request) => request.reject?.());
-        playbackService = jasmine.createSpyObj('ScorePlaybackService', ['versions', 'updatePartSettings', 'versionFile', 'editor', 'engravingPdf']);
+        playbackService = jasmine.createSpyObj('ScorePlaybackService', ['versions', 'updatePartSettings', 'versionFile', 'editor', 'engravingPdf', 'approve']);
+        recognition = jasmine.createSpyObj('ScoreRecognitionService', ['collect']);
+        recognition.collect.and.resolveTo(true);
         toast = jasmine.createSpyObj('ToastService', ['success', 'warn']);
         playbackService.versions.and.returnValue(of([version]));
         playbackService.updatePartSettings.and.callFake((_trackId, _scoreId, settings) => of(settings));
@@ -42,7 +45,8 @@ describe('ScoreVersionsDialogComponent', () => {
                 { provide: DynamicDialogRef, useValue: dialogRef },
                 { provide: ScorePlaybackService, useValue: playbackService },
                 { provide: ToastService, useValue: toast },
-                { provide: ConfirmService, useValue: confirmService }
+                { provide: ConfirmService, useValue: confirmService },
+                { provide: ScoreRecognitionService, useValue: recognition }
             ]
         }).compileComponents();
         fixture = TestBed.createComponent(ScoreVersionsDialogComponent);
@@ -64,6 +68,26 @@ describe('ScoreVersionsDialogComponent', () => {
         onClose.next({ correctVersionId: 7, measureIndex: 5 });
 
         expect(dialogRef.close).toHaveBeenCalledWith({ changed: false, correctVersionId: 7, measureIndex: 5 });
+    });
+
+    it('collects the quality of the recognition after approving a version, not after approving it again', () => {
+        const correction: ScoreVersion = { ...version, id: 8, versionNumber: 3, origin: 'CORRECTION', parentVersionId: 7 };
+        const versions = [correction, version];
+        playbackService.versions.and.returnValue(of(versions));
+        (fixture.componentInstance as unknown as { ngOnInit(): void }).ngOnInit();
+        const approved: ScoreVersion = { ...correction, status: 'APPROVED' };
+        playbackService.approve.and.returnValue(of(approved));
+        const approve = (target: ScoreVersion): void => (fixture.componentInstance as unknown as { approve(version: ScoreVersion): void }).approve(target);
+
+        approve(correction);
+        expect(playbackService.approve).toHaveBeenCalledWith(4, 9, 8);
+        expect(recognition.collect).toHaveBeenCalledOnceWith(4, 9, approved, { versions, complete: true });
+        expect(toast.success).toHaveBeenCalledWith('Versione approvata', jasmine.any(String));
+
+        recognition.collect.calls.reset();
+        approve(approved);
+        expect(playbackService.approve).toHaveBeenCalledTimes(2);
+        expect(recognition.collect).not.toHaveBeenCalled();
     });
 
     it('offers the comparison with more than one version', () => {

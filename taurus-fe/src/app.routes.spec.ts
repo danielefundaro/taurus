@@ -31,6 +31,14 @@ describe('appRoutes tenant features', () => {
         expect(calendar?.data?.['feature']).toBe(TenantFeature.CALENDAR);
     });
 
+    it('opens the quality of the recognition only with the score playback', () => {
+        const recognition = children.find((route) => route.path === 'recognition');
+
+        expect(recognition?.canActivate).toContain(tenantFeatureGuard);
+        expect(recognition?.data?.['feature']).toBe(TenantFeature.SCORE_PLAYBACK);
+        expect(roles(recognition)).toEqual([RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST]);
+    });
+
     it('does not couple unrelated routes to tenant features', () => {
         const albums = children.find((route) => route.path === 'albums');
 

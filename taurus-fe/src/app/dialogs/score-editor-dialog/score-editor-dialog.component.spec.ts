@@ -23,6 +23,7 @@ import {
     ScoreDraftService,
     ScoreEditLockService,
     ScorePlaybackService,
+    ScoreRecognitionService,
     ScoreRendererService
 } from '../../service';
 import { LayoutPage } from '../../score-editor/score-layout';
@@ -79,6 +80,7 @@ describe('ScoreEditorDialogComponent', () => {
     let arrangements: jasmine.SpyObj<ArrangementService>;
     let lockService: { forPart: jasmine.Spy; forArrangement: jasmine.Spy };
     let confirm: jasmine.SpyObj<ConfirmService>;
+    let recognition: jasmine.SpyObj<ScoreRecognitionService>;
 
     beforeEach(async () => {
         lockState = signal<EditLockState>({ status: 'acquiring', message: null });
@@ -147,6 +149,8 @@ describe('ScoreEditorDialogComponent', () => {
         playbackService.errorReports.and.returnValue(of([]));
         playbackService.correct.and.returnValue(of({ ...editor.version, id: 8, versionNumber: 3, origin: 'CORRECTION' }));
         dialogRef = jasmine.createSpyObj('DynamicDialogRef', ['close']);
+        recognition = jasmine.createSpyObj('ScoreRecognitionService', ['collect']);
+        recognition.collect.and.resolveTo(true);
         audio = jasmine.createSpyObj('ScoreAudioService', ['ready', 'load', 'play', 'pause', 'setChannel', 'preview']);
         audio.ready.and.resolveTo(null as never);
         audio.preview.and.resolveTo();
@@ -179,6 +183,7 @@ describe('ScoreEditorDialogComponent', () => {
                 { provide: ScoreEditLockService, useValue: lockService },
                 { provide: ScoreDraftService, useValue: drafts },
                 { provide: ArrangementService, useValue: arrangements },
+                { provide: ScoreRecognitionService, useValue: recognition },
                 { provide: InstrumentsService, useValue: { getAll: () => of({ content: [CLARINET, TUBA, ALTO_SAX], totalElements: 3 }) } }
             ]
         }).compileComponents();
@@ -378,9 +383,26 @@ describe('ScoreEditorDialogComponent', () => {
         expect(correction.content.split('<step>D</step>').length - 1).toBe(2);
         expect(correction.content).not.toContain('taurus-');
         expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ versionNumber: 3 }));
+        const [trackId, scoreId, approved, known] = recognition.collect.calls.mostRecent().args;
+        expect([trackId, scoreId, approved.id]).toEqual([4, 9, 8]);
+        expect(known?.versions?.map((version) => version.id)).toEqual([7]);
+        expect(known?.contents?.get(8)).toBe(correction.content);
+        expect(known?.contents?.get(7)).toBe(XML);
 
         fixture.destroy();
         expect(lock.release).toHaveBeenCalled();
+    });
+
+    it('collects nothing when the correction is saved without approving it', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const component = fixture.componentInstance as unknown as { move(steps: number): void; save(approve: boolean): Promise<void> };
+
+        component.move(1);
+        await component.save(false);
+
+        expect(playbackService.correct).toHaveBeenCalled();
+        expect(recognition.collect).not.toHaveBeenCalled();
     });
 
     it('opens in read only while someone else corrects or writes the part, until the user takes over', async () => {
@@ -692,6 +714,7 @@ describe('ScoreEditorDialogComponent', () => {
             const correction = playbackService.correct.calls.mostRecent().args[2];
             expect(correction).toEqual(jasmine.objectContaining({ parentVersionId: 7, approve: true, origin: 'WRITING', editSession: 'editor-window-1' }));
             expect(correction.measureSources).toBeUndefined();
+            expect(recognition.collect).toHaveBeenCalledOnceWith(4, 9, jasmine.objectContaining({ id: 8 }), { versions: [], contents: new Map([[8, correction.content]]) });
             expect(keeper.hold).toHaveBeenCalledBefore(playbackService.correct);
             expect(keeper.completed).toHaveBeenCalled();
             expect(dialogRef.close).toHaveBeenCalledWith(jasmine.objectContaining({ versionNumber: 3 }));

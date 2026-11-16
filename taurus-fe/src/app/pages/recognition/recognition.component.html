@@ -1,0 +1,173 @@
+<app-page-header heading="Riconoscimento" subtitle="Dove sbagliano i motori, dalle parti riconosciute e poi corrette e approvate">
+    <div pageActions>
+        <p-selectbutton [options]="periods" [ngModel]="period" (ngModelChange)="changePeriod($event)" optionLabel="label"
+            optionValue="value" [allowEmpty]="false" [disabled]="loading" ariaLabel="Periodo del riepilogo" />
+    </div>
+</app-page-header>
+
+@if (collection) {
+<section class="card recognition-collect" aria-live="polite">
+    <div class="recognition-collect__text">
+        <strong>Raccolta dalle approvazioni precedenti</strong>
+        <span class="text-muted-color">Confrontate {{ collection.done }} di {{ collection.total }}{{ collection.failed ? ' · non riuscite ' + collection.failed : '' }}</span>
+    </div>
+    <p-progressbar class="recognition-collect__bar" [value]="progress" [showValue]="false" ariaLabel="Avanzamento della raccolta" />
+    <p-button label="Interrompi" icon="pi pi-stop" severity="secondary" [outlined]="true" [disabled]="collection.stopping" (onClick)="stop()" />
+</section>
+} @else if (pendingTotal) {
+<section class="card recognition-collect">
+    <div class="recognition-collect__text">
+        <strong>{{ pendingTotal === 1 ? '1 parte approvata non è ancora contata' : pendingTotal + ' parti approvate non sono ancora contate' }}</strong>
+        <span class="text-muted-color">Sono approvazioni fatte prima della raccolta, o la cui raccolta non è riuscita: il browser le confronta una alla volta.</span>
+    </div>
+    <p-button label="Raccogli dalle approvazioni precedenti" icon="pi pi-replay" (onClick)="collect()" />
+</section>
+}
+
+@if (loadError) {
+<app-inline-alert class="block mb-4" severity="error" heading="Riepilogo non disponibile"
+    detail="Non è stato possibile leggere la qualità del riconoscimento." actionLabel="Riprova" (action)="load()" />
+} @else if (loading && !report) {
+<div class="recognition-engines" aria-busy="true" aria-label="Caricamento del riepilogo">
+    <p-skeleton height="9rem" />
+    <p-skeleton height="9rem" />
+</div>
+} @else if (report && !engines.length) {
+<div class="card">
+    <app-empty-state icon="pi pi-chart-bar" heading="Nessuna parte riconosciuta e approvata"
+        [message]="period === 'year' ? 'Negli ultimi 12 mesi nessuna parte riconosciuta da un motore è stata approvata. Le parti si contano all\'approvazione.' : 'Nessuna parte riconosciuta da un motore è stata approvata. Le parti si contano all\'approvazione.'" />
+</div>
+} @else if (report) {
+<section class="recognition-engines" aria-label="Motori">
+    @for (card of engines; track card.engine) {
+    <article class="card recognition-engine">
+        <header class="recognition-engine__header">
+            <h2 class="recognition-engine__name">{{ card.label }}</h2>
+            <span class="text-muted-color">{{ card.counts.parts === 1 ? '1 parte approvata' : card.counts.parts + ' parti approvate' }}</span>
+        </header>
+        <dl class="recognition-figures">
+            <div class="recognition-figure">
+                <dt>Battute giuste</dt>
+                <dd>
+                    <strong class="recognition-figure__value">{{ card.correctShare === null ? '—' : card.correctShare + '%' }}</strong>
+                    <span class="text-muted-color">{{ card.counts.correctMeasures }} su {{ card.counts.referenceMeasures }}</span>
+                </dd>
+            </div>
+            <div class="recognition-figure">
+                <dt>Segni di struttura letti</dt>
+                <dd>
+                    <strong class="recognition-figure__value">{{ card.marksShare === null ? '—' : card.marksShare + '%' }}</strong>
+                    <span class="text-muted-color">{{ card.counts.referenceMarks ? card.counts.foundMarks + ' su ' + card.counts.referenceMarks : 'nessun segno atteso' }}</span>
+                </dd>
+            </div>
+        </dl>
+    </article>
+    }
+</section>
+
+<section class="card recognition-section">
+    <h2 class="recognition-section__title">Andamento per mese</h2>
+    <p class="recognition-section__hint text-muted-color">Battute giuste delle parti riconosciute in ogni mese: un aggiornamento dei motori si vede dal mese in cui è entrato.</p>
+    <div class="recognition-table-wrap">
+        <table class="recognition-table">
+            <thead>
+                <tr>
+                    <th scope="col">Mese</th>
+                    @for (column of columns; track column.engine) {
+                    <th scope="col">{{ column.label }}</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (row of months; track row.month) {
+                <tr>
+                    <th scope="row">{{ row.label }}</th>
+                    @for (cell of row.cells; track cell.engine) {
+                    <td>
+                        @if (cell.share === null) {
+                        <span class="text-muted-color">—</span>
+                        } @else {
+                        <div class="recognition-meter">
+                            <span class="recognition-meter__track" aria-hidden="true"><span class="recognition-meter__fill" [style.width.%]="cell.share"></span></span>
+                            <span class="recognition-meter__value">{{ cell.share }}%</span>
+                            <span class="text-muted-color">{{ cell.parts === 1 ? '1 parte' : cell.parts + ' parti' }}</span>
+                        </div>
+                        }
+                    </td>
+                    }
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="card recognition-section">
+    <h2 class="recognition-section__title">Errori più frequenti</h2>
+    @if (errors.length) {
+    <div class="recognition-table-wrap">
+        <table class="recognition-table">
+            <thead>
+                <tr>
+                    <th scope="col">Errore</th>
+                    @for (column of columns; track column.engine) {
+                    <th scope="col">{{ column.label }}</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @for (row of errors; track row.label) {
+                <tr>
+                    <th scope="row">{{ row.label }}</th>
+                    @for (cell of row.cells; track cell.engine) {
+                    <td>{{ cell.count }}@if (cell.share !== null) {<span class="text-muted-color"> · {{ cell.share }}%</span>}</td>
+                    }
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <p class="recognition-section__hint text-muted-color">Le quote sono sulle battute della versione approvata; per le battute in più su quelle del motore, per i segni su quelli attesi.</p>
+    } @else {
+    <p class="text-muted-color m-0">I motori non hanno sbagliato nessuna battuta nel periodo.</p>
+    }
+</section>
+
+<section class="card recognition-section">
+    <h2 class="recognition-section__title">Parti più corrette</h2>
+    @if (report.parts.length) {
+    <div class="recognition-table-wrap">
+        <table class="recognition-table">
+            <thead>
+                <tr>
+                    <th scope="col">Traccia</th>
+                    <th scope="col">Parte</th>
+                    <th scope="col">Motore</th>
+                    <th scope="col">Battute corrette</th>
+                    <th scope="col">Giuste del motore</th>
+                    <th scope="col"><span class="sr-only">Azioni</span></th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (part of report.parts; track part.engineVersionId) {
+                <tr>
+                    <td><a [routerLink]="['/tracks', part.trackId]">{{ part.trackName }}</a></td>
+                    <td>{{ partLabel(part) }}</td>
+                    <td>{{ engineLabel(part.engine) }}</td>
+                    <td>{{ part.correctedMeasures }}</td>
+                    <td>{{ correctShare(part) === null ? '—' : correctShare(part) + '%' }} <span class="text-muted-color">({{ part.correctMeasures }} su {{ part.referenceMeasures }})</span></td>
+                    <td class="recognition-table__action">
+                        <p-button label="Confronta" icon="pi pi-clone" [text]="true" size="small"
+                            [ariaLabel]="'Confronta la versione ' + part.engineVersionNumber + ' del motore con la versione approvata ' + part.approvedVersionNumber + ' di ' + partLabel(part)"
+                            (onClick)="compare(part)" />
+                    </td>
+                </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    } @else {
+    <p class="text-muted-color m-0">Nel periodo gli archivisti non hanno corretto battute.</p>
+    }
+</section>
+}

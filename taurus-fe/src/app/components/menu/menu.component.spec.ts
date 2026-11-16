@@ -13,6 +13,7 @@ describe('MenuComponent', () => {
         const onboardingImportEnabled = signal(false);
         const externalCalendarFeedEnabled = signal(false);
         const calendarEnabled = signal(false);
+        const scorePlaybackEnabled = signal(false);
         const service = {
             loaded,
             financeEnabled,
@@ -20,6 +21,7 @@ describe('MenuComponent', () => {
             onboardingImportEnabled,
             externalCalendarFeedEnabled,
             calendarEnabled,
+            scorePlaybackEnabled,
             refresh: jasmine.createSpy().and.returnValue(of({}))
         };
         TestBed.configureTestingModule({
@@ -62,6 +64,12 @@ describe('MenuComponent', () => {
         TestBed.tick();
 
         expect(menuItem(component, 'Calendario')?.visible).toBeTrue();
+        expect(menuItem(component, 'Riconoscimento')?.visible).toBeFalse();
+
+        scorePlaybackEnabled.set(true);
+        TestBed.tick();
+
+        expect(menuItem(component, 'Riconoscimento')?.visible).toBeTrue();
     });
 });
 
@@ -74,6 +82,7 @@ describe('MenuComponent for the board', () => {
             onboardingImportEnabled: signal(true),
             externalCalendarFeedEnabled: signal(true),
             calendarEnabled: signal(true),
+            scorePlaybackEnabled: signal(true),
             refresh: jasmine.createSpy().and.returnValue(of({}))
         };
         TestBed.configureTestingModule({
@@ -85,7 +94,7 @@ describe('MenuComponent for the board', () => {
         const component = TestBed.runInInjectionContext(() => new MenuComponent(service as never));
         TestBed.tick();
 
-        for (const label of ['Utenti', 'Economia', 'Inventario', 'Album', 'Tracce', 'Strumenti', 'Calendario']) {
+        for (const label of ['Utenti', 'Economia', 'Inventario', 'Album', 'Tracce', 'Strumenti', 'Riconoscimento', 'Calendario']) {
             expect(menuItem(component, label)?.['hasRoles']).withContext(label).toContain(RoleEnums.BOARD);
         }
         for (const label of ['Configurazione iniziale', 'Consegne notifiche', 'Feed calendario']) {
@@ -104,6 +113,7 @@ describe('MenuComponent in bootstrap mode', () => {
             onboardingImportEnabled: signal(false),
             externalCalendarFeedEnabled: signal(false),
             calendarEnabled: signal(false),
+            scorePlaybackEnabled: signal(false),
             refresh: jasmine.createSpy().and.returnValue(of({}))
         };
         TestBed.configureTestingModule({

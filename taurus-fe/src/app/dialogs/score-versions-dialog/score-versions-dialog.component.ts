@@ -8,7 +8,7 @@ import { PartPlaybackSettings, PlaybackInstrument, PlaybackSound, ScoreVersion }
 import { GENERAL_MIDI_FAMILIES, programName } from '../../score-player/general-midi';
 import { fileName, saveFile, versionMidi } from '../../score-player/midi-download';
 import { checkIssues, originLabel } from '../../score-player/playback-labels';
-import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
+import { ConfirmService, ScorePlaybackService, ScoreRecognitionService, ToastService } from '../../service';
 import { openCompareDialog } from '../score-compare-dialog/score-compare-dialog.component';
 
 export interface ScoreVersionsDialogData {
@@ -64,6 +64,7 @@ export class ScoreVersionsDialogComponent implements OnInit {
         private readonly toastService: ToastService,
         private readonly confirmService: ConfirmService,
         private readonly dialogService: DialogService,
+        private readonly recognitionService: ScoreRecognitionService,
         config: DynamicDialogConfig<ScoreVersionsDialogData>
     ) {
         this.data = config.data!;
@@ -121,7 +122,12 @@ export class ScoreVersionsDialogComponent implements OnInit {
     }
 
     protected approve(version: ScoreVersion): void {
-        this.run(this.playbackService.approve(this.data.trackId, this.data.scoreId, version.id), 'Versione approvata', `La versione ${version.versionNumber} è approvata e ascoltata per la parte.`);
+        const versions = this.versions;
+        const { trackId, scoreId } = this.data;
+        this.run(this.playbackService.approve(trackId, scoreId, version.id), 'Versione approvata', `La versione ${version.versionNumber} è approvata e ascoltata per la parte.`, (approved) => {
+            // La raccolta della qualità del riconoscimento segue l'approvazione e non la ritarda.
+            if (version.status !== 'APPROVED') void this.recognitionService.collect(trackId, scoreId, approved, { versions, complete: true });
+        });
     }
 
     /** Apre il menu dei formati della versione: MusicXML, MIDI e, se ne derivano le pagine, il PDF. */
@@ -233,16 +239,17 @@ export class ScoreVersionsDialogComponent implements OnInit {
         };
     }
 
-    private run(request: ReturnType<ScorePlaybackService['approve']>, title: string, detail: string): void {
+    private run(request: ReturnType<ScorePlaybackService['approve']>, title: string, detail: string, done?: (version: ScoreVersion) => void): void {
         this.busy = true;
         request
             .pipe(
                 first(),
                 finalize(() => (this.busy = false))
             )
-            .subscribe(() => {
+            .subscribe((version) => {
                 this.changed = true;
                 this.toastService.success(title, detail);
+                done?.(version);
                 this.load();
             });
     }

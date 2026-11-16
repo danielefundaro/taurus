@@ -73,6 +73,12 @@ export const appRoutes: Routes = [
                 data: { role: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST] }
             },
             {
+                path: 'recognition',
+                loadComponent: () => import('./app/pages/recognition/recognition.component').then((module) => module.RecognitionComponent),
+                canActivate: [canActivateAuthRole, tenantFeatureGuard],
+                data: { role: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST], feature: TenantFeature.SCORE_PLAYBACK }
+            },
+            {
                 path: 'inventory',
                 loadChildren: () => import('./app/pages/inventory/inventory.routes'),
                 canActivate: [canActivateAuthRole, tenantFeatureGuard],

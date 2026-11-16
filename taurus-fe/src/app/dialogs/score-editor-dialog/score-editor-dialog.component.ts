@@ -57,6 +57,7 @@ import {
     ScoreDraftService,
     ScoreEditLockService,
     ScorePlaybackService,
+    ScoreRecognitionService,
     DrawingOptions,
     drawingOptions,
     ScoreRendererService,
@@ -494,7 +495,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         protected readonly clipboard: ScoreClipboardService,
         protected readonly midi: MidiInputService,
         private readonly arrangementService: ArrangementService,
-        private readonly instrumentsService: InstrumentsService
+        private readonly instrumentsService: InstrumentsService,
+        private readonly recognitionService: ScoreRecognitionService
     ) {
         this.data = config.data!;
         const arrangement = this.data.arrangement;
@@ -1800,10 +1802,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
                     confirmOutdated: false
                 });
             } else {
+                const content = score.cleanXml();
                 const correction: ScoreCorrection = this.writingMode
-                    ? { parentVersionId: this.baseVersionId, content: score.cleanXml(), approve, origin: 'WRITING', editSession: this.lock.session }
-                    : { parentVersionId: this.editor!.version.id, content: score.cleanXml(), approve, measureSources: score.measureSources(), origin: 'CORRECTION', editSession: this.lock.session };
+                    ? { parentVersionId: this.baseVersionId, content, approve, origin: 'WRITING', editSession: this.lock.session }
+                    : { parentVersionId: this.editor!.version.id, content, approve, measureSources: score.measureSources(), origin: 'CORRECTION', editSession: this.lock.session };
                 version = await this.submit(correction);
+                if (version && approve) this.collectReview(version, content);
             }
             if (!version) {
                 keeper?.resume();
@@ -1816,6 +1820,20 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.saving = false;
             this.changeDetector.markForCheck();
         }
+    }
+
+    /**
+     * Confronta la versione approvata con quella del motore da cui discende e ne invia i conteggi, senza ritardare la
+     * chiusura dell'editor: nella correzione la versione aperta e il suo MusicXML sono già noti.
+     */
+    private collectReview(approved: ScoreVersion, content: string): void {
+        const contents = new Map<number, string>([[approved.id, content]]);
+        const versions: ScoreVersion[] = [];
+        if (!this.writingMode && this.editor) {
+            versions.push(this.editor.version);
+            contents.set(this.editor.version.id, this.editor.musicXml);
+        }
+        void this.recognitionService.collect(this.data.trackId, this.data.scoreId, approved, { versions, contents });
     }
 
     /** Prende il blocco: dopo una conferma se lo possiede un altro, che passa in sola lettura. */
