@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<databaseChangeLog
+  xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+  <changeSet id="20261116000000-1" author="taurus">
+    <comment>
+      What the archivists corrected in a recognized part: for each version of an engine, the counts of the comparison
+      with the latest approved version descending from it. Only counts and the two versions: nothing of the score.
+    </comment>
+    <createTable tableName="score_recognition_review">
+      <column name="id" type="bigint" autoIncrement="true">
+        <constraints primaryKey="true" nullable="false"/>
+      </column>
+      <column name="sheet_music_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="engine_version_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="approved_version_id" type="bigint">
+        <constraints nullable="false"/>
+      </column>
+      <column name="engine" type="varchar(16)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="recognized_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="approved_at" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="reference_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="engine_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="correct_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="pitch_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="rhythm_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="tie_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="missing_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="extra_measures" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="reference_marks" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="found_marks" type="integer">
+        <constraints nullable="false"/>
+      </column>
+      <column name="entity_version" type="bigint" defaultValueNumeric="0">
+        <constraints nullable="false"/>
+      </column>
+      <column name="deleted" type="boolean" defaultValueBoolean="false">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="insert_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_date" type="timestamp with time zone">
+        <constraints nullable="false"/>
+      </column>
+      <column name="edit_by" type="varchar(255)">
+        <constraints nullable="false"/>
+      </column>
+    </createTable>
+    <addForeignKeyConstraint baseTableName="score_recognition_review" baseColumnNames="sheet_music_id"
+                             referencedTableName="sheet_music" referencedColumnNames="id"
+                             constraintName="fk_score_recognition_review_sheet_music" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_recognition_review" baseColumnNames="engine_version_id"
+                             referencedTableName="score_version" referencedColumnNames="id"
+                             constraintName="fk_score_recognition_review_engine_version" onDelete="RESTRICT"/>
+    <addForeignKeyConstraint baseTableName="score_recognition_review" baseColumnNames="approved_version_id"
+                             referencedTableName="score_version" referencedColumnNames="id"
+                             constraintName="fk_score_recognition_review_approved_version" onDelete="RESTRICT"/>
+    <sql><![CDATA[
+      ALTER TABLE score_recognition_review
+        ADD CONSTRAINT ck_score_recognition_review_engine CHECK (engine IN ('AUDIVERIS', 'HOMR')),
+        ADD CONSTRAINT ck_score_recognition_review_counts CHECK (
+          reference_measures >= 0 AND engine_measures >= 0 AND correct_measures >= 0 AND pitch_measures >= 0
+          AND rhythm_measures >= 0 AND tie_measures >= 0 AND missing_measures >= 0 AND extra_measures >= 0
+          AND correct_measures + pitch_measures + rhythm_measures + tie_measures + missing_measures = reference_measures
+          AND correct_measures + pitch_measures + rhythm_measures + tie_measures + extra_measures = engine_measures
+          AND found_marks >= 0 AND found_marks <= reference_marks
+        );
+      CREATE UNIQUE INDEX uq_score_recognition_review_engine_version ON score_recognition_review (engine_version_id);
+      CREATE INDEX idx_score_recognition_review_recognized ON score_recognition_review (recognized_at);
+      CREATE INDEX idx_score_recognition_review_approved_version ON score_recognition_review (approved_version_id);
+      CREATE INDEX idx_score_recognition_review_sheet_music ON score_recognition_review (sheet_music_id);
+      ]]></sql>
+  </changeSet>
+</databaseChangeLog>

@@ -227,7 +227,7 @@ public class SecurityConfiguration {
                     .hasAnyAuthority(RoleGroups.tenantManagers())
 
                     // Catalogue administration.
-                    .requestMatchers("/api/albums/**", "/api/tracks/**", "/api/instruments/**")
+                    .requestMatchers("/api/albums/**", "/api/tracks/**", "/api/instruments/**", "/api/score-recognition/**")
                     .hasAnyAuthority(RoleGroups.catalogueManagers())
 
                     // Read-only catalogue APIs for standard and external users; listeners can report the errors they hear.

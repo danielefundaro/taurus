@@ -102,4 +102,5 @@
   <include file="config/liquibase/changelog/20261115100000_instrument_ensemble.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261115200000_score_arrangement.xml" relativeToChangelogFile="false"/>
   <include file="config/liquibase/changelog/20261115300000_score_extraction.xml" relativeToChangelogFile="false"/>
+  <include file="config/liquibase/changelog/20261116000000_score_recognition_review.xml" relativeToChangelogFile="false"/>
 </databaseChangeLog>

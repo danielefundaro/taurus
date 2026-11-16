@@ -9,6 +9,7 @@ import com.fundaro.zodiac.taurus.domain.Tracks;
 import com.fundaro.zodiac.taurus.domain.criteria.InstrumentsCriteria;
 import com.fundaro.zodiac.taurus.domain.enumeration.MediaAssetStatus;
 import com.fundaro.zodiac.taurus.domain.enumeration.StateEnum;
+import com.fundaro.zodiac.taurus.domain.scoreplayback.RecognitionEngine;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreErrorReportClosure;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreErrorReportStatus;
 import com.fundaro.zodiac.taurus.domain.scoreplayback.ScoreVersionOrigin;
@@ -28,6 +29,11 @@ import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Sco
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.ScoreVersionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackSettingsDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScoreRecognitionDtos.PendingReviewsDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScoreRecognitionDtos.RecognitionReportDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScoreRecognitionDtos.RecognitionReviewRequestDTO;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.fundaro.zodiac.taurus.web.rest.errors.RequestAlertException;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
@@ -48,6 +54,9 @@ import tech.jhipster.service.filter.BooleanFilter;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Date;
@@ -111,6 +120,12 @@ class ScorePlaybackIT {
 
     @Autowired
     private InstrumentsService instrumentsService;
+
+    @Autowired
+    private ScoreRecognitionReviewService reviewService;
+
+    @Autowired
+    private MeterRegistry meterRegistry;
 
     private Catalog catalog;
 
@@ -393,6 +408,109 @@ class ScorePlaybackIT {
     }
 
     @Test
+    void theApprovalOfARecognizedPartKeepsOnlyTheCountsOfTheLatestApproval() {
+        ScoreVersionDTO recognized = transactionExecutor.execute(tenantCode, () -> versionService.upload(
+            catalog.completeTrack(), catalog.ownPart(), musicXml("tuba.musicxml", MusicXmlDocumentsTest.TWO_PARTS), "P1", false, archivist()
+        ));
+        jdbcTemplate.update("UPDATE " + schema() + ".score_version SET origin = 'OMR_AUDIVERIS' WHERE id = ?", recognized.id());
+        assertThat(pending().total()).isZero();
+        assertThatThrownBy(() -> record(recognized.id(), recognized.id(), counts(3, 3, 3, 0, 0, 0, 0, 0, 0, 0)))
+            .isInstanceOfSatisfying(RequestAlertException.class, error -> assertThat(error.getArgs().values()).containsEntry("reason", "notApproved"));
+
+        String content = transactionExecutor.execute(tenantCode, () -> versionService.editor(catalog.completeTrack(), catalog.ownPart(), recognized.id(), archivist())).musicXml();
+        ScoreVersionDTO first = transactionExecutor.execute(tenantCode, () -> versionService.correct(
+            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(recognized.id(), content, true, null, null, EDIT_SESSION, false), archivist()
+        ));
+        PendingReviewsDTO pending = pending();
+        assertThat(pending.total()).isEqualTo(1);
+        assertThat(pending.items()).singleElement().satisfies(item -> {
+            assertThat(item.trackId()).isEqualTo(catalog.completeTrack());
+            assertThat(item.scoreId()).isEqualTo(catalog.ownPart());
+            assertThat(item.engine()).isEqualTo(RecognitionEngine.AUDIVERIS);
+            assertThat(item.engineVersionId()).isEqualTo(recognized.id());
+            assertThat(item.approvedVersionId()).isEqualTo(first.id());
+            assertThat(item.approvedVersionNumber()).isEqualTo(2);
+        });
+
+        assertThatThrownBy(() -> record(first.id(), first.id(), counts(3, 3, 3, 0, 0, 0, 0, 0, 0, 0)))
+            .isInstanceOfSatisfying(RequestAlertException.class, error -> {
+                assertThat(error.getErrorKey()).isEqualTo("scorePlayback.recognitionReviewInvalid");
+                assertThat(error.getArgs().values()).containsEntry("reason", "notFromEngine");
+            });
+        assertThatThrownBy(() -> record(first.id(), recognized.id(), counts(3, 3, 2, 0, 0, 0, 0, 0, 0, 0)))
+            .isInstanceOfSatisfying(RequestAlertException.class, error -> assertThat(error.getArgs().values()).containsEntry("reason", "inconsistentCounts"));
+        assertThatThrownBy(() -> record(first.id(), recognized.id(), counts(3, 4, 2, 1, 0, 0, 0, 0, 0, 0)))
+            .isInstanceOfSatisfying(RequestAlertException.class, error -> assertThat(error.getArgs().values()).containsEntry("reason", "inconsistentCounts"));
+        assertThatThrownBy(() -> record(first.id(), recognized.id(), counts(3, 3, 3, 0, 0, 0, 0, 0, 1, 2)))
+            .isInstanceOfSatisfying(RequestAlertException.class, error -> assertThat(error.getArgs().values()).containsEntry("reason", "inconsistentCounts"));
+
+        double correctBefore = measures("correct");
+        double pitchBefore = measures("pitch");
+        record(first.id(), recognized.id(), counts(3, 4, 1, 1, 0, 0, 1, 2, 2, 1));
+        assertThat(pending().total()).isZero();
+        assertThat(measures("correct") - correctBefore).isEqualTo(1);
+        assertThat(measures("pitch") - pitchBefore).isEqualTo(1);
+
+        RecognitionReportDTO report = transactionExecutor.execute(tenantCode, () -> reviewService.report(null));
+        assertThat(report.engines()).singleElement().satisfies(engine -> {
+            assertThat(engine.engine()).isEqualTo(RecognitionEngine.AUDIVERIS);
+            assertThat(engine.counts().parts()).isEqualTo(1);
+            assertThat(engine.counts().referenceMeasures()).isEqualTo(3);
+            assertThat(engine.counts().engineMeasures()).isEqualTo(4);
+            assertThat(engine.counts().correctMeasures()).isEqualTo(1);
+            assertThat(engine.counts().missingMeasures()).isEqualTo(1);
+            assertThat(engine.counts().extraMeasures()).isEqualTo(2);
+            assertThat(engine.counts().foundMarks()).isEqualTo(1);
+        });
+        assertThat(report.months()).singleElement().satisfies(month -> {
+            assertThat(month.month()).isEqualTo(YearMonth.now(ZoneId.of("Europe/Rome")).toString());
+            assertThat(month.counts().correctMeasures()).isEqualTo(1);
+        });
+        assertThat(report.parts()).singleElement().satisfies(part -> {
+            assertThat(part.trackName()).startsWith("Gesù mio con dure funi");
+            assertThat(part.engineVersionNumber()).isEqualTo(1);
+            assertThat(part.approvedVersionNumber()).isEqualTo(2);
+            assertThat(part.referenceMeasures()).isEqualTo(3);
+            assertThat(part.correctedMeasures()).isEqualTo(4);
+        });
+        assertThat(transactionExecutor.execute(tenantCode, () -> reviewService.report(LocalDate.now().plusDays(2))).engines()).isEmpty();
+
+        // A later approval of a version descending from the same recognition replaces the counts; an older one does not.
+        ScoreVersionDTO second = transactionExecutor.execute(tenantCode, () -> versionService.correct(
+            catalog.completeTrack(), catalog.ownPart(), new CorrectionDTO(first.id(), content, true, null, null, EDIT_SESSION, false), archivist()
+        ));
+        assertThat(pending().items()).singleElement().satisfies(item -> assertThat(item.approvedVersionId()).isEqualTo(second.id()));
+        record(second.id(), recognized.id(), counts(3, 3, 3, 0, 0, 0, 0, 0, 2, 2));
+        record(first.id(), recognized.id(), counts(3, 4, 1, 1, 0, 0, 1, 2, 2, 1));
+        assertThat(measures("correct") - correctBefore).isEqualTo(1);
+        RecognitionReportDTO replaced = transactionExecutor.execute(tenantCode, () -> reviewService.report(null));
+        assertThat(replaced.engines()).singleElement().satisfies(engine -> {
+            assertThat(engine.counts().parts()).isEqualTo(1);
+            assertThat(engine.counts().correctMeasures()).isEqualTo(3);
+            assertThat(engine.counts().foundMarks()).isEqualTo(2);
+        });
+        assertThat(replaced.parts()).isEmpty();
+        assertThat(pending().total()).isZero();
+
+        // A version of an engine approved as it is counts with all its measures correct; a part removed leaves the counts.
+        ScoreVersionDTO otherRecognized = transactionExecutor.execute(tenantCode, () -> versionService.upload(
+            catalog.completeTrack(), catalog.otherPart(), musicXml("voce.musicxml", MusicXmlDocumentsTest.TWO_PARTS), "P2", false, archivist()
+        ));
+        jdbcTemplate.update("UPDATE " + schema() + ".score_version SET origin = 'OMR_HOMR' WHERE id = ?", otherRecognized.id());
+        transactionExecutor.execute(tenantCode, () -> versionService.approve(catalog.completeTrack(), catalog.otherPart(), otherRecognized.id(), archivist()));
+        assertThat(pending().items()).singleElement().satisfies(item -> {
+            assertThat(item.engine()).isEqualTo(RecognitionEngine.HOMR);
+            assertThat(item.engineVersionId()).isEqualTo(otherRecognized.id()).isEqualTo(item.approvedVersionId());
+        });
+        record(catalog.otherPart(), otherRecognized.id(), otherRecognized.id(), counts(2, 3, 2, 0, 0, 0, 0, 1, 0, 0));
+        jdbcTemplate.update("UPDATE " + schema() + ".sheet_music SET deleted = TRUE WHERE id = ?", catalog.otherPart());
+        RecognitionReportDTO withRemoved = transactionExecutor.execute(tenantCode, () -> reviewService.report(null));
+        assertThat(withRemoved.engines()).extracting(engine -> engine.engine()).containsExactly(RecognitionEngine.AUDIVERIS, RecognitionEngine.HOMR);
+        assertThat(withRemoved.parts()).isEmpty();
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + schema() + ".score_recognition_review", Long.class)).isEqualTo(2);
+    }
+
+    @Test
     void instrumentsCanBeFilteredByPlaybackConfiguration() {
         InstrumentsCriteria criteria = new InstrumentsCriteria();
         BooleanFilter notConfigured = new BooleanFilter();
@@ -520,6 +638,44 @@ class ScorePlaybackIT {
         Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject(keycloakId).claim("tenant", tenantCode)
             .issuedAt(now).expiresAt(now.plusSeconds(300)).build();
         return new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority(authority)));
+    }
+
+    private PendingReviewsDTO pending() {
+        return transactionExecutor.execute(tenantCode, () -> reviewService.pending(null));
+    }
+
+    private void record(Long approvedId, Long engineVersionId, RecognitionReviewRequestDTO counts) {
+        record(catalog.ownPart(), approvedId, engineVersionId, counts);
+    }
+
+    private void record(Long scoreId, Long approvedId, Long engineVersionId, RecognitionReviewRequestDTO counts) {
+        RecognitionReviewRequestDTO request = new RecognitionReviewRequestDTO(
+            engineVersionId,
+            counts.referenceMeasures(),
+            counts.engineMeasures(),
+            counts.correctMeasures(),
+            counts.pitchMeasures(),
+            counts.rhythmMeasures(),
+            counts.tieMeasures(),
+            counts.missingMeasures(),
+            counts.extraMeasures(),
+            counts.referenceMarks(),
+            counts.foundMarks()
+        );
+        transactionExecutor.execute(tenantCode, () -> {
+            reviewService.record(catalog.completeTrack(), scoreId, approvedId, request, archivist());
+            return null;
+        });
+    }
+
+    /** Measures of the approved version and of the engine, correct, pitch, rhythm, tie, missing, extra, marks expected and found. */
+    private static RecognitionReviewRequestDTO counts(int reference, int engine, int correct, int pitch, int rhythm, int tie, int missing, int extra, int marks, int found) {
+        return new RecognitionReviewRequestDTO(null, reference, engine, correct, pitch, rhythm, tie, missing, extra, marks, found);
+    }
+
+    private double measures(String outcome) {
+        Counter counter = meterRegistry.find("taurus.score.recognition.measures").tags("engine", "audiveris", "outcome", outcome).counter();
+        return counter == null ? 0 : counter.count();
     }
 
     private String schema() {

@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SecurityConfigurationTest.CancelAvailabilityController.class,
         SecurityConfigurationTest.ErrorReportController.class,
         SecurityConfigurationTest.InstrumentSuggestionController.class,
+        SecurityConfigurationTest.RecognitionReportController.class,
     }
 )
 @Import({
@@ -45,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     SecurityConfigurationTest.CancelAvailabilityController.class,
     SecurityConfigurationTest.ErrorReportController.class,
     SecurityConfigurationTest.InstrumentSuggestionController.class,
+    SecurityConfigurationTest.RecognitionReportController.class,
 })
 @EnableConfigurationProperties(JHipsterProperties.class)
 @TestPropertySource(properties = "spring.security.oauth2.client.provider.oidc.issuer-uri=https://issuer.example")
@@ -130,6 +132,28 @@ class SecurityConfigurationTest {
             .andExpect(status().isForbidden());
         mockMvc
             .perform(post("/api/tracks/4/instrument-suggestions/apply").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isForbidden());
+    }
+
+    @ParameterizedTest
+    @MethodSource("catalogueManagers")
+    void letsTheCatalogueManagersReadTheRecognitionQuality(String authority) throws Exception {
+        mockMvc
+            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isOk());
+    }
+
+    @ParameterizedTest
+    @MethodSource("otherRoles")
+    void keepsTheRecognitionQualityClosedToTheOtherRoles(String authority) throws Exception {
+        mockMvc
+            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isForbidden());
+        mockMvc
+            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
             .andExpect(status().isForbidden());
     }
 
@@ -221,6 +245,14 @@ class SecurityConfigurationTest {
             "/api/external/tracks/{trackId}/scores/{scoreId}/error-reports",
         })
         void reportError() {
+        }
+    }
+
+    @RestController
+    static class RecognitionReportController {
+
+        @GetMapping({ "/api/score-recognition/report", "/api/score-recognition/pending" })
+        void report() {
         }
     }
 
