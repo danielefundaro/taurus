@@ -76,9 +76,11 @@ La cartella `accuracy` misura quanto leggono bene i motori reali. Il corpus (`ac
 .venv/bin/python -m accuracy names --url http://localhost:8090 --key <chiave>
 # una parte reale: versione approvata e versione di un motore, scaricate da Taurus
 .venv/bin/python -m accuracy compare approvata.mxl audiveris.mxl
+# i tempi dell'impaginazione, su parti lunghe ricavate dal corpus
+.venv/bin/python -m accuracy engraving --url http://localhost:8090 --key <chiave> --runs 5
 ```
 
-`tests/test_accuracy.py` fissa la quota minima di battute corrette per motore e di nomi delle parti letti e si esegue solo con `TAURUS_OMR_ACCURACY_URL` e `TAURUS_OMR_ACCURACY_KEY`; la CI lo esegue sull'immagine appena costruita. Per aggiungere parti al corpus si modifica `accuracy/corpus.py` e si ridisegnano le pagine con `python -m accuracy render`, che richiede `requirements-accuracy.txt`, la libreria Cairo e un carattere compatibile con Times (si veda il [Runbook operativo](../docs/runbook-operativo.md)).
+`tests/test_accuracy.py` fissa la quota minima di battute corrette per motore e di nomi delle parti letti, e il tempo massimo di 15 secondi per impaginare una parte di due pagine A4; si esegue solo con `TAURUS_OMR_ACCURACY_URL` e `TAURUS_OMR_ACCURACY_KEY`; la CI lo esegue sull'immagine appena costruita. Per aggiungere parti al corpus si modifica `accuracy/corpus.py` e si ridisegnano le pagine con `python -m accuracy render`, che richiede `requirements-accuracy.txt`, la libreria Cairo e un carattere compatibile con Times (si veda il [Runbook operativo](../docs/runbook-operativo.md)).
 
 ## Immagine
 
