@@ -39,6 +39,9 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.data.domain.PageRequest;
@@ -63,6 +66,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -81,6 +86,7 @@ import static org.assertj.core.api.Assertions.within;
 )
 class ScorePlaybackIT {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ScorePlaybackIT.class);
     private static final String EDIT_SESSION = "score-playback-it-editor";
 
     @MockitoBean
@@ -510,6 +516,92 @@ class ScorePlaybackIT {
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + schema() + ".score_recognition_review", Long.class)).isEqualTo(2);
     }
 
+    /**
+     * The target of the Riconoscimento page: the summary with 5,000 approved parts in 500 tracks, each with the version of
+     * an engine and the approved version descending from it, recognized over two years; 4,000 collected and 1,000 still to
+     * collect.
+     */
+    @Test
+    @Timeout(value = 10, unit = TimeUnit.MINUTES)
+    void summarizesFiveThousandApprovedPartsWithinTheTarget() {
+        ScoreVersionDTO template = transactionExecutor.execute(tenantCode, () -> versionService.upload(
+            catalog.completeTrack(), catalog.ownPart(), musicXml("tuba.musicxml", MusicXmlDocumentsTest.TWO_PARTS), "P1", false, archivist()
+        ));
+        transactionExecutor.execute(tenantCode, () -> {
+            cloneRows("track", catalog.completeTrack(), "CROSS JOIN generate_series(1, 500) g", Map.of("name", "'Carico ' || g"));
+            cloneRows(
+                "sheet_music",
+                catalog.ownPart(),
+                "CROSS JOIN generate_series(1, 10) g CROSS JOIN (SELECT id FROM track WHERE name LIKE 'Carico %') load",
+                Map.of("track_id", "load.id", "display_order", "g", "description", "'Parte ' || g")
+            );
+            String parts = "CROSS JOIN (SELECT id, row_number() OVER (ORDER BY id) AS n FROM sheet_music " +
+                "WHERE track_id IN (SELECT id FROM track WHERE name LIKE 'Carico %')) part";
+            cloneRows("score_version", template.id(), parts, Map.of(
+                "sheet_music_id", "part.id",
+                "version_number", "1",
+                "origin", "CASE WHEN part.n % 2 = 0 THEN 'OMR_AUDIVERIS' ELSE 'OMR_HOMR' END",
+                "insert_date", "now() - (part.n % 730) * interval '1 day'"
+            ));
+            cloneRows("score_version", template.id(), parts + " JOIN score_version engine ON engine.sheet_music_id = part.id", Map.of(
+                "sheet_music_id", "part.id",
+                "version_number", "2",
+                "origin", "'CORRECTION'",
+                "status", "'APPROVED'",
+                "parent_version_id", "engine.id",
+                "approved_by", "'archivist'",
+                "approved_at", "engine.insert_date + interval '1 day'"
+            ));
+            entityManager.createNativeQuery("""
+                INSERT INTO score_recognition_review (sheet_music_id, engine_version_id, approved_version_id, engine, recognized_at,
+                    approved_at, reference_measures, engine_measures, correct_measures, pitch_measures, rhythm_measures, tie_measures,
+                    missing_measures, extra_measures, reference_marks, found_marks, insert_date, insert_by, edit_date, edit_by)
+                SELECT engine.sheet_music_id, engine.id, approved.id, CASE engine.origin WHEN 'OMR_AUDIVERIS' THEN 'AUDIVERIS' ELSE 'HOMR' END,
+                       engine.insert_date, approved.approved_at, 60, 61, 50 - engine.id % 8, engine.id % 8, 3, 1, 6, 7, 4, 3,
+                       now(), 'load', now(), 'load'
+                  FROM score_version engine
+                  JOIN score_version approved ON approved.parent_version_id = engine.id
+                 WHERE engine.origin IN ('OMR_AUDIVERIS', 'OMR_HOMR') AND engine.id % 5 <> 0
+                """).executeUpdate();
+            for (String table : List.of("track", "sheet_music", "score_version", "score_recognition_review")) {
+                entityManager.createNativeQuery("ANALYZE " + table).executeUpdate();
+            }
+            return null;
+        });
+        long reviews = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM " + schema() + ".score_recognition_review", Long.class);
+        LocalDate yearAgo = LocalDate.now().minusYears(1);
+
+        for (int warmUp = 0; warmUp < 5; warmUp++) {
+            transactionExecutor.execute(tenantCode, () -> reviewService.report(null));
+            transactionExecutor.execute(tenantCode, () -> reviewService.pending(1));
+        }
+        List<Long> everything = new ArrayList<>();
+        List<Long> lastYear = new ArrayList<>();
+        List<Long> toCollect = new ArrayList<>();
+        for (int request = 0; request < 20; request++) {
+            everything.add(millis(() -> transactionExecutor.execute(tenantCode, () -> reviewService.report(null))));
+            lastYear.add(millis(() -> transactionExecutor.execute(tenantCode, () -> reviewService.report(yearAgo))));
+            toCollect.add(millis(() -> transactionExecutor.execute(tenantCode, () -> reviewService.pending(1))));
+        }
+        LOG.info(
+            "recognition_report_load reviews={} reportP95Ms={} lastYearP95Ms={} pendingP95Ms={}",
+            reviews,
+            percentile(everything, 95),
+            percentile(lastYear, 95),
+            percentile(toCollect, 95)
+        );
+
+        RecognitionReportDTO report = transactionExecutor.execute(tenantCode, () -> reviewService.report(null));
+        assertThat(report.engines()).extracting(engine -> engine.engine()).containsExactly(RecognitionEngine.AUDIVERIS, RecognitionEngine.HOMR);
+        assertThat(report.engines().stream().mapToLong(engine -> engine.counts().parts()).sum()).isEqualTo(reviews).isBetween(3_900L, 4_100L);
+        assertThat(report.months()).hasSizeGreaterThanOrEqualTo(2 * 24);
+        assertThat(report.parts()).hasSize(20);
+        assertThat(transactionExecutor.execute(tenantCode, () -> reviewService.pending(1)).total()).isEqualTo(5_000 - reviews);
+        assertThat(percentile(everything, 95)).as("p95 del riepilogo di tutto il periodo in millisecondi").isLessThan(500);
+        assertThat(percentile(lastYear, 95)).as("p95 del riepilogo dell'ultimo anno in millisecondi").isLessThan(500);
+        assertThat(percentile(toCollect, 95)).as("p95 del conteggio delle approvazioni da raccogliere in millisecondi").isLessThan(500);
+    }
+
     @Test
     void instrumentsCanBeFilteredByPlaybackConfiguration() {
         InstrumentsCriteria criteria = new InstrumentsCriteria();
@@ -680,6 +772,34 @@ class ScorePlaybackIT {
 
     private String schema() {
         return '"' + schemaNameResolver.resolve(tenantCode).replace("\"", "\"\"") + '"';
+    }
+
+    /**
+     * Copies the template row {@code t} of a table for every row of {@code from}, replacing the given columns: the other
+     * columns, read from the catalog, stay as the service wrote them.
+     */
+    @SuppressWarnings("unchecked")
+    private void cloneRows(String table, Long templateId, String from, Map<String, String> overrides) {
+        entityManager.flush();
+        List<String> columns = entityManager.createNativeQuery(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = :table AND column_name <> 'id' ORDER BY ordinal_position"
+        ).setParameter("table", table).getResultList();
+        String select = columns.stream().map(column -> overrides.getOrDefault(column, "t." + column)).collect(Collectors.joining(", "));
+        entityManager.createNativeQuery(
+            "INSERT INTO " + table + " (" + String.join(", ", columns) + ") SELECT " + select + " FROM " + table + " t " + from + " WHERE t.id = " + templateId
+        ).executeUpdate();
+    }
+
+    private static long millis(Runnable action) {
+        long startedAt = System.nanoTime();
+        action.run();
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
+
+    private static long percentile(List<Long> values, int percentile) {
+        List<Long> sorted = values.stream().sorted().toList();
+        int index = (int) Math.ceil(percentile / 100.0 * sorted.size()) - 1;
+        return sorted.get(Math.max(0, index));
     }
 
     private record Catalog(Long completeTrack, Long draftTrack, Long ownPart, Long otherPart, Long ownInstrument) {}
