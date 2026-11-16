@@ -365,16 +365,18 @@ Introduzioni, marce d'ordinanza, segnali e rulli di tamburo si scrivono una volt
 
 Le correzioni degli archivisti dicono dove sbagliano i motori. Taurus ne conserva i conteggi, non il contenuto, e li mostra a chi gestisce l'archivio.
 
-- **Raccolta**: all'approvazione di una versione di una parte che discende, risalendo le correzioni, da una versione di un motore (origine `OMR_AUDIVERIS` o `OMR_HOMR`), il browser confronta le due versioni con la regola del [confronto](#confronto-tra-versioni) e invia i conteggi.
-  - Ogni battuta della versione approvata cade in un solo tipo: corretta, con altezze diverse, con ritmo diverso, con sole legature di valore diverse, o persa dal motore; a parte si contano le battute in più del motore e i segni di struttura attesi e letti.
-  - Vale per **Approva** nel dialogo delle versioni e per **Salva e approva** nell'editor di correzione. La raccolta segue l'approvazione e, se non riesce, non la annulla.
-  - Per ogni versione del motore conta l'ultima approvazione.
-- **Approvazioni precedenti**: **Raccogli dalle approvazioni precedenti** confronta nel browser, una alla volta, le parti approvate prima della raccolta, con l'avanzamento e **Interrompi**.
-- **Pagina Riconoscimento**: nel menu, dopo Strumenti, per super amministratore, amministratore e archivista con l'ascolto attivo. Nel periodo scelto, gli ultimi 12 mesi o tutto, mostra:
-  - per ogni motore le parti approvate, la quota di battute corrette e quella dei segni di struttura letti, con l'andamento per mese, che mostra l'effetto di un aggiornamento dei motori;
-  - gli errori più frequenti, per tipo e per motore;
-  - le parti con più battute corrette dagli archivisti, con traccia, parte, motore e quota, e **Confronta**, che apre il confronto tra la versione del motore e quella approvata.
-- **Installazione**: le metriche sommano i conteggi di tutti i tenant, senza identificativi né contenuti. Chi gestisce l'installazione le legge con le altre metriche e scrive nel corpus di riferimento nuove parti che imitano gli errori frequenti, come oggi.
+- **Raccolta**: all'approvazione di una versione di una parte che discende, risalendo le versioni della stessa parte, da una versione di un motore (origine `OMR_AUDIVERIS` o `OMR_HOMR`), il browser confronta le due versioni con la regola del [confronto](#confronto-tra-versioni) e invia i conteggi. Conta il primo motore che si incontra risalendo.
+  - Ogni battuta della versione approvata cade in un solo tipo: corretta, con altezze diverse, con ritmo diverso, con sole legature di valore diverse, o persa dal motore; a parte si contano le battute in più del motore e i segni di struttura attesi e letti. Una battuta diversa solo nei segni di struttura è corretta.
+  - Il backend rifiuta conteggi incoerenti: corrette, diverse e perse fanno le battute della versione approvata; corrette, diverse e in più quelle del motore; i segni letti non superano quelli attesi.
+  - Una versione del motore approvata così com'è conta tutte le battute come corrette.
+  - Vale per **Approva** nel dialogo delle versioni e per **Salva e approva** negli editor di correzione e di scrittura. La raccolta segue l'approvazione: se non riesce non la annulla e non mostra errori, e la parte resta tra le approvazioni da raccogliere.
+  - Per ogni versione del motore conta l'ultima approvazione, che sostituisce i conteggi della precedente; una raccolta di un'approvazione più vecchia di quella contata non cambia nulla.
+- **Approvazioni precedenti**: la pagina Riconoscimento dice quante parti approvate non sono ancora contate, e **Raccogli dalle approvazioni precedenti** le confronta nel browser una alla volta, con l'avanzamento e **Interrompi**. Quelle che non si possono confrontare restano da raccogliere, e l'avviso finale le conta.
+- **Pagina Riconoscimento**: nel menu, dopo Strumenti, per chi gestisce il catalogo (super amministratore, amministratore, direttivo e archivista) con l'ascolto attivo. Il periodo, gli ultimi 12 mesi dal primo giorno del mese o tutto, vale per la data del riconoscimento. La pagina mostra:
+  - per ogni motore le parti approvate, la quota di battute corrette e quella dei segni di struttura letti, con l'andamento per mese del riconoscimento, nel fuso del tenant, che mostra l'effetto di un aggiornamento dei motori;
+  - gli errori più frequenti, per tipo e per motore, con la quota sulle battute della versione approvata; per le battute in più sulle battute del motore, per i segni su quelli attesi;
+  - le 20 parti con più battute corrette dagli archivisti, con traccia, parte, motore e quota, e **Confronta**, che apre il confronto tra la versione del motore e quella approvata. Una parte eliminata resta nei conteggi ed esce dall'elenco.
+- **Installazione**: le metriche sommano i conteggi di tutti i tenant alla prima raccolta di ogni versione del motore, senza identificativi né contenuti. Chi gestisce l'installazione le legge con le altre metriche e scrive nel corpus di riferimento nuove parti che imitano gli errori frequenti, come oggi.
 - **Contenuto**: nulla dello spartito esce dal tenant; si conservano solo i conteggi e i collegamenti alle due versioni.
 
 ## Interfaccia utente
@@ -552,12 +554,12 @@ Sotto `/api/tracks/{trackId}`, per super amministratore, amministratore e archiv
 
 `GET /api/instruments/playback-suggestion` aggiunge alla proposta l'estensione (`lowestWrittenPitch`, `highestWrittenPitch`), e lo strumento la salva con gli altri campi. L'organico si salva con `PUT /api/instruments/ensemble`, per chi gestisce gli strumenti: riceve l'elenco ordinato degli strumenti che ne fanno parte (`instrumentIds`) e quello letto (`previousInstrumentIds`), e risponde `version.conflict` (409) se nel frattempo l'organico è cambiato. `PUT` risponde con l'organico salvato, `instrument.ensemble.invalid` (400) per uno strumento inesistente, eliminato o ripetuto. `GET /api/instruments/ensemble`, per tutti gli utenti autenticati, restituisce gli strumenti dell'organico nel loro ordine (`id`, `name`, `ensemblePosition`, `family`), vuoto senza organico: lo usano l'anteprima e la stampa. `GET /api/instruments/ensemble/reference` restituisce tutti gli strumenti del tenant nell'ordine di riferimento, con la famiglia riconosciuta e la posizione attuale, senza salvarlo; gli strumenti espongono `ensemblePosition` in sola lettura.
 
-La qualità del riconoscimento sta sotto `/api/score-recognition`, per super amministratore, amministratore e archivista con `SCORE_PLAYBACK`:
+La qualità del riconoscimento sta sotto `/api/score-recognition`, per chi gestisce il catalogo (super amministratore, amministratore, direttivo e archivista) con `SCORE_PLAYBACK`:
 
 | Metodo e percorso | Descrizione |
 | --- | --- |
-| `GET /report?from=` | riepilogo per motore, tipo e mese dalla data indicata, e le parti con più battute corrette |
-| `GET /pending?limit=` | versioni approvate che discendono da una versione di un motore e non hanno ancora la raccolta, con traccia, parte e le due versioni |
+| `GET /report?from=` | riepilogo per motore, tipo e mese dalla data indicata (`yyyy-MM-dd`, nel fuso del tenant; senza data tutto), e le 20 parti con più battute corrette |
+| `GET /pending?limit=` | ultime approvazioni che discendono da una versione di un motore e non hanno ancora la raccolta, con traccia, parte e le due versioni, fino a `limit` (100 per default, al massimo 500), e il loro numero totale |
 
 I frammenti stanno sotto `/api/score-fragments`, per gli stessi ruoli con `SCORE_WRITING`:
 
@@ -579,7 +581,7 @@ Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOption
 
 - Scrittura, bozze, blocchi, estrazione e impaginazione sono riservati a super amministratore, amministratore e archivista, sui percorsi di gestione; utenti ed esterni continuano a vedere solo le versioni, con le regole di visibilità dell'ascolto.
 - Bozze e blocchi stanno nello schema del tenant; il blocco riporta il nome di chi scrive solo agli utenti dello stesso tenant.
-- Confronto e qualità del riconoscimento sono per super amministratore, amministratore e archivista con l'ascolto (`SCORE_PLAYBACK`), perché servono anche alla correzione; i frammenti per gli stessi ruoli con la scrittura. Frammenti e raccolte stanno nello schema del tenant, e le metriche dell'installazione non portano identificativi.
+- Confronto e qualità del riconoscimento sono per chi gestisce il catalogo, compreso il direttivo, con l'ascolto (`SCORE_PLAYBACK`), perché servono anche alla correzione; i frammenti per gli stessi ruoli con la scrittura. Frammenti e raccolte stanno nello schema del tenant, e le metriche dell'installazione non portano identificativi.
 - Le bozze di un utente cancellato restano finché il bersaglio esiste, perché il contenuto è musica dell'archivio e non un dato personale; il nome dell'autore nel blocco scompare alla scadenza.
 
 ## Osservabilità e sicurezza

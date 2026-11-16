@@ -986,6 +986,7 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scorePlayback.report.invalid` | 422 | Segnalazione senza descrizione, con una descrizione oltre 1000 caratteri o un numero di battuta oltre 16 caratteri | — | «Descrivere l'errore in al massimo 1000 caratteri» |
 | `scorePlayback.report.limitReached` | 409 | L'utente ha già il numero massimo di segnalazioni aperte sulla parte | `maxOpen` | «Hai già {maxOpen} segnalazioni aperte su questa parte: attendi che vengano esaminate» |
 | `scorePlayback.report.notFound` | 404 | Segnalazione inesistente o di un'altra traccia | — | «Segnalazione non trovata» |
+| `scorePlayback.recognitionReviewInvalid` | 400 | Raccolta della qualità del riconoscimento per una versione non approvata, per una versione di un motore che non è quella da cui discende la versione approvata, o con conteggi negativi o incoerenti tra loro | `reason`: `notApproved`, `notFromEngine`, `inconsistentCounts` | Nessuno: la raccolta segue l'approvazione o parte dalla pagina Riconoscimento, e non mostra errori |
 
 ### Scrittura musicale e blocco degli editor
 
