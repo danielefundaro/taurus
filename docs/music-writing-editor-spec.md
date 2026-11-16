@@ -597,7 +597,7 @@ Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOption
 | Misura | Obiettivo |
 | --- | --- |
 | Tasto → nota disegnata, parte di 300 battute | meno di 100 ms su un computer recente |
-| Tasto → nota disegnata, partitura di 30 parti e 150 battute | meno di 150 ms, con il disegno della sola pagina visibile |
+| Tasto → nota disegnata, partitura di 30 parti e 150 battute | meno di 150 ms con fino a 10 righi mostrati e di 0,3 s con 30, con il disegno della sola pagina visibile |
 | Apertura di una partitura di 30 parti | meno di 3 secondi |
 | Salvataggio di una bozza | non blocca la scrittura |
 | Impaginazione di una parte di due pagine | meno di 15 secondi |
@@ -621,6 +621,86 @@ Misure del 16/11/2026 nel browser (Chrome 157 senza interfaccia, sul computer di
 - La cronologia per battute registra un tasto della partitura di 30 righi in 6 ms; prima le due istantanee e la copia completa del documento ne richiedevano circa 0,45.
 - Con il processore rallentato quattro volte la partitura di 30 righi si apre in 14 s, oltre l'obiettivo di 3, e un tasto richiede 2,3 s contro i 66 del ridisegno intero: su computer lenti conviene scrivere con pochi righi mostrati.
 
+#### Misure della fase 6
+
+Dal 16/11/2026 le misure si ripetono con `npm run measure:writing` (vedi [Strategia di test](#strategia-di-test)). Le misure di quel giorno, con il codice della fase 5, sono la mediana di tre esecuzioni in Chrome 157 senza interfaccia, sul computer di sviluppo (Intel Core i7-1255U, con le altre applicazioni aperte). Tra parentesi c'è il processore rallentato quattro volte:
+
+| Misura | Parte di 300 battute | Partitura di 10 righi e 150 battute | Partitura di 30 righi e 150 battute |
+| --- | --- | --- | --- |
+| Apertura fino alla prima pagina | 0,26 s (1,3 s) | 0,37 s (9,6 s) | 1,0 s (26,5 s) |
+| di cui lettura del documento | 0,05 s (0,27 s) | 0,17 s (4,1 s) | 0,48 s (14,4 s) |
+| di cui cronologia | 0,01 s (0,04 s) | 0,05 s (1,0 s) | 0,15 s (3,0 s) |
+| di cui controlli | 0,03 s (0,12 s) | 0,07 s (2,0 s) | 0,19 s (4,9 s) |
+| di cui prima pagina | 0,17 s (0,80 s) | 0,09 s (1,5 s) | 0,18 s (3,9 s) |
+| Tasto → nota disegnata, mediana di 15 | 0,10 s (1,8 s) | 0,06 s (1,5 s) | 0,40 s (3,9 s) |
+| di cui disegno della pagina | 0,02 s (0,57 s) | 0,03 s (0,83 s) | 0,26 s (2,5 s) |
+| di cui inserimento della pagina | 0,01 s (0,24 s) | 0,02 s (0,24 s) | 0,07 s (0,65 s) |
+| Impaginazione completa nel Web Worker | 0,59 s (1,7 s), 12 pagine | 1,5 s (3,3 s), 31 pagine | 9,0 s (11,2 s), 31 pagine |
+
+Il confronto di due versioni di 300 battute, con note cambiate, una battuta tolta e una aggiunta, si comporta così:
+
+- **Calcolo**: richiede 0,19 s (1,2 s), quasi tutto per leggere le due versioni. Il confronto delle battute, da solo, sta sotto i 5 ms.
+- **Dialogo**: con i due disegni affiancati richiede 0,94 s (16,8 s).
+
+Nel backend `ScorePlaybackIT` misura la pagina Riconoscimento con 5.000 parti approvate in 500 tracce, di cui 4.000 raccolte. Sono valori p95 su Testcontainers:
+
+- il riepilogo di tutto il periodo richiede 59 ms;
+- quello dell'ultimo anno 54 ms;
+- il conteggio delle approvazioni da raccogliere 106 ms.
+
+L'impaginazione si misura nel servizio musicale ricostruito il 16/11/2026, con Verovio 6.4.1 e i limiti di `omr.yml` (4 CPU e 6 GB). La parte di flauto del corpus di accuratezza, con le battute ripetute fino a 100, va a `POST /v1/engravings` cinque volte; i tempi comprendono la richiesta:
+
+- **Due pagine A4**: 3,8 s di mediana, 6,0 s al massimo; la stessa lunghezza con il clarinetto richiede 3,7 s.
+- **Formato marcia**: la stessa parte occupa cinque pagine, in 3,6 s.
+- **Una pagina A4 piena**, di 40 battute: 1,7 s.
+
+L'obiettivo di 15 s è raggiunto con largo margine. Il job del backend aggiunge l'attesa in coda e il salvataggio delle pagine; in esercizio la durata del servizio è in `taurus_score_engraving_duration_seconds`.
+
+Rispetto agli obiettivi:
+
+- **Tasto con 30 righi**: 0,40 s, mentre l'obiettivo è 150 ms.
+- **Calcolo del confronto**: 0,19 s, mentre l'obiettivo è 0,1 s.
+- **Parte di 300 battute**: il tasto è al limite, con 0,10 s.
+
+Gli altri obiettivi sono raggiunti.
+
+I tempi con il processore rallentato variano molto con lo stato del computer. Lo stesso giorno l'apertura di 30 righi ha richiesto da 8,5 a 48 s in esecuzioni a un'ora di distanza. Valgono solo per confrontare misure fatte di seguito.
+
+#### Partitura grande nella fase 6
+
+Il secondo incremento della fase 6 ha ridotto questi tempi senza cambiare ciò che si vede:
+
+- **Lettura del documento**:
+  - l'editor toglie l'indentazione tra gli elementi prima di analizzare il MusicXML, perché i suoi nodi erano tanti quanti gli elementi;
+  - la lettura di figli e note scorre gli elementi fratelli invece di copiarli a ogni chiamata;
+  - il confronto analizza ogni versione una volta sola, non più una per le note e una per le armature.
+- **Cronologia**: anche la parte registra le battute cambiate, senza istantanee del documento. La cronologia legge il documento dopo la prima pagina, o prima della prima modifica se arriva prima. Il disegno per pagine della parte ridisegna così solo le pagine cambiate.
+- **Controlli**: quelli dei righi e dell'estensione si completano dopo la prima pagina, mentre quelli del rigo attivo restano immediati.
+- **Tasto**: la pagina ridisegnata conserva i sistemi del disegno precedente finché ha le stesse battute, quindi Verovio non ricalcola gli a capo. L'SVG senza indentazione pesa il 40% in meno da inserire e da conservare.
+
+La pagina provvisoria resta di `40 / righi` battute, almeno 4. Gli a capo scritti non le servono, perché il disegno completo non c'è ancora.
+
+Le misure del 16/11/2026 eseguono il codice prima e dopo l'incremento in esecuzioni alternate nello stesso momento, con la mediana di quattro esecuzioni per versione e di quindici tasti:
+
+| Misura | Prima | Dopo |
+| --- | --- | --- |
+| Parte di 300 battute: apertura | 0,20 s | 0,15 s |
+| Parte di 300 battute: tasto | 55 ms | 22 ms |
+| Partitura di 10 righi: apertura | 0,56 s | 0,20 s |
+| Partitura di 10 righi: tasto | 161 ms | 46 ms |
+| Partitura di 30 righi: apertura | 1,6 s | 0,75 s |
+| Partitura di 30 righi: tasto | 374 ms | 252 ms |
+| Confronto di 300 battute: calcolo | 179 ms | 85 ms |
+| Confronto di 300 battute: dialogo | 0,78 s | 0,67 s |
+
+Dopo la prima pagina, la cronologia e i controlli dei righi della partitura di 30 righi richiedono altri 0,16 s. Un tasto premuto prima li anticipa.
+
+Rispetto agli obiettivi:
+
+- **Tasto con 30 righi**: l'obiettivo diventa 0,3 s. Il nuovo disegno di un sistema di 30 righi richiede circa 0,17 s del solo Verovio, senza contare l'inserimento nella pagina. L'obiettivo di 150 ms vale fino a 10 righi mostrati: con più righi conviene nascondere quelli che non si scrivono.
+- **Apertura con il processore rallentato quattro volte**: l'obiettivo di 3 s non si verifica su questo computer, dove il rallentamento moltiplica i tempi delle partiture fino a 30 volte invece che per quattro, e in modo diverso da un'ora all'altra. Resta l'obiettivo di 3 s a velocità normale, raggiunto con 0,75 s.
+- **Altri obiettivi**: sono raggiunti, compreso il calcolo del confronto sotto 0,1 s.
+
 ## Strategia di test
 
 - **Unità (frontend)**: ogni operazione di scrittura su documenti minimi, come le specifiche di `score-edits`: inserimento al cursore, battute sempre complete, divisione e legatura alla stanghetta, voci, copia e incolla, trasposizione con accidenti e armatura, partitura e cronologia per battute; inserimento da MIDI con un dispositivo simulato (accordi entro e oltre la soglia, legato che non forma accordi, Note On con intensità 0, grafia, vista trasposta e suoni reali, percussioni con uno o più strumenti); copia nel browser conservata dopo un rifiuto e proposta alla riapertura; preparazione dell'MEI, opzioni, sezioni e numeri di pagina dell'impaginazione, dialogo con il job simulato, parti da impaginare nella scheda Ascolto, nel Workspace Parti, nell'anteprima e nel programma dell'evento, stampa della scaletta per strumento e nel formato marcia; intervallo e ottava della derivazione (dal clarinetto in Si♭ al sax contralto in Mi♭, chiave di basso, intervallo enarmonico, cambio di chiave), note fuori estensione nel dialogo e negli editor, MIDI scaricato senza metronomo né attacco; organico con ordine di riferimento e posizione di famiglia, anteprima e stampa ordinate con l'organico; partitura dall'organico e dalle parti, con battute e ritornelli diversi e parti di percussione con più strumenti; operazioni su tutti i righi, conversione tra suoni reali e trasposizione e ritorno, cronologia per battute, parti estratte con struttura, intestazione e trasposizione e stati dei righi, dialogo dell'estrazione, impaginazione di più parti ed etichette delle parti estratte e delle pagine da assegnare nella scheda Ascolto.
@@ -629,8 +709,26 @@ Misure del 16/11/2026 nel browser (Chrome 157 senza interfaccia, sul computer di
 - **Andata e ritorno**: scrivere, salvare, riaprire e scaricare produce lo stesso MusicXML, senza attributi di lavoro.
 - **Backend**: bozze con concorrenza ottimistica, eliminate al salvataggio di una versione e con la parte o la partitura, blocchi con rinnovo, scadenza e presa di controllo, organico con ordine di riferimento proposto e non salvato, salvato con il controllo dell'organico letto e ricompattato con gli strumenti eliminati, bozze e versioni scritte o corrette rifiutate senza il blocco, partitura una per traccia con bozza, blocco e versioni, estrazione dalla versione corrente verso parti con gli stessi strumenti o parti nuove, rifiutata per righi e parti ripetuti, parti bloccate e strumenti non configurati, con il collegamento dei righi e l'impaginazione assegnata alle parti senza pagine, derivazione con la bozza e la versione di origine, rifiutata per parti con più strumenti e di percussione, per versioni di altre parti e per strumenti inesistenti, versione di origine conservata dalla pulizia, estensione controllata e compilata dalla migrazione solo con la trasposizione del catalogo, job di impaginazione con il servizio simulato, parti da impaginare nel programma e nella criticità degli spartiti della preparazione degli eventi, autorizzazioni e isolamento tenant.
 - **Servizio musicale**: impaginazione su MusicXML noti, con conteggio delle pagine e confronto delle immagini entro una tolleranza; controllo che la versione di Verovio coincida con quella del frontend. I test che disegnano richiedono la libreria Cairo, installata dalla CI, che con `TAURUS_OMR_REQUIRE_CAIRO=true` li fa fallire invece di saltarli se manca; la pagina di riferimento si confronta a un quarto della dimensione, perché contino l'impaginazione e non le sfumature dei bordi.
-- **Prestazioni**: misure ripetibili del disegno su parti e partiture grandi.
-- **Manuale**: prove con archivisti su parti reali, tempo per scrivere una parte di una pagina, uso su tablet, tastiera MIDI reale su Chrome, Edge e Firefox.
+- **Prestazioni**: misure ripetibili su parti e partiture grandi con `npm run measure:writing` nel frontend. Lo strumento usa il codice dell'editor e il Chrome di Playwright, anche con il processore rallentato quattro volte, e stampa la tabella di [Prestazioni](#prestazioni). Misura:
+  - apertura, tasto e impaginazione nel Web Worker, sulla parte di 300 battute e sulle partiture di 10 e 30 righi;
+  - il confronto di due versioni di 300 battute, nel calcolo e nel dialogo.
+
+  Nel backend `ScorePlaybackIT` misura il riepilogo della pagina Riconoscimento con 5.000 parti approvate. Con il servizio musicale in esecuzione si misura l'impaginazione di una parte di due pagine.
+- **End to end**: `e2e/specs/score-writing.spec.ts`, sui profili desktop e tablet, su un'istanza completa con `SCORE_WRITING` attiva per il tenant di prova. Prova:
+  - una parte scritta da zero, con la tastiera e, sul tablet, con il pianoforte a schermo;
+  - il salvataggio e l'approvazione;
+  - la ripresa della bozza dopo la chiusura;
+  - la sola lettura per un secondo utente mentre il primo scrive.
+
+  La traccia di prova arriva da `E2E_SCORE_WRITING_TRACK_ID`, senza la quale le prove si saltano, come sotto 768 pixel. Ogni prova crea una parte `e2e-scrittura-…` e alla fine la rimuove dalla traccia; l'eliminazione è logica, quindi la base dati conserva la parte e le sue versioni.
+- **Manuale**: i casi `SCW` del runbook di test:
+  - prove con archivisti su parti reali, con il tempo per scrivere una parte di una pagina;
+  - uso su tablet;
+  - tastiera MIDI reale su Chrome, Edge e Firefox;
+  - MusicXML scaricato aperto in MuseScore;
+  - i criteri di accettazione che le prove automatiche non coprono.
+
+  Sono i casi da `SCW-001` a `SCW-013` del [Runbook di test](runbook-test.md#1417-scrittura-della-musica). Configurazione, segnali e procedure per l'esercizio sono nella sezione [Scrittura della musica](runbook-operativo.md#1410-scrittura-della-musica) del Runbook operativo.
 
 ## Criteri di accettazione
 
@@ -691,6 +789,7 @@ L'impaginazione viene subito dopo la scrittura perché una parte scritta, per es
 - La correzione cambia in un punto: l'editor prende il blocco della parte e il salvataggio lo richiede, anche con `SCORE_WRITING` disattivata. Due persone non correggono più la stessa parte insieme.
 - La stampa ordina le parti con l'organico solo quando il tenant l'ha definito; l'organico non si compila da solo con l'ordine di riferimento.
 - Le nuove origini di versione sono valori aggiuntivi: il frontend precedente mostra un'origine sconosciuta come «Altro» finché non viene aggiornato.
+- Dalla fase 6 l'editor salva il MusicXML senza indentazione, anche nella correzione: il contenuto musicale non cambia e i programmi di notazione lo leggono come prima.
 - Rollback: disattivare la funzionalità; partiture, bozze e versioni restano per una riattivazione.
 
 ## Decisioni della revisione
