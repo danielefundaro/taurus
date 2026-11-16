@@ -1,5 +1,4 @@
 import { parseMusicXml } from '../score-player/musicxml-score';
-import { EditHistory } from './edit-history';
 import { excerpt } from './excerpt';
 import { EditError, pitchOf, ScoreDocument } from './score-document';
 import * as edits from './score-edits';
@@ -298,19 +297,16 @@ describe('score editor', () => {
         expect(document.note(first).querySelector('notations')).toBeNull();
     });
 
-    it('restores the snapshots of the history', () => {
+    it('restores a snapshot with its ids, giving new ids after the restored ones', () => {
         const document = score();
-        const history = new EditHistory();
         const before = document.snapshot();
         edits.moveStep(document, ids(document)[0], 1);
-        history.record(before);
 
-        const undone = ScoreDocument.restore(history.undo(document.snapshot())!, PREFIX);
-        expect(pitch(undone, 0)).toBe('Bb4');
-        expect(history.canRedo).toBeTrue();
-        const redone = ScoreDocument.restore(history.redo(undone.snapshot())!, PREFIX);
-        expect(pitch(redone, 0)).toBe('C5');
-        expect(redone.newId('n')).not.toEqual(ids(redone)[ids(redone).length - 1]);
+        expect(pitch(ScoreDocument.restore(before, PREFIX), 0)).toBe('Bb4');
+        const restored = ScoreDocument.restore(document.snapshot(), PREFIX);
+        expect(pitch(restored, 0)).toBe('C5');
+        expect(ids(restored)).toEqual(ids(document));
+        expect(restored.newId('n')).not.toEqual(ids(restored)[ids(restored).length - 1]);
     });
 
     it('plays a passage straight, without repeats and jumps', () => {

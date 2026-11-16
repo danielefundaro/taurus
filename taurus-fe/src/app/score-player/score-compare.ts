@@ -6,7 +6,7 @@
  * battute allineate si confrontano i segni di struttura. I casi di `compare-cases.json`, copia di quelli del servizio
  * musicale, tengono uguali le due regole.
  */
-import { parseMusicXml, parseMusicXmlParts, ScoreMeasure, ScorePart } from './musicxml-score';
+import { parseMusicXml, parseMusicXmlParts, parseMusicXmlRoot, ScoreMeasure, ScorePart } from './musicxml-score';
 
 /** Suddivisioni della semiminima: esatte per terzine, quintine, settimine e figure fino alla semibiscroma. */
 const TICKS = 20160;
@@ -73,7 +73,8 @@ export type DifferenceCounts = Record<Exclude<DifferenceKind, 'marks'>, number>;
 
 /** Battute della parte indicata, come si ascoltano: le altezze con la trasposizione del suono, se c'è. */
 export function readMeasures(xml: string, partIndex = 0, sound: CompareSound = {}): CompareMeasure[] {
-    return compareMeasuresOf(parseMusicXml(xml, partIndex), keySignatures(xml)[partIndex] ?? [], sound);
+    const root = parseMusicXmlRoot(xml);
+    return compareMeasuresOf(parseMusicXml(root, partIndex), keySignatures(root)[partIndex] ?? [], sound);
 }
 
 /** Un rigo di una partitura, con le sue battute come si ascoltano. */
@@ -86,8 +87,9 @@ export interface CompareRow {
 
 /** Tutti i righi di una partitura, letti una volta sola, ognuno con il suono indicato per il suo `id`. */
 export function readRows(xml: string, sound: (id: string) => CompareSound = () => ({})): CompareRow[] {
-    const fifths = keySignatures(xml);
-    return parseMusicXmlParts(xml).map((part, index) => ({ id: part.id, name: part.name, measures: compareMeasuresOf(part, fifths[index] ?? [], sound(part.id)) }));
+    const root = parseMusicXmlRoot(xml);
+    const fifths = keySignatures(root);
+    return parseMusicXmlParts(root).map((part, index) => ({ id: part.id, name: part.name, measures: compareMeasuresOf(part, fifths[index] ?? [], sound(part.id)) }));
 }
 
 function compareMeasuresOf(part: ScorePart, fifths: readonly number[], sound: CompareSound): CompareMeasure[] {
@@ -226,8 +228,7 @@ function list(items: readonly string[]): string {
 }
 
 /** Armatura in vigore in ogni battuta, per ogni parte. */
-function keySignatures(xml: string): number[][] {
-    const root = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+function keySignatures(root: Element): number[][] {
     return Array.from(root.children)
         .filter((item) => item.tagName === 'part')
         .map((part) => {

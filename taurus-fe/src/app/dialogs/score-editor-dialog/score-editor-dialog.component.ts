@@ -22,7 +22,7 @@ import {
     ScoreEditorData,
     ScoreVersion
 } from '../../module';
-import { DocumentChange, DocumentHistory, MeasureHistory, SnapshotHistory } from '../../score-editor/edit-history';
+import { DocumentChange, DocumentHistory, MeasureHistory } from '../../score-editor/edit-history';
 import { excerpt } from '../../score-editor/excerpt';
 import { concertFifths, proposedClef, writtenFifths } from '../../score-editor/new-part';
 import * as arrangements from '../../score-editor/score-arrangement';
@@ -468,8 +468,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private versionXml: string | null = null;
 
     private score?: ScoreDocument;
-    private initialSnapshot = '';
-    private history: DocumentHistory = new SnapshotHistory();
+    /** Cronologia del documento aperto, per battute anche nella parte. */
+    private history: DocumentHistory | null = null;
     private readonly pageUrls = new Map<number, string>();
     private renderToken = 0;
     private renderFrame?: number;
@@ -571,15 +571,16 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         for (const url of this.pageUrls.values()) URL.revokeObjectURL(url);
         this.closePager();
         this.layoutClient?.terminate();
-        this.history.dispose();
+        this.history?.dispose();
+        this.history = null;
     }
 
     protected get canUndo(): boolean {
-        return this.history.canUndo && !this.readOnly;
+        return !!this.history?.canUndo && !this.readOnly;
     }
 
     protected get canRedo(): boolean {
-        return this.history.canRedo && !this.readOnly;
+        return !!this.history?.canRedo && !this.readOnly;
     }
 
     /** Un altro autore possiede il blocco, o non si è potuto prendere: si consulta senza modificare. */
@@ -1601,13 +1602,13 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     // Cronologia
 
     protected undo(): void {
-        if (!this.score || this.readOnly) return;
+        if (!this.score || !this.history || this.readOnly) return;
         const previous = this.history.undo(this.score);
         if (previous) this.restored(previous);
     }
 
     protected redo(): void {
-        if (!this.score || this.readOnly) return;
+        if (!this.score || !this.history || this.readOnly) return;
         const next = this.history.redo(this.score);
         if (next) this.restored(next);
     }
@@ -1979,20 +1980,22 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     /** Apre il contenuto nell'editor e lo disegna; nella partitura segna sui righi i loro strumenti. */
     private async open(xml: string, rows: readonly RowAssignment[] | null = null): Promise<void> {
-        this.score = edits.openScore(xml);
-        if (this.data.arrangement) arrangements.annotateRows(this.score, rows ?? []);
-        this.initialSnapshot = this.score.snapshot();
-        // La partitura registra le battute cambiate, una parte le istantanee del documento.
-        this.history.dispose();
-        this.history = this.data.arrangement ? new MeasureHistory(this.score) : new SnapshotHistory();
+        const score = edits.openScore(xml);
+        this.score = score;
+        if (this.data.arrangement) arrangements.annotateRows(score, rows ?? []);
+        // La cronologia registra le battute cambiate, senza copie del documento.
+        this.history?.dispose();
+        const history = new MeasureHistory(score, { deferred: true });
+        this.history = history;
         this.measureCache = {};
         // Il disegno per pagine riparte dal nuovo documento.
         this.closePager();
         this.dirty = false;
         this.checks = this.score.checks();
+        // Cronologia e controlli dei righi e dell'estensione si completano dopo la prima pagina, che così arriva prima.
+        this.rowCheckList = [];
+        this.rangeWarnings = [];
         this.refreshRows();
-        this.refreshRowChecks();
-        this.checkRange(this.score);
         this.selectedId = this.score.notes()[0]?.getAttribute('id') ?? null;
         this.emptyMeasureId = null;
         this.rangeEnd = null;
@@ -2004,6 +2007,23 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
         this.refreshSelection();
         await this.render();
+        this.afterFirstPage(score, history);
+    }
+
+    /**
+     * Dopo che la prima pagina è comparsa: la cronologia legge il documento e si controllano righi ed estensione, lavoro
+     * che in una partitura grande ritarderebbe la pagina. Una modifica arrivata prima trova già letto il documento.
+     */
+    private afterFirstPage(score: ScoreDocument, history: DocumentHistory): void {
+        requestAnimationFrame(() =>
+            setTimeout(() => {
+                if (this.score !== score || this.history !== history) return;
+                history.prepare();
+                this.refreshRowChecks();
+                this.checkRange(score);
+                this.changeDetector.markForCheck();
+            })
+        );
     }
 
     private failed(error: unknown): void {
@@ -2369,7 +2389,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
      */
     private apply(change: (score: ScoreDocument) => string | null | void, options: { merge?: boolean; keepPlayed?: boolean } = {}): boolean {
         if (!options.merge && !options.keepPlayed) this.played = null;
-        if (!this.score || this.saving) return false;
+        if (!this.score || !this.history || this.saving) return false;
         if (this.readOnly) {
             this.message = "L'editor è in sola lettura: prendi il controllo per modificare la parte";
             this.changeDetector.markForCheck();
@@ -2413,8 +2433,9 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.score = score;
         this.message = null;
         this.keeper?.changed();
-        this.noteDrawChange(this.history.lastChange);
-        this.afterChange(this.history.lastChange);
+        const change = this.history?.lastChange ?? null;
+        this.noteDrawChange(change);
+        this.afterChange(change);
     }
 
     /** Battute da ridisegnare nel disegno per pagine; con `null` tutte. */
@@ -2434,8 +2455,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private afterChange(change: DocumentChange | null = null): void {
         const score = this.score!;
         this.measureCache = {};
-        // La partitura confronta le battute registrate con quelle di apertura; la parte confronta le istantanee.
-        this.dirty = this.history.modified(score) ?? score.snapshot() !== this.initialSnapshot;
+        // Le battute registrate si confrontano con quelle di apertura.
+        this.dirty = this.history?.modified(score) ?? false;
         this.checks = score.checks();
         this.refreshRows();
         this.refreshRowChecks(change);
@@ -2580,7 +2601,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const created = !this.pager;
         if (!this.pager) {
             host.replaceChildren();
-            this.pager = new PagedNotation(host, { draw: (from, to) => this.drawExcerpt(from, to), positions: () => this.measurePositions(), drawn: () => this.pageDrawn() });
+            this.pager = new PagedNotation(host, { draw: (from, to, systems) => this.drawExcerpt(from, to, systems), positions: () => this.measurePositions(), drawn: () => this.pageDrawn() });
             // Prima dell'impaginazione completa le pagine sono gruppi di battute, all'incirca un sistema della partitura.
             this.pager.provisional(score.measures().length, Math.max(4, Math.round(40 / this.shownRowCount(score))), this.pageHeight(host));
         } else {
@@ -2605,13 +2626,14 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         }
     }
 
-    /** Estratto di una pagina, disegnato subito nel thread principale. */
-    private async drawExcerpt(from: number, to: number): Promise<string[]> {
+    /** Estratto di una pagina, disegnato subito nel thread principale; con `systems` tiene i sistemi del disegno precedente. */
+    private async drawExcerpt(from: number, to: number, systems: readonly number[] | null): Promise<string[]> {
         const score = this.score;
         const host = this.notationHost;
         if (!score || !host) return [];
+        const source = { ...this.drawingSource(), systems: systems ? new Set(systems) : undefined };
         try {
-            return await this.renderer.renderPrepared(drawingExcerpt(score, from, to, this.drawingSource()), host.clientWidth || 900, EDITOR_SCALE, this.drawingFlags());
+            return await this.renderer.renderPrepared(drawingExcerpt(score, from, to, source), host.clientWidth || 900, EDITOR_SCALE, { ...this.drawingFlags(), encodedSystems: !!systems });
         } catch (error) {
             this.message = DRAWING_ERROR;
             this.changeDetector.markForCheck();

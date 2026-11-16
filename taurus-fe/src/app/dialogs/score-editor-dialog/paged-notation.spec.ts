@@ -2,7 +2,11 @@ import { LayoutPage } from '../../score-editor/score-layout';
 import { PagedNotation } from './paged-notation';
 
 const svg = (ids: readonly string[]): string => `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">${ids.map((id) => `<g class="measure" id="${id}"></g>`).join('')}</svg>`;
-const page = (ids: string[]): LayoutPage => ({ svg: svg(ids), width: 1000, height: 500, measureIds: ids });
+const page = (ids: string[]): LayoutPage => ({ svg: svg(ids), width: 1000, height: 500, measureIds: ids, systemIds: [] });
+/** Pagina con i sistemi indicati, ognuno con le sue battute. */
+const systemsSvg = (rows: readonly string[][]): string =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">${rows.map((row) => `<g class="system">${row.map((id) => `<g class="measure" id="${id}"></g>`).join('')}</g>`).join('')}</svg>`;
+const systemsPage = (rows: string[][]): LayoutPage => ({ svg: systemsSvg(rows), width: 1000, height: 500, measureIds: rows.flat(), systemIds: rows.map((row) => row[0]) });
 const frame = (): Promise<unknown> => new Promise((resolve) => requestAnimationFrame(resolve));
 
 async function settle(frames = 8): Promise<void> {
@@ -15,12 +19,12 @@ describe('PagedNotation', () => {
     /** Battute del documento, nell'ordine, con gli `id` di un altro rigo. */
     let order: string[];
     let otherRow: Map<string, number>;
-    let draw: jasmine.Spy<(from: number, to: number) => Promise<string[]>>;
+    let draw: jasmine.Spy<(from: number, to: number, systems: readonly number[] | null) => Promise<string[]>>;
     let drawn: jasmine.Spy<() => void>;
     let pager: PagedNotation;
 
     const pageElement = (index: number): HTMLElement => container.children[index] as HTMLElement;
-    const drawnRanges = (): number[][] => draw.calls.allArgs().map((args) => [...args]);
+    const drawnRanges = (): number[][] => draw.calls.allArgs().map(([from, to]) => [from, to]);
 
     beforeEach(() => {
         pane = document.createElement('div');
@@ -77,6 +81,37 @@ describe('PagedNotation', () => {
         expect(draw).not.toHaveBeenCalled();
     });
 
+    it('keeps the systems of the drawing while the page has the same measures', async () => {
+        // Il nuovo disegno ha un sistema per battuta.
+        draw.and.callFake(async (from: number, to: number) => [systemsSvg(order.slice(from, to + 1).map((id) => [id]))]);
+        pager.layout([
+            systemsPage([
+                ['m0', 'm1'],
+                ['m2', 'm3']
+            ]),
+            systemsPage([['m4', 'm5']])
+        ]);
+
+        pager.invalidate(new Set(['m1']));
+        await pager.refresh(1);
+        expect(draw).toHaveBeenCalledWith(0, 3, [0, 2]);
+
+        // La pagina ricorda i sistemi del nuovo disegno.
+        pager.invalidate(new Set(['m2']));
+        await pager.refresh(2);
+        expect(draw).toHaveBeenCalledWith(0, 3, [0, 1, 2, 3]);
+
+        // Con una battuta nuova nella pagina, o senza la battuta che apre un sistema, Verovio va a capo dove serve.
+        order.splice(2, 0, 'x');
+        pager.invalidate(new Set(['x']));
+        await pager.refresh(2);
+        expect(draw).toHaveBeenCalledWith(0, 4, null);
+        order.splice(order.indexOf('m4'), 1);
+        pager.invalidate(new Set(['m4']));
+        await pager.refresh(5);
+        expect(draw).toHaveBeenCalledWith(5, 5, null);
+    });
+
     it('redraws only the changed pages, also for measures of another row or new measures', async () => {
         pager.layout(Array.from({ length: 6 }, (_, index) => page([`m${2 * index}`, `m${2 * index + 1}`])));
         // Un'altra riga della partitura ha le sue battute: Verovio disegna l'`id` di una sola.
@@ -100,7 +135,7 @@ describe('PagedNotation', () => {
         order.push('last');
         pager.invalidate(new Set(['last']));
         await pager.refresh(order.length - 1);
-        expect(draw.calls.mostRecent().args).toEqual([11, 41]);
+        expect(draw.calls.mostRecent().args).toEqual([11, 41, null]);
     });
 
     it('draws a stale page when asked, telling when it is ready', async () => {

@@ -1057,7 +1057,7 @@ describe('ScoreEditorDialogComponent', () => {
                 const pages: LayoutPage[] = [];
                 for (let from = 0; from < ids.length; from += 10) {
                     const measureIds = ids.slice(from, from + 10);
-                    pages.push({ svg: `<svg>${measureIds.map((id) => `<g class="measure" id="${id}"></g>`).join('')}</svg>`, width: 1000, height: 500, measureIds });
+                    pages.push({ svg: `<svg>${measureIds.map((id) => `<g class="measure" id="${id}"></g>`).join('')}</svg>`, width: 1000, height: 500, measureIds, systemIds: [] });
                 }
                 return pages;
             };

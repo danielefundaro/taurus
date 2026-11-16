@@ -446,8 +446,15 @@ function applyAttributes(state: MusicalState, attributes: Element): MusicalState
     return next;
 }
 
+/** Spazi di indentazione tra due elementi: vanno sempre a capo, a differenza dei testi fatti di soli spazi. */
+const INDENTATION = />\s*\n\s*</g;
+
+/**
+ * Il documento del MusicXML, senza l'indentazione tra gli elementi: in una partitura grande i suoi nodi sono quanti gli
+ * elementi e rallentano lettura, disegno e cronologia. Il MusicXML salvato resta lo stesso, senza indentazione.
+ */
 function parse(xml: string): Document {
-    const document = new DOMParser().parseFromString(xml, 'application/xml');
+    const document = new DOMParser().parseFromString(xml.replace(INDENTATION, '><'), 'application/xml');
     if (document.getElementsByTagName('parsererror').length) throw new EditError('Il MusicXML della versione non è leggibile');
     if (document.documentElement.tagName !== 'score-partwise') throw new EditError('Il MusicXML della versione non è una partitura per parti');
     return document;

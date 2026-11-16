@@ -1,44 +1,6 @@
 import { children } from './musicxml-dom';
 import { ScoreDocument } from './score-document';
 
-/** Cronologia delle modifiche della sessione di correzione, come istantanee del documento. */
-export class EditHistory {
-    private readonly undoStack: string[] = [];
-    private readonly redoStack: string[] = [];
-
-    constructor(private readonly limit = 100) {}
-
-    get canUndo(): boolean {
-        return this.undoStack.length > 0;
-    }
-
-    get canRedo(): boolean {
-        return this.redoStack.length > 0;
-    }
-
-    /** Registra lo stato precedente a una modifica; una nuova modifica annulla la possibilità di ripristinare. */
-    record(before: string): void {
-        this.undoStack.push(before);
-        if (this.undoStack.length > this.limit) this.undoStack.shift();
-        this.redoStack.length = 0;
-    }
-
-    /** Stato da ripristinare annullando l'ultima modifica, oppure `null`. */
-    undo(current: string): string | null {
-        const previous = this.undoStack.pop();
-        if (previous === undefined) return null;
-        this.redoStack.push(current);
-        return previous;
-    }
-
-    redo(current: string): string | null {
-        const next = this.redoStack.pop();
-        if (next === undefined) return null;
-        this.undoStack.push(current);
-        return next;
-    }
-}
-
 /** Righi e battute toccati da una modifica, per ridisegnare e ricontrollare solo quelli. */
 export interface DocumentChange {
     /** Posizioni dei righi cambiati. */
@@ -50,7 +12,7 @@ export interface DocumentChange {
 /** L'istantanea del documento prima di una modifica, o la funzione che la ricava solo se serve. */
 export type Before = string | (() => string);
 
-/** Cronologia di Annulla e Ripristina dell'editor: per una parte le istantanee, per la partitura le battute cambiate. */
+/** Cronologia di Annulla e Ripristina dell'editor. */
 export interface DocumentHistory {
     readonly canUndo: boolean;
     readonly canRedo: boolean;
@@ -66,55 +28,12 @@ export interface DocumentHistory {
     /** Annulla l'ultima modifica: il documento da usare, lo stesso o uno ricostruito; `null` se non c'è nulla da annullare. */
     undo(score: ScoreDocument): ScoreDocument | null;
     redo(score: ScoreDocument): ScoreDocument | null;
-    /** Il documento è cambiato da quando è stato aperto; `null` se lo dice solo il confronto delle istantanee. */
-    modified(score: ScoreDocument): boolean | null;
+    /** Il documento è cambiato da quando è stato aperto. */
+    modified(score: ScoreDocument): boolean;
+    /** Legge il documento aperto, se non l'ha ancora fatto: dopo la prima pagina, perché l'apertura non lo attenda. */
+    prepare(): void;
     /** Smette di seguire il documento. */
     dispose(): void;
-}
-
-/** Istantanee del documento intero, per la parte singola. */
-export class SnapshotHistory implements DocumentHistory {
-    private readonly history: EditHistory;
-    readonly lastChange = null;
-
-    constructor(limit = 100) {
-        this.history = new EditHistory(limit);
-    }
-
-    get canUndo(): boolean {
-        return this.history.canUndo;
-    }
-
-    get canRedo(): boolean {
-        return this.history.canRedo;
-    }
-
-    checkpoint(score: ScoreDocument): () => string {
-        const snapshot = score.snapshot();
-        return () => snapshot;
-    }
-
-    record(_score: ScoreDocument, before: Before, merge: boolean): void {
-        if (!merge || !this.history.canUndo) this.history.record(typeof before === 'string' ? before : before());
-    }
-
-    undo(score: ScoreDocument): ScoreDocument | null {
-        const previous = this.history.undo(score.snapshot());
-        return previous === null ? null : ScoreDocument.restore(previous, score.prefix, score.partIndex);
-    }
-
-    redo(score: ScoreDocument): ScoreDocument | null {
-        const next = this.history.redo(score.snapshot());
-        return next === null ? null : ScoreDocument.restore(next, score.prefix, score.partIndex);
-    }
-
-    modified(): null {
-        return null;
-    }
-
-    dispose(): void {
-        // Le istantanee non seguono il documento.
-    }
 }
 
 /** Battute di un rigo prima e dopo una modifica, per `id`. */
@@ -152,31 +71,35 @@ interface DocumentLayout {
 const NO_CHANGE: DocumentChange = { rows: new Set(), measures: new Set() };
 
 /**
- * Cronologia della partitura: ogni modifica registra le battute cambiate di tutti i righi, prima e dopo, invece di una
- * copia del documento, che in una partitura grande pesa diversi megabyte. Le modifiche che cambiano i righi o
+ * Cronologia della parte e della partitura: ogni modifica registra le battute cambiate di tutti i righi, prima e dopo,
+ * invece di una copia del documento, che in una partitura grande pesa diversi megabyte. Le modifiche che cambiano i righi o
  * l'intestazione, come aggiungere un rigo o convertire la notazione, registrano il documento intero.
  *
  * Un `MutationObserver` segue il documento: a ogni modifica si serializzano solo le battute toccate, e il documento di
  * prima si ricompone dai pezzi solo quando serve.
+ *
+ * Con `deferred` il documento aperto si legge con `prepare`, per esempio dopo la prima pagina, o alla prima operazione:
+ * chi lo modifica chiede prima `checkpoint`, come l'editor, perché la lettura deve precedere la prima modifica.
  */
 export class MeasureHistory implements DocumentHistory {
     private readonly undoStack: HistoryEntry[] = [];
     private readonly redoStack: HistoryEntry[] = [];
-    private state: HistoryState;
-    private readonly initial: HistoryState;
+    private state!: HistoryState;
+    private initial!: HistoryState;
+    /** Il documento aperto, finché non è letto. */
+    private opened: ScoreDocument | null;
     private readonly observer: MutationObserver | null;
+    private readonly limit: number;
     private watched: Document | null = null;
     private pending: MutationRecord[] = [];
     private change: DocumentChange | null = NO_CHANGE;
 
-    constructor(
-        score: ScoreDocument,
-        private readonly limit = 100
-    ) {
+    constructor(score: ScoreDocument, options: { limit?: number; deferred?: boolean } = {}) {
+        this.limit = options.limit ?? 100;
         this.observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => this.pending.push(...records));
         this.watch(score.document);
-        this.state = capture(score);
-        this.initial = this.state;
+        this.opened = score;
+        if (!options.deferred) this.prepare();
     }
 
     get canUndo(): boolean {
@@ -191,7 +114,18 @@ export class MeasureHistory implements DocumentHistory {
         return this.change;
     }
 
+    prepare(): void {
+        if (!this.opened) return;
+        this.state = capture(this.opened);
+        this.initial = this.state;
+        this.opened = null;
+        // Lo stato appena letto comprende già le modifiche osservate fin qui.
+        this.observer?.takeRecords();
+        this.pending = [];
+    }
+
     checkpoint(score: ScoreDocument): () => string {
+        this.prepare();
         if (!this.following(score) || !this.state.stable) {
             const snapshot = score.snapshot();
             return () => snapshot;
@@ -202,6 +136,7 @@ export class MeasureHistory implements DocumentHistory {
     }
 
     record(score: ScoreDocument, before: Before, merge: boolean): void {
+        this.prepare();
         const next = this.refresh(score);
         const entry = difference(this.state, next, typeof before === 'string' ? () => before : before, () => score.snapshot());
         this.state = next;
@@ -215,6 +150,7 @@ export class MeasureHistory implements DocumentHistory {
     }
 
     undo(score: ScoreDocument): ScoreDocument | null {
+        this.prepare();
         const entry = this.undoStack.pop();
         if (!entry) return null;
         const result = apply(score, entry, 'before');
@@ -225,6 +161,7 @@ export class MeasureHistory implements DocumentHistory {
     }
 
     redo(score: ScoreDocument): ScoreDocument | null {
+        this.prepare();
         const entry = this.redoStack.pop();
         if (!entry) return null;
         const result = apply(score, entry, 'after');
@@ -234,9 +171,10 @@ export class MeasureHistory implements DocumentHistory {
         return result;
     }
 
-    modified(score: ScoreDocument): boolean | null {
-        if (!this.following(score)) return null;
-        return !sameState(this.state, this.initial);
+    /** Con modifiche non ancora registrate, o con un altro documento, lo stato si legge di nuovo dal documento. */
+    modified(score: ScoreDocument): boolean {
+        this.prepare();
+        return !sameState(this.following(score) ? this.state : capture(score), this.initial);
     }
 
     dispose(): void {

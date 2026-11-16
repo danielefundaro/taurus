@@ -53,7 +53,13 @@ describe('score layout', () => {
         const svg = '<svg><g class="measure" id="a"/><g class="measure-number" id="n"/><g id="b" data-n="2" class="measure is-wrong"><g class="note" id="c"/></g></svg>';
 
         expect(pageMeasureIds(svg)).toEqual(['a', 'b']);
-        expect(layoutPage(svg)).toEqual({ svg, width: 0, height: 0, measureIds: ['a', 'b'] });
+        expect(layoutPage(svg)).toEqual({ svg, width: 0, height: 0, measureIds: ['a', 'b'], systemIds: [] });
         expect(layoutPage('<svg viewBox="0,0, 640.5 , 300"/>').width).toBe(640.5);
+    });
+
+    it('reads the measures that open a system, the first one of every system', () => {
+        const svg = '<svg><g class="system" id="s1"><g class="label"/><g class="measure" id="a"/><g class="measure" id="b"/></g><g id="s2" class="system"><g class="measure" id="c"/></g></svg>';
+
+        expect(layoutPage(svg)).toEqual(jasmine.objectContaining({ measureIds: ['a', 'b', 'c'], systemIds: ['a', 'c'] }));
     });
 });

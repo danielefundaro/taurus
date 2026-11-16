@@ -83,6 +83,23 @@ describe('score pages', () => {
         expect(names(drawing)).toEqual(['', '']);
     });
 
+    it('opens a system where asked, only on the first row shown and with the layout the measure already has', () => {
+        const drawing = parse(drawingExcerpt(score, 0, 2, { hidden: new Set(['P1']), systems: new Set([0, 2]) }));
+
+        const measures = Array.from(drawing.querySelectorAll('part[id="P2"] > measure'));
+        expect(tags(measures[0])).toEqual(['print', 'attributes', 'note']);
+        expect(measures[0].querySelector('print')?.getAttribute('new-system')).toBe('yes');
+        expect(measures[1].querySelector('print')).toBeNull();
+        // L'interruzione di pagina della battuta diventa l'interruzione di riga, senza un secondo `print`.
+        expect(measures[2].querySelectorAll('print').length).toBe(1);
+        expect(measures[2].querySelector('print')?.getAttribute('new-system')).toBe('yes');
+        expect(measures[2].querySelector('print')?.hasAttribute('new-page')).toBeFalse();
+
+        const both = parse(drawingExcerpt(score, 0, 1, { systems: new Set([1]) }));
+        expect(both.querySelector('part[id="P1"] > measure:nth-of-type(2) > print')?.getAttribute('new-system')).toBe('yes');
+        expect(both.querySelector('part[id="P2"] > measure:nth-of-type(2) > print')).toBeNull();
+    });
+
     it('adds nothing at the start of the score', () => {
         const drawing = parse(drawingExcerpt(score, -3, 0));
 

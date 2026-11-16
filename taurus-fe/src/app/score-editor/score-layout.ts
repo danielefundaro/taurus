@@ -19,12 +19,16 @@ export interface LayoutRequest {
     data: string;
 }
 
-/** Pagina disegnata: l'SVG, la sua dimensione in pixel e gli `id` delle battute disegnate, nell'ordine. */
+/**
+ * Pagina disegnata: l'SVG, la sua dimensione in pixel, gli `id` delle battute disegnate, nell'ordine, e quelli delle
+ * battute che aprono un sistema.
+ */
 export interface LayoutPage {
     svg: string;
     width: number;
     height: number;
     measureIds: string[];
+    systemIds: string[];
 }
 
 export type LayoutResponse = { id: number; pages: LayoutPage[] } | { id: number; error: true };
@@ -38,19 +42,33 @@ export function layoutPages(toolkit: LayoutToolkit, request: LayoutRequest): Lay
     return { id: request.id, pages };
 }
 
-/** La pagina con la dimensione del suo `viewBox` e gli `id` delle battute che contiene. */
+/** La pagina con la dimensione del suo `viewBox`, gli `id` delle battute che contiene e di quelle che aprono i sistemi. */
 export function layoutPage(svg: string): LayoutPage {
     const box = /\bviewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)\s*"/.exec(svg);
-    return { svg, width: box ? Number(box[1]) : 0, height: box ? Number(box[2]) : 0, measureIds: pageMeasureIds(svg) };
+    return { svg, width: box ? Number(box[1]) : 0, height: box ? Number(box[2]) : 0, ...pageMeasures(svg) };
 }
 
 /** `id` delle battute disegnate, nell'ordine: Verovio scrive un gruppo `class="measure"` per battuta e sistema. */
 export function pageMeasureIds(svg: string): string[] {
-    const ids: string[] = [];
+    return pageMeasures(svg).measureIds;
+}
+
+/** `id` delle battute disegnate e di quelle che aprono un sistema, la prima di ogni gruppo `class="system"`. */
+function pageMeasures(svg: string): { measureIds: string[]; systemIds: string[] } {
+    const measureIds: string[] = [];
+    const systemIds: string[] = [];
+    let opening = false;
     for (const [tag] of svg.matchAll(/<g\b[^>]*>/g)) {
+        if (/\bclass="system[\s"]/.test(tag)) {
+            opening = true;
+            continue;
+        }
         if (!/\bclass="measure[\s"]/.test(tag)) continue;
         const id = /\bid="([^"]+)"/.exec(tag)?.[1];
-        if (id) ids.push(id);
+        if (!id) continue;
+        measureIds.push(id);
+        if (opening) systemIds.push(id);
+        opening = false;
     }
-    return ids;
+    return { measureIds, systemIds };
 }

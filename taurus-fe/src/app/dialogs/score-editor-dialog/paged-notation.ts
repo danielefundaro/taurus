@@ -2,8 +2,11 @@ import { LayoutPage } from '../../score-editor/score-layout';
 
 /** Ciò che serve alle pagine dall'editor. */
 export interface PagedNotationSource {
-    /** Le battute da `from` a `to`, comprese, disegnate con un estratto: le pagine SVG. */
-    draw(from: number, to: number): Promise<string[]>;
+    /**
+     * Le battute da `from` a `to`, comprese, disegnate con un estratto: le pagine SVG. Con `systems`, le posizioni delle
+     * battute che aprono un sistema, l'estratto va a capo solo lì.
+     */
+    draw(from: number, to: number, systems: readonly number[] | null): Promise<string[]>;
     /** Posizione corrente di ogni battuta, per `id`. */
     positions(): Map<string, number>;
     /** Una pagina è stata disegnata o inserita: l'editor rimette selezione, evidenziazioni e cursore. */
@@ -16,6 +19,8 @@ interface NotationPage {
     svg: string | null;
     /** `id` delle battute disegnate nella pagina, nell'ordine. */
     measureIds: string[];
+    /** `id` delle battute che aprono i sistemi della pagina. */
+    systemIds: string[];
     /** Battute di una pagina provvisoria, prima del disegno completo. */
     range: [number, number] | null;
     /** Il disegno non corrisponde più al documento e va rifatto con un estratto. */
@@ -29,6 +34,7 @@ interface NotationPage {
 interface PageEntry {
     svg: string | null;
     measureIds: string[];
+    systemIds: string[];
     range: [number, number] | null;
     stale: boolean;
     height: number;
@@ -60,14 +66,14 @@ export class PagedNotation {
     /** Pagine provvisorie di `size` battute, alte `height` pixel finché non si disegnano, prima del disegno completo. */
     provisional(measureCount: number, size: number, height: number): void {
         const entries: PageEntry[] = [];
-        for (let from = 0; from < measureCount; from += size) entries.push({ svg: null, measureIds: [], range: [from, Math.min(measureCount, from + size) - 1], stale: true, height });
+        for (let from = 0; from < measureCount; from += size) entries.push({ svg: null, measureIds: [], systemIds: [], range: [from, Math.min(measureCount, from + size) - 1], stale: true, height });
         this.replace(entries);
     }
 
     /** Il disegno completo, con le pagine alla larghezza del contenitore. */
     layout(pages: readonly LayoutPage[]): void {
         const width = this.container.clientWidth;
-        this.replace(pages.map((page) => ({ svg: page.svg, measureIds: page.measureIds, range: null, stale: false, height: width && page.width ? (page.height * width) / page.width : page.height })));
+        this.replace(pages.map((page) => ({ svg: page.svg, measureIds: page.measureIds, systemIds: page.systemIds, range: null, stale: false, height: width && page.width ? (page.height * width) / page.width : page.height })));
     }
 
     /**
@@ -140,7 +146,7 @@ export class PagedNotation {
             const element = elements[index];
             element.className = 'score-editor__page';
             element.style.height = `${Math.max(1, Math.round(entry.height))}px`;
-            return { element, svg: entry.svg, measureIds: entry.measureIds, range: entry.range, stale: entry.stale, failed: false, shown: false };
+            return { element, svg: entry.svg, measureIds: entry.measureIds, systemIds: entry.systemIds, range: entry.range, stale: entry.stale, failed: false, shown: false };
         });
         this.container.replaceChildren(...elements);
         if (pane) pane.scrollTop = scrollTop;
@@ -183,13 +189,36 @@ export class PagedNotation {
         return target;
     }
 
+    /**
+     * Posizioni delle battute che aprono i sistemi della pagina, se ha ancora tutte e sole le battute del suo disegno: il
+     * nuovo disegno tiene gli stessi sistemi, che Verovio non deve ricalcolare. Con battute aggiunte, o tolte all'inizio di
+     * un sistema, `null`: l'estratto va a capo dove serve.
+     */
+    private systemStarts(page: NotationPage, range: [number, number]): number[] | null {
+        if (!page.systemIds.length) return null;
+        const positions = this.source.positions();
+        const drawn = new Set<number>();
+        for (const id of page.measureIds) {
+            const position = positions.get(id);
+            if (position !== undefined) drawn.add(position);
+        }
+        if (drawn.size !== range[1] - range[0] + 1) return null;
+        const starts: number[] = [];
+        for (const id of page.systemIds) {
+            const position = positions.get(id);
+            if (position === undefined) return null;
+            starts.push(position);
+        }
+        return starts;
+    }
+
     private async redraw(index: number, range: [number, number] | null): Promise<void> {
         const page = this.pages[index];
         page.stale = false;
         let svgs: string[] = [];
         if (range) {
             try {
-                svgs = await this.source.draw(range[0], range[1]);
+                svgs = await this.source.draw(range[0], range[1], this.systemStarts(page, range));
             } catch {
                 // L'estratto non si disegna: la pagina resta da rifare, dopo la prossima modifica o con il disegno completo.
                 page.stale = true;
@@ -204,6 +233,7 @@ export class PagedNotation {
         page.element.style.height = '';
         page.svg = null;
         page.measureIds = Array.from(page.element.querySelectorAll('g.measure'), (measure) => measure.getAttribute('id') ?? '').filter((id) => id);
+        page.systemIds = Array.from(page.element.querySelectorAll('g.system'), (system) => system.querySelector('g.measure')?.getAttribute('id') ?? '').filter((id) => id);
         page.range = page.measureIds.length ? null : range;
         page.shown = true;
         this.source.drawn();
