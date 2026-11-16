@@ -5,6 +5,7 @@ import { openEngraveDialog } from '../../../../dialogs/engrave-dialog/engrave-di
 import { ExtractedPartToEngrave, ExtractPartsDialogComponent, ExtractPartsDialogData, ExtractPartsDialogResult } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent, NewArrangementDialogData, NewArrangementDialogResult } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
 import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { editLockMessage } from '../../../../constants';
 import { ImportsModule } from '../../../../imports';
 import { Arrangement, ArrangementRowStatus, ArrangementVersion, DraftSummary, EditLock, TrackPlayback } from '../../../../module';
@@ -231,6 +232,43 @@ export class ScoreArrangementPanelComponent implements OnChanges {
             .pipe(first())
             // Le pagine assegnate da sole cambiano la traccia: la pagina la rilegge.
             .subscribe(() => this.partsChange.emit());
+    }
+
+    /** Ascolta la versione corrente: tutti i righi insieme, ognuno con il suono del suo strumento, con il mixer. */
+    protected async listen(): Promise<void> {
+        const arrangement = this.arrangement;
+        const version = arrangement?.currentVersion;
+        if (!arrangement || !version || this.opening) return;
+        this.opening = true;
+        this.changeDetector.markForCheck();
+        let playback: TrackPlayback;
+        try {
+            // Dalla traccia vengono il titolo e il tempo dell'ascolto.
+            playback = await firstValueFrom(this.playbackService.playback(this.trackId));
+        } catch {
+            this.toastService.error('Ascolto non disponibile', 'La traccia non si può leggere: riprovare più tardi.');
+            return;
+        } finally {
+            this.opening = false;
+            this.changeDetector.markForCheck();
+        }
+        const data: ScorePlayerDialogData = {
+            trackId: this.trackId,
+            playback,
+            mode: 'arrangement',
+            arrangement: { versionId: version.id, rows: arrangement.rows.map((row) => ({ id: row.id, name: row.name, instruments: row.instruments })) }
+        };
+        this.dialogService.open(ScorePlayerDialogComponent, {
+            header: `Partitura · versione ${version.versionNumber}${playback.trackName ? ` · ${playback.trackName}` : ''}`,
+            width: '96vw',
+            height: '94vh',
+            modal: true,
+            closable: true,
+            maximizable: false,
+            focusOnShow: false,
+            data,
+            contentStyle: { padding: '0', overflow: 'hidden', height: 'calc(94vh - 60px)' }
+        });
     }
 
     /** Mostra o nasconde le versioni della partitura. */

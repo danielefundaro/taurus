@@ -1,12 +1,22 @@
 import { TestBed } from '@angular/core/testing';
 import { DynamicDialogConfig } from 'primeng/dynamicdialog';
 import { of, throwError } from 'rxjs';
-import { PartPlayback, TrackPlayback } from '../../module';
-import { ScoreAudioService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
+import { ArrangementRow, PartPlayback, TrackPlayback } from '../../module';
+import { ArrangementService, ScoreAudioService, ScorePlaybackService, ScoreRendererService, ToastService } from '../../service';
 import { musicXml, readMidi } from '../../score-player/score-player.testing';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from './score-player-dialog.component';
 
 const XML = musicXml(['<attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>']);
+
+/** Partitura trasposta di due righi: clarinetto in Si♭ e tuba. */
+const SCORE = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Clarinetto</part-name></score-part><score-part id="P2"><part-name>Tuba</part-name></score-part></part-list>
+<part id="P1"><measure number="1"><attributes><divisions>1</divisions><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><note><pitch><step>D</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice></note></measure></part>
+<part id="P2"><measure number="1"><attributes><divisions>1</divisions><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes><note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>1</voice></note></measure></part></score-partwise>`;
+const ROWS: ArrangementRow[] = [
+    { id: 'P1', name: 'Clarinetto', instruments: [{ id: 10, name: 'Clarinetto', transpositionSemitones: -2, soundProgram: 71, configured: true }] },
+    { id: 'P2', name: 'Tuba', instruments: [{ id: 11, name: 'Tuba', transpositionSemitones: 0, soundProgram: 58, configured: true }] }
+];
+const partNames = (xml: string): string[] => Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('part-name'), (name) => name.textContent ?? '');
 
 function part(scoreId: number, overrides: Partial<PartPlayback> = {}): PartPlayback {
     return {
@@ -103,6 +113,32 @@ describe('ScorePlayerDialogComponent', () => {
         expect(toast.success).toHaveBeenCalledWith('Segnalazione inviata', jasmine.any(String));
     });
 
+    it('plays every row of a score with the sound of its instrument, showing one row at a time', async () => {
+        const { component, playbackService, arrangementService, renderer, audio } = setup('arrangement', []);
+        arrangementService.content.and.resolveTo(SCORE);
+
+        await component.ngOnInit();
+
+        expect(component.status).toBe('ready');
+        expect(arrangementService.content).toHaveBeenCalledWith(5, 21);
+        expect(playbackService.playbackFile).not.toHaveBeenCalled();
+        expect(component.rows.map((row: { label: string }) => row.label)).toEqual(['Clarinetto', 'Tuba']);
+        expect(component.rows.map((row: { part: PartPlayback }) => row.part.sound.transpositionSemitones)).toEqual([-2, 0]);
+        expect(component.reference.measures.length).toBe(1);
+        expect(audio.load).toHaveBeenCalledTimes(1);
+        // Lo spartito mostrato è un rigo alla volta.
+        expect(partNames(renderer.render.calls.mostRecent().args[0])).toEqual(['Clarinetto']);
+        await component.changeNotation(component.notationParts[1].scoreId);
+        expect(partNames(renderer.render.calls.mostRecent().args[0])).toEqual(['Tuba']);
+        await component.changeNotation(component.notationParts[1].scoreId);
+        expect(renderer.render).toHaveBeenCalledTimes(3);
+
+        const failing = setup('arrangement', []);
+        failing.arrangementService.content.and.rejectWith(new Error('offline'));
+        await failing.component.ngOnInit();
+        expect(failing.component.status).toBe('error');
+    });
+
     it('explains when the part cannot be played yet or the files cannot be loaded', async () => {
         const unavailable = setup('part', [part(1, { availability: 'NOT_AVAILABLE', version: null })], 1);
         await unavailable.component.ngOnInit();
@@ -138,6 +174,7 @@ describe('ScorePlayerDialogComponent in the page', () => {
                 { provide: ScorePlaybackService, useValue: { playbackFile: () => of(XML) } },
                 { provide: ScoreAudioService, useValue: audio },
                 { provide: ScoreRendererService, useValue: renderer },
+                { provide: ArrangementService, useValue: {} },
                 { provide: ToastService, useValue: jasmine.createSpyObj('ToastService', ['success']) }
             ]
         }).compileComponents();
@@ -219,9 +256,10 @@ function mutedByPart(calls: readonly unknown[][]): boolean[] {
     return calls.map((args) => args[2] as boolean);
 }
 
-function setup(mode: 'part' | 'score', parts: PartPlayback[], scoreId?: number) {
+function setup(mode: ScorePlayerDialogData['mode'], parts: PartPlayback[], scoreId?: number) {
     const playback: TrackPlayback = { trackId: 5, trackName: 'Marcia', version: 3, parts, recognitionAvailable: false };
-    const data: ScorePlayerDialogData = { trackId: 5, playback, mode, scoreId };
+    const data: ScorePlayerDialogData = { trackId: 5, playback, mode, scoreId, arrangement: mode === 'arrangement' ? { versionId: 21, rows: ROWS } : undefined };
+    const arrangementService = { content: jasmine.createSpy('content') };
     const playbackService = { playbackFile: jasmine.createSpy().and.returnValue(of(XML)), canManage: false };
     const audio = {
         ready: jasmine.createSpy().and.resolveTo(),
@@ -237,7 +275,7 @@ function setup(mode: 'part' | 'score', parts: PartPlayback[], scoreId?: number) 
     const changeDetector = { markForCheck: jasmine.createSpy() };
     const dialogService = { open: jasmine.createSpy().and.returnValue({ onClose: of(true) }) };
     const toast = jasmine.createSpyObj('ToastService', ['success', 'warn']);
-    const component: any = new ScorePlayerDialogComponent({ data } as never, playbackService as never, audio as never, renderer as never, zone as never, changeDetector as never, dialogService as never, toast);
+    const component: any = new ScorePlayerDialogComponent({ data } as never, playbackService as never, audio as never, renderer as never, zone as never, changeDetector as never, dialogService as never, toast, arrangementService as never);
     component.notation = { nativeElement: document.createElement('div') };
-    return { component, playbackService, audio, renderer, dialogService, toast };
+    return { component, playbackService, arrangementService, audio, renderer, dialogService, toast };
 }

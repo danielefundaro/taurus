@@ -29,8 +29,8 @@
                     <span class="text-sm text-muted-color"><i class="pi pi-lock mr-1" aria-hidden="true"></i>{{ editingLabel(editing) }}</span>
                 }
             </div>
-            @if (!phone) {
-                <div class="flex flex-wrap gap-2">
+            <div class="flex flex-wrap gap-2">
+                @if (!phone) {
                     @if (arrangement.draft) {
                         <p-button label="Riprendi la bozza" icon="pi pi-pencil" (onClick)="write(true)" />
                         <p-button label="Scarta la bozza" severity="danger" text [disabled]="editedElsewhere" [pTooltip]="editedElsewhere ? 'Qualcuno sta scrivendo la partitura' : ''" (onClick)="discardDraft()" />
@@ -40,14 +40,20 @@
                     <span [pTooltip]="extractBlocker ?? 'Le parti della traccia ricevono una nuova versione dai righi scelti'">
                         <p-button label="Estrai le parti" icon="pi pi-clone" severity="secondary" outlined [loading]="opening" [disabled]="!!extractBlocker" (onClick)="extract()" />
                     </span>
+                }
+                <!-- Anche sul telefono la partitura si ascolta. -->
+                <span [pTooltip]="arrangement.currentVersion ? 'Tutti i righi della versione corrente, ognuno con il suono del suo strumento' : 'La partitura non ha ancora versioni salvate'">
+                    <p-button label="Ascolta" icon="pi pi-play" severity="secondary" outlined [disabled]="!arrangement.currentVersion || opening" (onClick)="listen()" />
+                </span>
+                @if (!phone) {
                     <p-button [label]="versions ? 'Nascondi le versioni' : 'Versioni'" icon="pi pi-history" severity="secondary" outlined (onClick)="toggleVersions()" />
                     <p-button label="Elimina la partitura" icon="pi pi-trash" severity="danger" outlined [disabled]="editedElsewhere" [pTooltip]="editedElsewhere ? 'Qualcuno sta scrivendo la partitura' : ''" (onClick)="remove()" />
-                </div>
-            }
+                }
+            </div>
         </div>
 
         @if (phone) {
-            <app-inline-alert severity="info" heading="Scrittura da computer o tablet" detail="Sul telefono la scheda mostra solo lo stato della partitura e dei suoi righi." />
+            <app-inline-alert severity="info" heading="Scrittura da computer o tablet" detail="Sul telefono la scheda mostra lo stato della partitura e dei suoi righi, e la partitura si ascolta." />
         }
 
         @if (versions) {

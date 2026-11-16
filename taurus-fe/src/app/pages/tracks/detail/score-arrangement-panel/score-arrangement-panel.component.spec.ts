@@ -4,6 +4,7 @@ import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engra
 import { ExtractPartsDialogComponent } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { ScorePlayerDialogComponent } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { Arrangement, ArrangementVersion } from '../../../../module';
 import { ArrangementService, ConfirmService, ScorePlaybackService, ToastService } from '../../../../service';
 import { ScoreArrangementPanelComponent } from './score-arrangement-panel.component';
@@ -206,6 +207,39 @@ describe('ScoreArrangementPanelComponent', () => {
         expect(toast.error).toHaveBeenCalledWith('File non scaricato', 'Riprovare più tardi.');
     });
 
+    it('plays every row of the current version, with the title and the tempo of the track', async () => {
+        playbackService.playback.and.returnValue(of({ trackId: 5, trackName: 'Marcia reale', version: 2, tempoBpm: 96, parts: [], recognitionAvailable: false }));
+
+        await component.listen();
+
+        expect(opened().component).toBe(ScorePlayerDialogComponent);
+        expect(opened().options.header).toBe('Partitura · versione 2 · Marcia reale');
+        expect(opened().options.data).toEqual({
+            trackId: 5,
+            playback: jasmine.objectContaining({ tempoBpm: 96 }),
+            mode: 'arrangement',
+            arrangement: {
+                versionId: 21,
+                rows: [
+                    { id: 'P1', name: 'Clarinetto', instruments: [CLARINET] },
+                    { id: 'P2', name: 'Percussioni', instruments: [SNARE, BASS_DRUM] },
+                    { id: 'P3', name: null, instruments: [CLARINET] }
+                ]
+            }
+        });
+
+        // Senza versioni non c'è nulla da ascoltare; se la traccia non si legge lo dice.
+        dialogs.open.calls.reset();
+        component.arrangement = arrangement({ currentVersion: null });
+        await component.listen();
+        component.arrangement = arrangement();
+        playbackService.playback.and.returnValue(throwError(() => new Error('offline')));
+        await component.listen();
+        expect(dialogs.open).not.toHaveBeenCalled();
+        expect(toast.error).toHaveBeenCalledWith('Ascolto non disponibile', jasmine.any(String));
+        expect(component.opening).toBeFalse();
+    });
+
     it('extracts the parts and engraves them with one dialog of options', async () => {
         const playback = { trackId: 5, trackName: 'Marcia reale', version: 2, parts: [], recognitionAvailable: true };
         playbackService.playback.and.returnValue(of(playback));
@@ -346,6 +380,7 @@ describe('ScoreArrangementPanelComponent view', () => {
         const host = await render(arrangement({ currentVersion: null }), { phone: true });
         expect(host.textContent).toContain('Mai salvata');
         expect(host.textContent).toContain('Scrittura da computer o tablet');
-        expect(buttons(host)).toEqual([]);
+        // Sul telefono la partitura si ascolta soltanto.
+        expect(buttons(host)).toEqual(['Ascolta']);
     });
 });

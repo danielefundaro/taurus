@@ -6,7 +6,9 @@
             <div class="score-player__buttons">
                 <p-button [icon]="playing ? 'pi pi-pause' : 'pi pi-play'" [label]="playing ? 'Pausa' : 'Ascolta'" [disabled]="status !== 'ready'" (onClick)="togglePlay()" />
                 <p-button icon="pi pi-step-backward" severity="secondary" outlined ariaLabel="Torna all'inizio" pTooltip="Torna all'inizio" [disabled]="status !== 'ready'" (onClick)="rewind()" />
-                <p-button icon="pi pi-flag" label="Segnala un errore" severity="secondary" text [disabled]="status !== 'ready'" pTooltip="Segnala a chi gestisce l'archivio una nota o un passaggio sbagliato" (onClick)="reportError()" />
+                @if (data.mode !== 'arrangement') {
+                    <p-button icon="pi pi-flag" label="Segnala un errore" severity="secondary" text [disabled]="status !== 'ready'" pTooltip="Segnala a chi gestisce l'archivio una nota o un passaggio sbagliato" (onClick)="reportError()" />
+                }
                 @if (canDownload) {
                     <p-button
                         icon="pi pi-download"
@@ -59,28 +61,25 @@
             </div>
         </section>
 
-        <div class="score-player__body" [class.score-player__body--score]="data.mode === 'score'">
-            @if (data.mode === 'score') {
+        <div class="score-player__body" [class.score-player__body--score]="data.mode !== 'part'">
+            @if (data.mode !== 'part') {
                 <aside class="score-player__mixer" aria-label="Parti">
                     <div class="score-player__shortcuts">
                         <p-button label="Tutte" size="small" severity="secondary" outlined (onClick)="listen('all')" [disabled]="status !== 'ready'" />
-                        <p-button label="Solo le mie parti" size="small" severity="secondary" outlined (onClick)="listen('mine')" [disabled]="status !== 'ready' || !ownScoreIds.length" />
-                        <p-button label="Tutto tranne le mie" size="small" severity="secondary" outlined (onClick)="listen('others')" [disabled]="status !== 'ready' || !ownScoreIds.length" />
+                        @if (data.mode === 'score') {
+                            <p-button label="Solo le mie parti" size="small" severity="secondary" outlined (onClick)="listen('mine')" [disabled]="status !== 'ready' || !ownScoreIds.length" />
+                            <p-button label="Tutto tranne le mie" size="small" severity="secondary" outlined (onClick)="listen('others')" [disabled]="status !== 'ready' || !ownScoreIds.length" />
+                        }
                     </div>
                     @if (lengthsDiffer) {
                         <app-inline-alert severity="info" heading="Le parti hanno lunghezze diverse" detail="Le parti più corte tacciono nelle battute che non hanno." />
                     }
-                    <button
-                        pButton
-                        type="button"
-                        class="score-player__parts-toggle"
-                        severity="secondary"
-                        size="small"
-                        [text]="true"
-                        aria-controls="playerParts"
-                        [attr.aria-expanded]="partsOpen"
-                        (click)="partsOpen = !partsOpen"
-                    ><i [class]="partsOpen ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" pButtonIcon aria-hidden="true"></i><span pButtonLabel>{{ partsOpen ? 'Nascondi le parti' : 'Mostra le parti (' + (rows.length + unavailable.length) + ')' }}</span></button>
+                    <button pButton type="button" class="score-player__parts-toggle" severity="secondary" size="small" [text]="true" aria-controls="playerParts" [attr.aria-expanded]="partsOpen" (click)="partsOpen = !partsOpen">
+                        <i [class]="partsOpen ? 'pi pi-chevron-up' : 'pi pi-chevron-down'" pButtonIcon aria-hidden="true"></i
+                        ><span pButtonLabel>{{
+                            partsOpen ? (data.mode === 'arrangement' ? 'Nascondi i righi' : 'Nascondi le parti') : (data.mode === 'arrangement' ? 'Mostra i righi (' : 'Mostra le parti (') + (rows.length + unavailable.length) + ')'
+                        }}</span>
+                    </button>
                     <div id="playerParts" class="score-player__parts" [class.score-player__parts--closed]="!partsOpen">
                         @for (row of rows; track row.part.scoreId) {
                             <div class="score-player__row" [class.score-player__row--muted]="row.muted">
@@ -93,7 +92,7 @@
                                 </div>
                                 <p-slider [(ngModel)]="row.volume" (onChange)="applyMixer()" [min]="0" [max]="100" [ariaLabel]="'Volume ' + row.label" />
                                 <div class="flex flex-wrap gap-1">
-                                    @if (row.part.version?.status !== 'APPROVED') {
+                                    @if (data.mode !== 'arrangement' && row.part.version?.status !== 'APPROVED') {
                                         <p-tag severity="warn" value="Non verificata" />
                                     }
                                     @if (!row.part.sound.configured) {
@@ -113,8 +112,8 @@
             }
 
             <section class="score-player__score" aria-label="Spartito">
-                @if (data.mode === 'score' && notationParts.length > 1) {
-                    <app-form-field label="Spartito mostrato" forId="playerNotation" class="score-player__notation-select">
+                @if (data.mode !== 'part' && notationParts.length > 1) {
+                    <app-form-field [label]="data.mode === 'arrangement' ? 'Rigo mostrato' : 'Spartito mostrato'" forId="playerNotation" class="score-player__notation-select">
                         <p-select inputId="playerNotation" [options]="notationParts" [ngModel]="notationScoreId" (ngModelChange)="changeNotation($event)" optionValue="scoreId" [optionLabel]="'description'" appendTo="body">
                             <ng-template #selectedItem let-part>{{ label(part) }}</ng-template>
                             <ng-template #item let-part>{{ label(part) }}</ng-template>
