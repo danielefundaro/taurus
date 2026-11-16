@@ -320,7 +320,7 @@ Il backend non converte in MIDI: il file nasce da ciò che si ascolta e suona co
 Chi gestisce la traccia confronta due versioni di una parte, o due versioni della partitura rigo per rigo, e vede le battute diverse. Serve a rivedere una correzione prima di approvarla, una parte modificata dopo l'estrazione e il lavoro dei motori di riconoscimento.
 
 - **Dove**:
-  - nel dialogo **Versioni e suono**, **Confronta** su una versione la confronta con quella da cui deriva: per una correzione la versione che ha corretto, per le altre la precedente; **Con** sceglie un'altra versione della parte;
+  - nel dialogo **Versioni e suono**, con almeno due versioni, **Confronta** su una versione la confronta con quella da cui deriva: per una correzione la versione che ha corretto, per le altre la precedente, e per la prima la successiva; **Con** sceglie un'altra versione della parte;
   - nelle **Versioni** della scheda Partitura, lo stesso per le versioni della partitura;
   - nella scheda Ascolto, «Modificata dopo l'estrazione» ha **Confronta con l'estrazione**, tra l'ultima versione estratta della parte e la corrente; «La parte di origine è cambiata» di una parte ricavata ha **Confronta le versioni di origine**, tra la versione da cui la parte è ricavata e quella che la parte di origine ascolta ora.
 - **Regola**: una battuta è uguale se si ascolta uguale, come nello strumento di [accuratezza dei motori](runbook-operativo.md#46-accuratezza-dei-motori).
@@ -329,18 +329,21 @@ Chi gestisce la traccia confronta due versioni di una parte, o due versioni dell
   - Le battute si allineano prima del confronto, quindi una battuta aggiunta o tolta conta una volta e non sposta le altre.
   - Sulle battute allineate si confrontano anche i segni di struttura: ritornelli, volte, segno, coda, Fine, D.C., D.S. e tempo.
 - **Differenze**: una riga per ogni battuta diversa, con i numeri di battuta delle due versioni, per esempio:
-  - «Battuta 12: altezze diverse (La4 invece di Sol4)»;
-  - «Battuta 18: ritmo diverso»;
+  - «Battuta 12: altezze diverse (La4 invece di Sol4)», con «e altre 2 note» se ne cambiano altre, e le note scritte di ciascuna versione;
+  - «Battuta 18: ritmo diverso», anche per un cambio di metro;
   - «Battuta 23: legatura di valore»;
   - «Battuta 20: solo nella versione 5»;
-  - «Battuta 31: ritornello solo nella versione 5».
+  - «Battuta 31: inizio del ritornello solo nella versione 5; tempo 96 solo nella versione 4»;
+  - «Battuta 14 (13 nella versione 4): ritmo diverso», quando le due versioni numerano la battuta in modo diverso.
+
+  Il numero è quello della versione più recente, tranne per le battute che ha solo la più vecchia.
 
   Senza differenze il dialogo dice «Le due versioni si ascoltano uguali: possono cambiare solo grafia, voci e travature».
 - **Vista**: un dialogo a schermo intero con le due versioni affiancate, la più vecchia a sinistra, ognuna con numero, origine, stato e data; sul tablet in verticale e sul telefono le versioni stanno una sotto l'altra.
-  - Le battute diverse sono evidenziate in entrambi gli spartiti, con un colore per quelle cambiate e uno per quelle presenti in una sola versione.
+  - Le battute diverse sono evidenziate in entrambi gli spartiti, in arancione quelle cambiate, anche solo nei segni di struttura, e in blu quelle presenti in una sola versione; la differenza scelta è nel colore primario. Una legenda sotto gli spartiti ricorda i colori.
   - L'elenco delle differenze sta sotto gli spartiti, con il loro numero e **Precedente** e **Successiva**, anche con `←` e `→`; scegliere una differenza porta entrambi gli spartiti alla sua battuta.
   - Nella partitura **Rigo** sceglie il rigo da confrontare e riporta le differenze di ogni rigo; i righi presenti in una sola versione si dicono senza confronto.
-- **Sola lettura**: il confronto non cambia nulla. Per una parte **Correggi** apre l'editor di correzione sulla versione di destra, alla battuta della differenza scelta.
+- **Sola lettura**: il confronto non cambia nulla. Per una parte **Correggi** apre l'editor di correzione sulla versione di destra, alla battuta della differenza scelta; per una battuta che ha solo la versione di sinistra, alla battuta che la segue. Il confronto delle versioni di origine riguarda un'altra parte e non ha **Correggi**.
 
 ### Frammenti
 
@@ -467,7 +470,7 @@ Le scorciatoie della tabella che esistono già nell'editor di correzione manteng
 - **Scaricamento MIDI**: `buildPlayback` costruisce anche il file da scaricare, senza metronomo né attacco; per una versione diversa da quella ascoltata il MusicXML arriva dalla lettura dell'editor.
 - **Stampa della scaletta**: `PrinterService.previewProgram` apre l'anteprima con le parti del programma e con quelle da impaginare che l'evento segnala, perché il programma non porta la loro versione. L'anteprima le ordina per strumento e propone il formato marcia, le cui regole di stampa sono in `styles.scss`.
 - **Bozze e blocco**: un servizio che salva la bozza con ritardo, ne conserva una copia in IndexedDB e rinnova il blocco ogni 30 secondi. La copia resta in IndexedDB anche quando il server la rifiuta, fino all'accettazione o allo scarto. L'editor di correzione usa lo stesso servizio per il blocco, senza bozze.
-- **Confronto**: `score-compare.ts` legge le battute come sono scritte, senza eseguire ritornelli e salti, con le regole di lettura del lettore (`musicxml-score.ts`) e le altezze come suonano; le allinea con lo stesso algoritmo di `compare.py` (`difflib.SequenceMatcher` senza `autojunk`, cioè i blocchi comuni più lunghi) e classifica le differenze. I casi di prova sono gli stessi nei due moduli, e una modifica della regola si fa in entrambi. Il dialogo `score-compare-dialog` disegna le due versioni con `ScoreRendererService` ed evidenzia le battute per `id`, come l'editor; nella partitura confronta un rigo alla volta (`rowXml`).
+- **Confronto**: `score-compare.ts` legge le battute come sono scritte, senza eseguire ritornelli e salti, con le regole di lettura del lettore (`musicxml-score.ts`) e le altezze come suonano; le allinea con lo stesso algoritmo di `compare.py` (`difflib.SequenceMatcher` senza `autojunk`, cioè i blocchi comuni più lunghi) e classifica le differenze. I casi di prova sono gli stessi nei due moduli, e una modifica della regola si fa in entrambi. I casi condivisi stanno in `taurus-omr/tests/compare_cases.json`, scritti da `python -m accuracy cases`, e nella copia `score-player/compare-cases.json`; `scripts/ops/check-compare-cases.mjs`, nella CI, fallisce se le due copie divergono. Il dialogo `score-compare-dialog` disegna le due versioni con `ScoreRendererService` e trova le battute disegnate come il lettore (`measureElements`), per numero e, se i numeri non tornano, per posizione; nella partitura legge tutti i righi una volta sola, li abbina per `id` della parte e ne disegna uno alla volta (`rowXml`). **Correggi** passa all'editor di correzione la battuta da selezionare (`measureIndex`).
 - **Frammenti**: `score-fragments.ts` costruisce il MusicXML del frammento da un passaggio di battute intere, sopra `copyPassage`, e lo porta in suoni reali con l'intervallo di `score-derivation.ts`; l'inserimento traspone con il piano della derivazione e aggiunge le battute con le operazioni della scrittura.
 - **Raccolta**: `recognition-review.ts` trova la versione del motore risalendo `parentVersionId` e calcola i conteggi con `score-compare.ts`; la pagina `recognition` legge il riepilogo e guida la raccolta delle approvazioni precedenti.
 
