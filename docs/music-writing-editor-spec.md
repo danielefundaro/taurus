@@ -673,6 +673,15 @@ La fase 4 si sviluppa in sei incrementi: l'organico della banda, con l'anteprima
 
 La fase 5 si sviluppa in tre incrementi: il confronto tra versioni, con il confronto per battute nel browser e i comandi nei dialoghi delle versioni e nella scheda Ascolto; la qualità del riconoscimento, con la raccolta all'approvazione e dalle approvazioni precedenti, le metriche e la pagina Riconoscimento; i frammenti, con la biblioteca, il salvataggio e l'inserimento con la trasposizione.
 
+La fase 6 si sviluppa in tre incrementi:
+
+1. le misure ripetibili, con lo strumento di misura del frontend, le misure della fase 5 e quella della pagina Riconoscimento nel backend;
+2. l'ottimizzazione della [partitura grande](#partitura-grande-nella-fase-6), per l'apertura e il tasto con 30 righi;
+3. le prove, cioè:
+   - le prove Playwright della scrittura sui profili desktop e tablet;
+   - i casi manuali del runbook di test per archivisti, tablet e tastiera MIDI;
+   - la sezione della scrittura nel runbook operativo, con configurazione, segnali e procedure per blocchi, bozze, impaginazione ed estrazione.
+
 L'impaginazione viene subito dopo la scrittura perché una parte scritta, per esempio al posto di una perduta, serve soprattutto a essere stampata. Per questo la fase 1 non si rilascia da sola: `SCORE_WRITING` diventa attivabile per i tenant quando anche la fase 2 è completa.
 
 ## Compatibilità e adozione
@@ -750,6 +759,16 @@ Decise il 16/11/2026, nel dettaglio della fase 5:
 3. **Frammenti in suoni reali**: il frammento si salva in suoni reali e si traspone all'inserimento con il piano della derivazione; le percussioni si salvano con i suoni delle voci. Scartati il frammento salvato com'è scritto, da trasporre a mano a ogni inserimento, e una versione per strumento, più lavoro per ogni frammento.
 4. **Solo i conteggi dei riconoscimenti**: all'approvazione si salvano i conteggi per tipo di errore, mostrati nella pagina Riconoscimento e sommati dalle metriche dell'installazione; le nuove parti del corpus le scrive chi sviluppa, imitando gli errori. Scartati un pacchetto con pagine e versioni per il corpus, che porterebbe lo spartito fuori dal tenant, e le sole metriche, che l'archivista non vedrebbe.
 5. **Funzionalità**: confronto e raccolta richiedono solo l'ascolto, perché servono anche alla correzione; i frammenti richiedono la scrittura.
+
+## Decisioni della sesta revisione
+
+Decise il 16/11/2026, nel dettaglio della fase 6:
+
+1. **Ottimizzare la partitura grande**: prima di rivedere gli obiettivi di 30 righi si riducono i tempi di apertura e del tasto. Un obiettivo si rivede, con le misure finali, solo se resta fuori portata. Scartata la revisione immediata degli obiettivi sui valori misurati, che lascerebbe lenta l'apertura sui computer delle associazioni.
+2. **Misure nel repository**: lo strumento di misura è uno script del frontend, che usa il codice dell'editor e il Chrome di Playwright e rallenta il processore attraverso il protocollo di Chrome. Così ogni misura si ripete con un comando. Scartati:
+   - le misure fatte a mano, che non si ripetono uguali;
+   - una suite Karma, che non rallenta il processore.
+3. **Prove automatiche e manuali**: le prove Playwright della scrittura, sui profili desktop e tablet, affiancano i casi manuali del runbook di test. Richiedono un'istanza completa, come il resto della suite end to end. Scartati i soli casi manuali, che lascerebbero da ripetere a mano anche i percorsi principali.
 
 ## Estensioni approvate
 
