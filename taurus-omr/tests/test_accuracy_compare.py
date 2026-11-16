@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
 import pytest
 
-from accuracy import compare, corpus
+from accuracy import cases, compare, corpus
 from accuracy.__main__ import main
 from accuracy.run import CORPUS, pages
 
@@ -118,6 +119,8 @@ def test_a_wrong_pitch_duration_tie_or_meter_makes_the_measure_wrong() -> None:
 
     assert result.correct_measures == 28
     assert any(difference.startswith("battuta 2: attesa 2 q: F5@0+3/2") for difference in result.differences)
+    assert [(detail.kind, detail.measure) for detail in result.details] == [("pitch", "2"), ("rhythm", "13"), ("tie", "21"), ("rhythm", "30")]
+    assert result.kinds == {"pitch": 1, "rhythm": 2, "tie": 1, "missing": 0, "extra": 0}
 
 
 def test_a_missing_or_extra_measure_does_not_shift_the_rest_of_the_part() -> None:
@@ -176,3 +179,14 @@ def test_reads_compressed_files_and_compares_from_the_command_line(tmp_path: Pat
     output = capsys.readouterr().out
     assert output.startswith("battuta 3: attesa 4 q: Eb2@0+2 G2@2+2; letta 4 q: Eb3@0+2 G2@2+2")
     assert "Battute corrette: 20/21 (95%), lette 21; struttura: 3/3" in output
+    assert "Battute diverse: altezze 1, ritmo 0, legature 0, perse 0, in più 0" in output
+
+
+def test_the_cases_shared_with_the_frontend_are_written_again_after_a_change_of_the_rule() -> None:
+    assert cases.CASES_FILE.read_text(encoding="utf-8") == cases.render(), "run python -m accuracy cases again"
+
+
+def test_the_shared_cases_cover_every_kind_of_difference() -> None:
+    found = {difference["kind"] for case in json.loads(cases.render())["cases"] for difference in case["expected"]["differences"]}
+
+    assert found == {"pitch", "rhythm", "tie", "missing", "extra", "marks"}
