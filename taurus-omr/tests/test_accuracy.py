@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from accuracy import run
+from accuracy import engraving, run
 
 URL = os.environ.get("TAURUS_OMR_ACCURACY_URL")
 KEY = os.environ.get("TAURUS_OMR_ACCURACY_KEY")
@@ -22,6 +22,9 @@ MINIMUM_MARKS = {"AUDIVERIS": 0.5, "HOMR": 0.15}
 # Measured on 01/11/2026 with RapidOCR 3.10.0 and the PP-OCRv6 small models: 6/6 part names read in the zone kept by
 # the backend; one miss is allowed.
 MINIMUM_NAMES = 0.8
+# The target of the specification for a part of two A4 pages. Measured on 16/11/2026 with Verovio 6.4.1, with the
+# limits of omr.yml on the development computer: 3.8 seconds, median of five.
+ENGRAVING_TARGET_SECONDS = 15
 
 pytestmark = pytest.mark.skipif(not URL or not KEY, reason="no OMR service to check: set TAURUS_OMR_ACCURACY_URL and TAURUS_OMR_ACCURACY_KEY")
 
@@ -74,3 +77,23 @@ def test_text_engine_reads_at_least_the_expected_share_of_part_names(names: list
     correct = sum(result.correct for result in names)
 
     assert correct / len(names) >= MINIMUM_NAMES, f"{correct}/{len(names)} part names: {[r.piece for r in names if not r.correct]}"
+
+
+@pytest.fixture(scope="module")
+def engravings() -> list[engraving.Timing]:
+    timings = engraving.measure(URL or "", KEY or "", runs=3)
+    table = engraving.report(timings)
+    print(f"\n{table}")
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as output:
+            output.write(f"### Impaginazione\n\n{table}\n")
+    return timings
+
+
+def test_a_part_of_two_pages_is_engraved_within_the_target(engravings: list[engraving.Timing]) -> None:
+    two_pages = engravings[0]
+
+    # A different number of pages means that the engraver lays out the part differently: the case needs other measures.
+    assert two_pages.pages == 2, f"{two_pages.case}: {two_pages.pages} pages"
+    assert two_pages.median_request < ENGRAVING_TARGET_SECONDS, f"{two_pages.median_request:.1f} s"

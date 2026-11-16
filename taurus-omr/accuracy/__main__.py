@@ -7,7 +7,9 @@
   piece with the text engine and prints the lines the backend would keep;
 - ``python -m accuracy compare corrected.mxl recognized.mxl``: compares a real part recognized by an engine with the
   version corrected by an archivist, both downloaded from Taurus, and lists the different measures;
-- ``python -m accuracy cases``: writes again the comparison cases shared with the frontend (``tests/compare_cases.json``).
+- ``python -m accuracy cases``: writes again the comparison cases shared with the frontend (``tests/compare_cases.json``);
+- ``python -m accuracy engraving --url http://localhost:8090 --key ...``: engraves long parts built from the corpus,
+  one of them of two A4 pages, and prints the median times; ``--runs`` sets how many times each part is engraved.
 """
 
 from __future__ import annotations
@@ -35,6 +37,10 @@ def main(arguments: list[str] | None = None) -> int:
     pair.add_argument("reference", type=Path, help="versione corretta (.mxl, .musicxml)")
     pair.add_argument("candidate", type=Path, help="versione riconosciuta (.mxl, .musicxml)")
     commands.add_parser("cases", help="scrive di nuovo i casi del confronto comuni con il frontend")
+    engraving = commands.add_parser("engraving", help="misura i tempi dell'impaginazione del servizio")
+    engraving.add_argument("--url", default=os.environ.get("TAURUS_OMR_ACCURACY_URL", "http://localhost:8090"))
+    engraving.add_argument("--key", default=os.environ.get("TAURUS_OMR_ACCURACY_KEY"))
+    engraving.add_argument("--runs", type=int, default=5, help="impaginazioni di ogni parte, 5 per default")
     options = parser.parse_args(arguments)
 
     if options.command == "render":
@@ -63,6 +69,16 @@ def main(arguments: list[str] | None = None) -> int:
         from .cases import write
 
         print(write())
+        return 0
+
+    if options.command == "engraving":
+        from .engraving import measure, report
+
+        if not options.key:
+            parser.error("serve la chiave del servizio: --key o TAURUS_OMR_ACCURACY_KEY")
+        if options.runs < 1:
+            parser.error("--runs deve essere almeno 1")
+        print(report(measure(options.url, options.key, runs=options.runs)))
         return 0
 
     from .compare import compare, load_file
