@@ -33,6 +33,9 @@
                         @if (version.status !== 'APPROVED') {
                             <p-button label="Approva" icon="pi pi-check" size="small" [disabled]="busy" (onClick)="approve(version)" />
                         }
+                        @if (versions.length > 1) {
+                            <p-button label="Confronta" icon="pi pi-arrow-right-arrow-left" size="small" severity="secondary" outlined pTooltip="Le battute diverse da quella da cui deriva, o dalla precedente" (onClick)="compare(version)" />
+                        }
                         <p-button label="Correggi" icon="pi pi-pencil" size="small" severity="secondary" outlined [disabled]="busy" (onClick)="correct(version)" />
                         <p-button label="Scarica" icon="pi pi-download" size="small" severity="secondary" text ariaHaspopup="menu" (onClick)="openDownloads($event, downloadMenu, version)" />
                     </div>

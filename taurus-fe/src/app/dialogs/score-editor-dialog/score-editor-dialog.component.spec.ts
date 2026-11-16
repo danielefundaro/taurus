@@ -215,6 +215,28 @@ describe('ScoreEditorDialogComponent', () => {
         expect(component.selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
     });
 
+    it('opens the correction at the measure of a difference of the comparison', async () => {
+        fixture.destroy();
+        config.data = { ...config.data, measureIndex: 1 };
+        fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect((fixture.componentInstance as unknown as { selectionLabel: string }).selectionLabel).toBe('Battuta 2 · Mi3 · minima');
+    });
+
+    it('opens the correction at the first note for a measure that is not in the version', async () => {
+        fixture.destroy();
+        config.data = { ...config.data, measureIndex: 5 };
+        fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect((fixture.componentInstance as unknown as { selectionLabel: string }).selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
+    });
+
     it('draws quick edits once, at the next frame', async () => {
         fixture.detectChanges();
         await fixture.whenStable();

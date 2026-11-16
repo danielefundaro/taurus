@@ -3,6 +3,7 @@ import { of, Subject } from 'rxjs';
 import { DerivePartDialogComponent } from '../../../../dialogs/derive-part-dialog/derive-part-dialog.component';
 import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
+import { ScoreCompareDialogComponent } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { Arrangement, ArrangementRowState, PartPlayback, PlaybackSound, RecognitionJob, TrackPlayback } from '../../../../module';
 import { RECOGNITION_POLL_MILLIS, ScorePlaybackPanelComponent } from './score-playback-panel.component';
@@ -168,6 +169,36 @@ describe('ScorePlaybackPanelComponent writing', () => {
         expect(component.sourceChanged({ ...derived, derivedFrom: { scoreId: 1, versionId: 9, versionNumber: 3 } })).toBeNull();
         expect(component.derivedLabel({ ...derived, derivedFrom: { scoreId: 7, versionId: 4, versionNumber: 1 } })).toBe('Ricavata da una parte eliminata');
         expect(component.sourceChanged({ ...derived, derivedFrom: { scoreId: 7, versionId: 4, versionNumber: 1 } })).toBeNull();
+    });
+
+    it('compares the version a derived part comes from with the one the source plays now', () => {
+        const source = part({}, { scoreId: 1, description: 'Clarinetto 1°', version: { ...version, id: 9, versionNumber: 3 } });
+        const derived = part({}, { scoreId: 2, order: 2, description: 'Sax contralto', version, derivedFrom: { scoreId: 1, versionId: 8, versionNumber: 2 } });
+        const { component, opened, dialogs } = setup([source, derived]);
+
+        component.compareSource(derived);
+        expect(opened().component).toBe(ScoreCompareDialogComponent);
+        expect(opened().data).toEqual({ trackId: 5, scoreId: 1, subject: 'Clarinetto 1°', versionId: 9, withId: 8, sound: source.sound });
+
+        component.compareSource({ ...derived, derivedFrom: { scoreId: 7, versionId: 4, versionNumber: 1 } });
+        expect(dialogs.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('corrects at the chosen measure from the comparison with the extraction or of the versions', () => {
+        const corrected = part({}, { version });
+        const { component, close, opened } = setup([corrected]);
+
+        component.compareExtraction(corrected);
+        expect(opened().component).toBe(ScoreCompareDialogComponent);
+        expect(opened().data).toEqual(jasmine.objectContaining({ scoreId: 1, versionId: 7, withOrigin: 'ARRANGEMENT', correctable: true }));
+        close({ correctVersionId: 7, measureIndex: 12 });
+        expect(opened().component).toBe(ScoreEditorDialogComponent);
+        expect(opened().data).toEqual(jasmine.objectContaining({ versionId: 7, measureIndex: 12 }));
+        close();
+
+        component.versions(corrected);
+        close({ changed: false, correctVersionId: 6, measureIndex: 3 });
+        expect(opened().data).toEqual(jasmine.objectContaining({ versionId: 6, measureIndex: 3 }));
     });
 
     it('derives a part for another instrument and opens it in the editor', () => {

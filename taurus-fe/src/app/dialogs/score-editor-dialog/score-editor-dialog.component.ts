@@ -83,6 +83,8 @@ export interface ScoreEditorDialogData {
     engravable?: boolean;
     /** Strumento di una parte con un solo strumento, per segnalare le note fuori dalla sua estensione. */
     range?: EditorRange | null;
+    /** Correzione: la battuta da selezionare all'apertura, da 0, come quella di una differenza del confronto. */
+    measureIndex?: number | null;
     /**
      * Scrittura della partitura della traccia: tutti i righi, con il blocco, la bozza e le versioni della partitura. Le
      * modifiche della struttura valgono per tutti i righi, le altre per il rigo attivo.
@@ -527,8 +529,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.reports = reports.filter((report) => report.scoreId === scoreId && report.status === 'OPEN');
             if (this.writingMode) this.midiSubscription = this.midi.played.subscribe((note) => this.onMidiNote(note));
             if (this.writingMode) await this.prepareWriting();
-            else if (editor) await this.open(editor.musicXml);
-            else throw new EditError('Scegli una versione da correggere');
+            else if (editor) {
+                await this.open(editor.musicXml);
+                const measureIndex = this.data.measureIndex;
+                if (measureIndex !== null && measureIndex !== undefined && measureIndex < (this.score?.measures().length ?? 0)) this.selectMeasure(measureIndex);
+            } else throw new EditError('Scegli una versione da correggere');
         } catch (error) {
             this.failed(error);
         }

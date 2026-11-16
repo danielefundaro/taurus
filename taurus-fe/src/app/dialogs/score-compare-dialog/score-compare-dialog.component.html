@@ -1,0 +1,113 @@
+<div class="score-compare">
+    <header class="score-compare__header">
+        <p-button icon="pi pi-arrow-left" ariaLabel="Chiudi il confronto" pTooltip="Chiudi il confronto" tooltipPosition="bottom" severity="secondary" text [rounded]="true" (onClick)="close()" />
+        <div class="score-compare__title">
+            <h2 class="m-0 text-lg font-semibold">Confronto · {{ data.subject }}</h2>
+            <span class="text-sm text-muted-color">Le battute si confrontano come si ascoltano; il confronto non cambia nulla</span>
+        </div>
+        <div class="score-compare__actions">
+            @if (otherOptions.length > 1) {
+                <label for="compareWith" class="text-sm">Con</label>
+                <p-select inputId="compareWith" size="small" [options]="otherOptions" [(ngModel)]="otherId" optionLabel="label" optionValue="value" appendTo="body" [disabled]="status === 'loading'" (onChange)="changeOther()" />
+            }
+            @if (arrangement && rows.length > 1 && status === 'ready') {
+                <label for="compareRow" class="text-sm">Rigo</label>
+                <p-select inputId="compareRow" size="small" [options]="rowOptions" [(ngModel)]="rowId" optionLabel="label" optionValue="value" appendTo="body" [filter]="rows.length > 8" (onChange)="changeRow()" />
+            }
+            @if (data.correctable) {
+                <p-button
+                    label="Correggi"
+                    icon="pi pi-pencil"
+                    size="small"
+                    [disabled]="status !== 'ready' || !row?.newer"
+                    pTooltip="Apre l'editor di correzione sulla versione di destra, alla battuta della differenza scelta"
+                    tooltipPosition="bottom"
+                    (onClick)="correct()"
+                />
+            }
+        </div>
+    </header>
+
+    @if (status === 'loading') {
+        <div class="score-compare__state"><app-list-loading-skeleton /></div>
+    } @else if (status === 'error') {
+        <div class="score-compare__state"><app-inline-alert severity="error" heading="Confronto non riuscito" [detail]="errorMessage" /></div>
+    } @else {
+        <div class="score-compare__sides">
+            <section class="score-compare__side" aria-label="Versione più vecchia">
+                <ng-container *ngTemplateOutlet="versionHeader; context: { $implicit: older }" />
+                @if (!row?.older) {
+                    <p class="score-compare__missing">Il rigo non c'è in questa versione.</p>
+                }
+                <div #left class="score-compare__notation" [class.score-compare__notation--empty]="!row?.older"></div>
+            </section>
+            <section class="score-compare__side" aria-label="Versione più recente">
+                <ng-container *ngTemplateOutlet="versionHeader; context: { $implicit: newer }" />
+                @if (!row?.newer) {
+                    <p class="score-compare__missing">Il rigo non c'è in questa versione.</p>
+                }
+                <div #right class="score-compare__notation" [class.score-compare__notation--empty]="!row?.newer"></div>
+            </section>
+        </div>
+
+        <section class="score-compare__differences" aria-label="Differenze">
+            <div class="score-compare__summary">
+                <div class="flex flex-col gap-1 min-w-0">
+                    @if (drawError) {
+                        <span class="text-sm text-orange-700"><i class="pi pi-exclamation-triangle mr-1" aria-hidden="true"></i>{{ drawError }}</span>
+                    }
+                    @if (onlyIn; as version) {
+                        <strong>Il rigo è solo nella versione {{ version.versionNumber }}: senza confronto</strong>
+                    } @else if (!texts.length) {
+                        <strong>Le due versioni si ascoltano uguali: possono cambiare solo grafia, voci e travature</strong>
+                    } @else {
+                        <strong aria-live="polite">Differenza {{ current + 1 }} di {{ texts.length }}</strong>
+                    }
+                    <span class="score-compare__legend text-sm text-muted-color">
+                        <span><i class="score-compare__swatch score-compare__swatch--changed" aria-hidden="true"></i>Battute cambiate</span>
+                        <span><i class="score-compare__swatch score-compare__swatch--only" aria-hidden="true"></i>In una sola versione</span>
+                        @if (drawing) {
+                            <span><i class="pi pi-spin pi-spinner mr-1" aria-hidden="true"></i>Disegno degli spartiti</span>
+                        }
+                    </span>
+                </div>
+                @if (texts.length) {
+                    <div class="flex gap-2">
+                        <p-button label="Precedente" icon="pi pi-chevron-left" size="small" severity="secondary" outlined pTooltip="←" [disabled]="current <= 0" (onClick)="previous()" />
+                        <p-button label="Successiva" icon="pi pi-chevron-right" iconPos="right" size="small" severity="secondary" outlined pTooltip="→" [disabled]="current >= texts.length - 1" (onClick)="next()" />
+                    </div>
+                }
+            </div>
+            @if (texts.length) {
+                <ol #list class="score-compare__list">
+                    @for (text of texts; track $index) {
+                        <li>
+                            <button type="button" class="score-compare__item" [class.score-compare__item--current]="$index === current" [attr.aria-current]="$index === current ? 'true' : null" [attr.data-difference]="$index" (click)="choose($index)">
+                                <span>{{ text }}</span>
+                                <span class="text-xs text-muted-color">{{ kindLabel(differences[$index]) }}</span>
+                            </button>
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    }
+</div>
+
+<ng-template #versionHeader let-version>
+    @if (version) {
+        <header class="score-compare__side-header">
+            <strong>Versione {{ version.versionNumber }}</strong>
+            <p-tag [severity]="version.status === 'APPROVED' ? 'success' : 'warn'" [value]="version.status === 'APPROVED' ? 'Approvata' : 'Non verificata'" />
+            <span class="text-sm text-muted-color">
+                @if (version.origin) {
+                    {{ originLabel(version.origin) }} ·
+                }
+                @if (arrangement) {
+                    {{ version.concertPitch ? 'In suoni reali' : 'Trasposta' }} ·
+                }
+                {{ version.createdAt | date: 'dd/MM/yyyy HH:mm' }}
+            </span>
+        </header>
+    }
+</ng-template>

@@ -68,12 +68,30 @@
                         }
                         @if (canManage && sourceChanged(part); as changed) {
                             <p-tag severity="warn" icon="pi pi-exclamation-triangle" value="La parte di origine è cambiata" [pTooltip]="changed" />
+                            <p-button
+                                label="Confronta le versioni di origine"
+                                icon="pi pi-arrow-right-arrow-left"
+                                size="small"
+                                text
+                                pTooltip="Le battute diverse tra la versione da cui la parte è ricavata e quella ascoltata ora"
+                                (onClick)="compareSource(part)"
+                            />
                         }
                         @if (canManage && extractedLabel(part); as extracted) {
                             <p-tag severity="secondary" icon="pi pi-clone" [value]="extracted" />
                         }
                         @if (canManage && extractionDivergence(part); as divergence) {
                             <p-tag severity="warn" icon="pi pi-exclamation-triangle" [value]="divergence.label" [pTooltip]="divergence.hint" />
+                            @if (divergence.modified && part.version) {
+                                <p-button
+                                    label="Confronta con l'estrazione"
+                                    icon="pi pi-arrow-right-arrow-left"
+                                    size="small"
+                                    text
+                                    pTooltip="Le battute diverse tra l'ultima versione estratta dalla partitura e quella ascoltata"
+                                    (onClick)="compareExtraction(part)"
+                                />
+                            }
                         }
                         @if (canWrite && part.pendingPages; as pending) {
                             <button

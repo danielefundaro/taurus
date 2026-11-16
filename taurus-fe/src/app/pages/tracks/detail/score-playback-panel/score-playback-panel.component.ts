@@ -4,6 +4,7 @@ import { finalize, first, Subscription, timer } from 'rxjs';
 import { DerivePartDialogComponent, DerivePartDialogData, DerivePartDialogResult } from '../../../../dialogs/derive-part-dialog/derive-part-dialog.component';
 import { openEngraveDialog, EngraveDialogData } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { NewPartDialogComponent, NewPartDialogData, NewPartDialogResult } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
+import { openCompareDialog } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { EditorRange, isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData, ScoreEditorDialogResult } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { ScoreReportsDialogComponent, ScoreReportsDialogData, ScoreReportsDialogResult } from '../../../../dialogs/score-reports-dialog/score-reports-dialog.component';
@@ -127,12 +128,30 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     }
 
     /** Come la parte estratta si discosta dalla partitura, con il suggerimento; `null` se è aggiornata. */
-    protected extractionDivergence(part: PartPlayback): { label: string; hint: string } | null {
+    protected extractionDivergence(part: PartPlayback): { label: string; hint: string; modified: boolean } | null {
         const row = this.extractions.get(part.scoreId);
         if (!row?.extractedFrom) return null;
-        if (row.status === 'MODIFIED') return { label: "Modificata dopo l'estrazione", hint: "La parte ha una versione più recente di quella estratta: un'altra estrazione la sostituirebbe" };
-        if (row.status === 'TO_EXTRACT') return { label: 'La partitura è cambiata', hint: 'La partitura ha una versione più recente: la parte non si aggiorna da sola, si estrae di nuovo dalla scheda Partitura' };
+        if (row.status === 'MODIFIED') return { label: "Modificata dopo l'estrazione", hint: "La parte ha una versione più recente di quella estratta: un'altra estrazione la sostituirebbe", modified: true };
+        if (row.status === 'TO_EXTRACT') return { label: 'La partitura è cambiata', hint: 'La partitura ha una versione più recente: la parte non si aggiorna da sola, si estrae di nuovo dalla scheda Partitura', modified: false };
         return null;
+    }
+
+    /** Confronta la versione ascoltata con l'ultima estratta dalla partitura; «Correggi» apre l'editor alla differenza. */
+    protected compareExtraction(part: PartPlayback): void {
+        if (!part.version) return;
+        openCompareDialog(this.dialogService, { trackId: this.trackId, scoreId: part.scoreId, subject: partLabel(part), versionId: part.version.id, withOrigin: 'ARRANGEMENT', sound: part.sound, correctable: true })
+            .pipe(first())
+            .subscribe((result) => {
+                if (result) this.correct(part, result.correctVersionId, result.measureIndex);
+            });
+    }
+
+    /** Confronta la versione da cui la parte è ricavata con quella che la parte di origine ascolta ora. */
+    protected compareSource(part: PartPlayback): void {
+        const origin = part.derivedFrom;
+        const source = origin ? this.playback?.parts.find((candidate) => candidate.scoreId === origin.scoreId) : undefined;
+        if (!origin || !source?.version) return;
+        openCompareDialog(this.dialogService, { trackId: this.trackId, scoreId: source.scoreId, subject: partLabel(source), versionId: source.version.id, withId: origin.versionId, sound: source.sound });
     }
 
     /** «Le 2 pagine impaginate dalla versione 3…», per il suggerimento delle pagine da assegnare. */
@@ -251,14 +270,14 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         const ref = this.dialogService.open(ScoreVersionsDialogComponent, { showHeader: false, width: 'min(56rem, 95vw)', modal: true, focusOnShow: false, data });
         ref?.onClose.pipe(first()).subscribe((result: ScoreVersionsDialogResult | undefined) => {
             if (result?.changed) this.reload();
-            if (result?.correctVersionId) this.correct(part, result.correctVersionId);
+            if (result?.correctVersionId) this.correct(part, result.correctVersionId, result.measureIndex);
         });
     }
 
-    /** Apre l'editor di correzione su una versione della parte, di norma quella ascoltata. */
-    protected correct(part: PartPlayback, versionId = part.version?.id): void {
+    /** Apre l'editor di correzione su una versione della parte, di norma quella ascoltata, ed eventualmente su una battuta. */
+    protected correct(part: PartPlayback, versionId = part.version?.id, measureIndex?: number): void {
         if (!versionId) return;
-        const data: ScoreEditorDialogData = { trackId: this.trackId, scoreId: part.scoreId, versionId, partLabel: partLabel(part), sound: part.sound, range: editorRange(part) };
+        const data: ScoreEditorDialogData = { trackId: this.trackId, scoreId: part.scoreId, versionId, partLabel: partLabel(part), sound: part.sound, range: editorRange(part), measureIndex: measureIndex ?? null };
         const ref = this.dialogService.open(ScoreEditorDialogComponent, {
             showHeader: false,
             width: '100vw',

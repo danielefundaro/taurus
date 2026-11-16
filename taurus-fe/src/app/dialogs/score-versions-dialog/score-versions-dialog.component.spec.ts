@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
-import { of, throwError } from 'rxjs';
+import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { of, Subject, throwError } from 'rxjs';
 import { ScoreVersion } from '../../module';
 import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
+import { ScoreCompareDialogComponent } from '../score-compare-dialog/score-compare-dialog.component';
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData } from './score-versions-dialog.component';
 
 describe('ScoreVersionsDialogComponent', () => {
@@ -37,7 +38,6 @@ describe('ScoreVersionsDialogComponent', () => {
         await TestBed.configureTestingModule({
             imports: [ScoreVersionsDialogComponent],
             providers: [
-
                 { provide: DynamicDialogConfig, useValue: { data } },
                 { provide: DynamicDialogRef, useValue: dialogRef },
                 { provide: ScorePlaybackService, useValue: playbackService },
@@ -49,9 +49,30 @@ describe('ScoreVersionsDialogComponent', () => {
         fixture.detectChanges();
     });
 
-    const component = (): { transpositionOverride: number | null; soundDirty: boolean; saveSound(): void; correct(version: ScoreVersion): void } =>
-        fixture.componentInstance as never;
+    const component = (): { transpositionOverride: number | null; soundDirty: boolean; saveSound(): void; correct(version: ScoreVersion): void } => fixture.componentInstance as never;
     const clickClose = (): void => fixture.nativeElement.querySelector('footer p-button button').click();
+
+    it('compares a version and opens the editor at the measure chosen in the comparison', () => {
+        expect(fixture.nativeElement.textContent).not.toContain('Confronta');
+        const dialogs = fixture.debugElement.injector.get(DialogService);
+        const onClose = new Subject<unknown>();
+        const open = spyOn(dialogs, 'open').and.returnValue({ onClose } as never);
+
+        (fixture.componentInstance as unknown as { compare(version: ScoreVersion): void }).compare(version);
+        expect(open.calls.mostRecent().args[0]).toBe(ScoreCompareDialogComponent);
+        expect(open.calls.mostRecent().args[1]?.data).toEqual({ trackId: 4, scoreId: 9, subject: 'Clarinetto piccolo mib', versionId: 7, sound: data.sound, correctable: true });
+        onClose.next({ correctVersionId: 7, measureIndex: 5 });
+
+        expect(dialogRef.close).toHaveBeenCalledWith({ changed: false, correctVersionId: 7, measureIndex: 5 });
+    });
+
+    it('offers the comparison with more than one version', () => {
+        playbackService.versions.and.returnValue(of([version, { ...version, id: 6, versionNumber: 1, current: false }]));
+        (fixture.componentInstance as unknown as { ngOnInit(): void }).ngOnInit();
+        fixture.detectChanges();
+
+        expect(fixture.nativeElement.textContent).toContain('Confronta');
+    });
 
     it('closes at once when the sound has no unsaved changes', () => {
         clickClose();
@@ -117,7 +138,10 @@ describe('ScoreVersionsDialogComponent', () => {
 
         it('saves the compressed MusicXML and the engraved PDF of the version', async () => {
             playbackService.versionFile.and.returnValue(of(new Blob(['mxl'])));
-            playbackService.engravingPdf.and.returnValues(of(new Blob(['pdf'])), throwError(() => new Error('gone')));
+            playbackService.engravingPdf.and.returnValues(
+                of(new Blob(['pdf'])),
+                throwError(() => new Error('gone'))
+            );
             data.engravedFromVersionId = 7;
             downloads().openDownloads(new MouseEvent('click'), { toggle: () => undefined }, version);
 
@@ -134,8 +158,12 @@ describe('ScoreVersionsDialogComponent', () => {
         });
 
         it('builds the MIDI of the version in the browser, and says when the version cannot be read', async () => {
-            const xml = '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Cl</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>whole</type></note></measure></part></score-partwise>';
-            playbackService.editor.and.returnValues(of({ version, musicXml: xml, pages: [], layout: null }), throwError(() => new Error('offline')));
+            const xml =
+                '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Cl</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration><voice>1</voice><type>whole</type></note></measure></part></score-partwise>';
+            playbackService.editor.and.returnValues(
+                of({ version, musicXml: xml, pages: [], layout: null }),
+                throwError(() => new Error('offline'))
+            );
 
             await downloads().downloadMidi(version);
             expect(playbackService.editor).toHaveBeenCalledWith(4, 9, 7);

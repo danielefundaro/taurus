@@ -3,6 +3,7 @@ import { of, Subject, throwError } from 'rxjs';
 import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { ExtractPartsDialogComponent } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
+import { ScoreCompareDialogComponent } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { Arrangement, ArrangementVersion } from '../../../../module';
@@ -172,6 +173,14 @@ describe('ScoreArrangementPanelComponent', () => {
         component.discardDraft();
         await settle();
         expect(service.arrangement.calls.count()).toBe(loads + 1);
+    });
+
+    it('compares a version of the score row by row, with the instruments of the rows', () => {
+        component.compare(VERSION);
+
+        expect(opened().component).toBe(ScoreCompareDialogComponent);
+        expect(opened().options.width).toBe('100vw');
+        expect(opened().options.data).toEqual({ trackId: 5, scoreId: null, subject: 'Partitura', versionId: 21, rows: component.arrangement.rows });
     });
 
     it('lists, approves and downloads the versions', async () => {
