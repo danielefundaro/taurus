@@ -10,6 +10,8 @@ export interface DrawingSource {
     partNames?: boolean;
     /** Le interruzioni di pagina diventano interruzioni di riga: lo spartito scorre in una pagina sola. */
     pageBreaksAsSystems?: boolean;
+    /** Posizioni da 0 delle battute che aprono un sistema: l'estratto vi va a capo, come il disegno che sostituisce. */
+    systems?: ReadonlySet<number>;
 }
 
 /**
@@ -110,10 +112,18 @@ function partCopy(target: Document, part: Element, from: number, to: number, fir
                 print.setAttribute('new-system', 'yes');
             }
         }
+        if (first && source.systems?.has(index)) newSystem(target, measure);
         if (index === from && state) prependState(target, measure, state);
         copy.append(measure);
     }
     return copy;
+}
+
+/** La battuta apre un sistema: Verovio legge l'interruzione di riga dal primo rigo. */
+function newSystem(target: Document, measure: Element): void {
+    const print = child(measure, 'print') ?? measure.insertBefore(target.createElement('print'), measure.firstChild);
+    print.removeAttribute('new-page');
+    print.setAttribute('new-system', 'yes');
 }
 
 /** Ultimo valore di ogni elemento di `<attributes>` scritto prima della battuta `from`. */

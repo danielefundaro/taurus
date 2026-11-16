@@ -1,14 +1,15 @@
 import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MenuItem } from 'primeng/api';
 import { Menu, MenuModule } from 'primeng/menu';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { finalize, first, firstValueFrom } from 'rxjs';
 import { ImportsModule } from '../../imports';
 import { PartPlaybackSettings, PlaybackInstrument, PlaybackSound, ScoreVersion } from '../../module';
 import { GENERAL_MIDI_FAMILIES, programName } from '../../score-player/general-midi';
 import { fileName, saveFile, versionMidi } from '../../score-player/midi-download';
 import { checkIssues, originLabel } from '../../score-player/playback-labels';
-import { ConfirmService, ScorePlaybackService, ToastService } from '../../service';
+import { ConfirmService, ScorePlaybackService, ScoreRecognitionService, ToastService } from '../../service';
+import { openCompareDialog } from '../score-compare-dialog/score-compare-dialog.component';
 
 export interface ScoreVersionsDialogData {
     trackId: number;
@@ -29,6 +30,8 @@ export interface ScoreVersionsDialogData {
 export interface ScoreVersionsDialogResult {
     changed: boolean;
     correctVersionId?: number;
+    /** La battuta da selezionare nell'editor, da 0, come quella di una differenza del confronto. */
+    measureIndex?: number;
 }
 
 /** Versioni MusicXML di una parte e sovrascritture di suono e trasposizione. */
@@ -37,7 +40,8 @@ export interface ScoreVersionsDialogResult {
     standalone: true,
     imports: [ImportsModule, MenuModule],
     changeDetection: ChangeDetectionStrategy.Eager,
-    templateUrl: './score-versions-dialog.component.html'
+    templateUrl: './score-versions-dialog.component.html',
+    providers: [DialogService]
 })
 export class ScoreVersionsDialogComponent implements OnInit {
     protected readonly data: ScoreVersionsDialogData;
@@ -59,6 +63,8 @@ export class ScoreVersionsDialogComponent implements OnInit {
         private readonly playbackService: ScorePlaybackService,
         private readonly toastService: ToastService,
         private readonly confirmService: ConfirmService,
+        private readonly dialogService: DialogService,
+        private readonly recognitionService: ScoreRecognitionService,
         config: DynamicDialogConfig<ScoreVersionsDialogData>
     ) {
         this.data = config.data!;
@@ -116,7 +122,12 @@ export class ScoreVersionsDialogComponent implements OnInit {
     }
 
     protected approve(version: ScoreVersion): void {
-        this.run(this.playbackService.approve(this.data.trackId, this.data.scoreId, version.id), 'Versione approvata', `La versione ${version.versionNumber} è approvata e ascoltata per la parte.`);
+        const versions = this.versions;
+        const { trackId, scoreId } = this.data;
+        this.run(this.playbackService.approve(trackId, scoreId, version.id), 'Versione approvata', `La versione ${version.versionNumber} è approvata e ascoltata per la parte.`, (approved) => {
+            // La raccolta della qualità del riconoscimento segue l'approvazione e non la ritarda.
+            if (version.status !== 'APPROVED') void this.recognitionService.collect(trackId, scoreId, approved, { versions, complete: true });
+        });
     }
 
     /** Apre il menu dei formati della versione: MusicXML, MIDI e, se ne derivano le pagine, il PDF. */
@@ -178,9 +189,28 @@ export class ScoreVersionsDialogComponent implements OnInit {
         this.saveSound();
     }
 
+    /**
+     * Confronta la versione con quella da cui deriva, o con la precedente; «Correggi» del confronto apre l'editor sulla
+     * versione più recente, alla battuta della differenza scelta.
+     */
+    protected compare(version: ScoreVersion): void {
+        openCompareDialog(this.dialogService, {
+            trackId: this.data.trackId,
+            scoreId: this.data.scoreId,
+            subject: this.data.partLabel,
+            versionId: version.id,
+            sound: this.data.sound ?? null,
+            correctable: true
+        })
+            .pipe(first())
+            .subscribe((result) => {
+                if (result) this.correct(this.versions.find((item) => item.id === result.correctVersionId) ?? version, result.measureIndex);
+            });
+    }
+
     /** Chiude il dialogo e apre la versione nell'editor di correzione; con il suono non salvato chiede prima. */
-    protected correct(version: ScoreVersion): void {
-        const open = (): void => this.dialogRef.close({ changed: this.changed, correctVersionId: version.id } satisfies ScoreVersionsDialogResult);
+    protected correct(version: ScoreVersion, measureIndex?: number): void {
+        const open = (): void => this.dialogRef.close({ changed: this.changed, correctVersionId: version.id, ...(measureIndex === undefined ? {} : { measureIndex }) } satisfies ScoreVersionsDialogResult);
         if (!this.soundDirty) {
             open();
             return;
@@ -209,16 +239,17 @@ export class ScoreVersionsDialogComponent implements OnInit {
         };
     }
 
-    private run(request: ReturnType<ScorePlaybackService['approve']>, title: string, detail: string): void {
+    private run(request: ReturnType<ScorePlaybackService['approve']>, title: string, detail: string, done?: (version: ScoreVersion) => void): void {
         this.busy = true;
         request
             .pipe(
                 first(),
                 finalize(() => (this.busy = false))
             )
-            .subscribe(() => {
+            .subscribe((version) => {
                 this.changed = true;
                 this.toastService.success(title, detail);
+                done?.(version);
                 this.load();
             });
     }

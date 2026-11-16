@@ -383,6 +383,19 @@
                                     (onClick)="transpose()"
                                 />
                             </div>
+                            <div class="score-editor__group" role="group" aria-label="Frammenti">
+                                <span class="score-editor__label">Frammenti</span>
+                                <p-button
+                                    label="Salva come frammento"
+                                    icon="pi pi-bookmark"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    pTooltip="Salva le battute intere selezionate, al massimo 64, nella biblioteca dell'associazione"
+                                    [disabled]="!measure && !passage"
+                                    (onClick)="saveFragment()"
+                                />
+                            </div>
                         </div>
                     </p-tabpanel>
                 }
@@ -487,6 +500,18 @@
                             <span class="score-editor__label">Battuta {{ measure?.number }}</span>
                             <p-button label="Inserisci prima" size="small" severity="secondary" outlined [disabled]="!measure" (onClick)="insertMeasure('before')" />
                             <p-button label="Elimina" icon="pi pi-trash" size="small" severity="danger" outlined [disabled]="!measure" (onClick)="deleteMeasure()" />
+                            @if (writingMode) {
+                                <p-button
+                                    label="Inserisci un frammento"
+                                    icon="pi pi-bookmark"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    pTooltip="Dalla biblioteca, prima della battuta selezionata o in fondo"
+                                    [disabled]="readOnly"
+                                    (onClick)="openFragments()"
+                                />
+                            }
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Numero di battute">
                             <span class="score-editor__label">Numero di battute</span>

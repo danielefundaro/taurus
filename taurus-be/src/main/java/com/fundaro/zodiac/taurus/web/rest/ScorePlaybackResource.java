@@ -12,9 +12,11 @@ import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.Sco
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.ScoreVersionDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackDTO;
 import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScorePlaybackDtos.TrackPlaybackSettingsDTO;
+import com.fundaro.zodiac.taurus.service.dto.scoreplayback.ScoreRecognitionDtos.RecognitionReviewRequestDTO;
 import com.fundaro.zodiac.taurus.service.scoreplayback.MusicXmlDocuments;
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScoreErrorReportService;
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScorePlaybackService;
+import com.fundaro.zodiac.taurus.service.scoreplayback.ScoreRecognitionReviewService;
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScoreRecognitionService;
 import com.fundaro.zodiac.taurus.service.scoreplayback.ScoreVersionService;
 import org.springframework.http.ContentDisposition;
@@ -51,17 +53,20 @@ public class ScorePlaybackResource {
     private final ScoreVersionService versionService;
     private final ScoreRecognitionService recognitionService;
     private final ScoreErrorReportService reportService;
+    private final ScoreRecognitionReviewService reviewService;
 
     public ScorePlaybackResource(
         ScorePlaybackService playbackService,
         ScoreVersionService versionService,
         ScoreRecognitionService recognitionService,
-        ScoreErrorReportService reportService
+        ScoreErrorReportService reportService,
+        ScoreRecognitionReviewService reviewService
     ) {
         this.playbackService = playbackService;
         this.versionService = versionService;
         this.recognitionService = recognitionService;
         this.reportService = reportService;
+        this.reviewService = reviewService;
     }
 
     /** Recognizes every part with pages that has no recognition queued or running. */
@@ -179,6 +184,22 @@ public class ScorePlaybackResource {
         AbstractAuthenticationToken token
     ) {
         return ResponseEntity.ok(versionService.approve(trackId, scoreId, versionId, token));
+    }
+
+    /**
+     * Counts of the comparison, made in the browser, between an approved version and the version of the engine it
+     * descends from: only counts, never the content of the score.
+     */
+    @PutMapping("/scores/{scoreId}/score-versions/{versionId}/recognition-review")
+    public ResponseEntity<Void> recordRecognitionReview(
+        @PathVariable Long trackId,
+        @PathVariable Long scoreId,
+        @PathVariable Long versionId,
+        @RequestBody RecognitionReviewRequestDTO review,
+        AbstractAuthenticationToken token
+    ) {
+        reviewService.record(trackId, scoreId, versionId, review, token);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/scores/{scoreId}/score-versions/{versionId}/current")

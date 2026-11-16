@@ -986,6 +986,7 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scorePlayback.report.invalid` | 422 | Segnalazione senza descrizione, con una descrizione oltre 1000 caratteri o un numero di battuta oltre 16 caratteri | — | «Descrivere l'errore in al massimo 1000 caratteri» |
 | `scorePlayback.report.limitReached` | 409 | L'utente ha già il numero massimo di segnalazioni aperte sulla parte | `maxOpen` | «Hai già {maxOpen} segnalazioni aperte su questa parte: attendi che vengano esaminate» |
 | `scorePlayback.report.notFound` | 404 | Segnalazione inesistente o di un'altra traccia | — | «Segnalazione non trovata» |
+| `scorePlayback.recognitionReviewInvalid` | 400 | Raccolta della qualità del riconoscimento per una versione non approvata, per una versione di un motore che non è quella da cui discende la versione approvata, o con conteggi negativi o incoerenti tra loro | `reason`: `notApproved`, `notFromEngine`, `inconsistentCounts` | Nessuno: la raccolta segue l'approvazione o parte dalla pagina Riconoscimento, e non mostra errori |
 
 ### Scrittura musicale e blocco degli editor
 
@@ -1009,6 +1010,9 @@ La guida non mostra all'utente gli errori delle proprie chiamate automatiche: i 
 | `scoreWriting.extractionInvalid` | 400 | Estrazione senza righi, con un rigo che non è nella versione della partitura o ripetuto, con due righi verso la stessa parte o verso una parte con strumenti diversi da quelli del rigo; anche alla creazione della partitura, per due righi fatti dalla stessa parte | `reason`: `empty`, `unknownRow`, `duplicateRow`, `duplicateTarget`, `instrumentsMismatch` | Testo per motivo, per esempio «Due righi non possono andare nella stessa parte» |
 | `scoreWriting.instrumentNotConfigured` | 422 | Estrazione, da una partitura in suoni reali, di un rigo con uno strumento intonato senza trasposizione | `instrument`: nome dello strumento | «{instrument} non ha la trasposizione: configurarla per estrarne la parte» |
 | `scoreWriting.engravingNotReady` | 409 | Assegnazione di pagine di un job non terminato, già assegnato o con le pagine ormai eliminate, da un'impaginazione più recente della parte o dalla pulizia | — | «Le pagine impaginate non sono più disponibili: impaginare di nuovo la versione» |
+| `scoreWriting.fragmentNotFound` | 404 | Il frammento non esiste o è stato eliminato | — | «Il frammento non è più nella biblioteca: ricaricare l'elenco» |
+| `scoreWriting.fragmentNameExists` | 409 | Salvataggio o modifica di un frammento con il nome di un altro frammento non eliminato, senza distinguere maiuscole e minuscole | — | «Un altro frammento ha già questo nome», sotto il campo Nome |
+| `scoreWriting.fragmentInvalid` | 422 | Il contenuto del frammento non è un MusicXML di battute intere valide con almeno una nota, ha più parti, troppe battute, tempo, segni, salti, una battuta in levare, o suoni di percussione che non corrispondono alle voci delle note | `maxMeasures` facoltativo (numero massimo di battute, con il motivo tooManyMeasures); `reason`: `malformed`, `tooLarge` (oltre 1 MB), `severalParts`, `tooManyMeasures`, `structure`, `empty`, `percussionSounds` | Testo per motivo, per esempio «Un frammento ha al massimo {maxMeasures} battute» |
 
 ### Onboarding
 

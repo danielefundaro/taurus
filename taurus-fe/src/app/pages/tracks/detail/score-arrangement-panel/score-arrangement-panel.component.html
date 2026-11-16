@@ -76,6 +76,17 @@
                             @if (version.status !== 'APPROVED') {
                                 <p-button label="Approva" icon="pi pi-check" size="small" severity="secondary" outlined (onClick)="approve(version)" />
                             }
+                            @if (versions.length > 1) {
+                                <p-button
+                                    label="Confronta"
+                                    icon="pi pi-arrow-right-arrow-left"
+                                    size="small"
+                                    severity="secondary"
+                                    outlined
+                                    pTooltip="Le battute diverse da quella da cui deriva, o dalla precedente, rigo per rigo"
+                                    (onClick)="compare(version)"
+                                />
+                            }
                             <p-button label="Scarica MusicXML" icon="pi pi-download" size="small" severity="secondary" text pTooltip="File da aprire in MuseScore" (onClick)="download(version)" />
                         </div>
                     </div>

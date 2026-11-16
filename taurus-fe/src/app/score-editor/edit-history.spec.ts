@@ -1,4 +1,4 @@
-import { MeasureHistory, SnapshotHistory } from './edit-history';
+import { MeasureHistory } from './edit-history';
 import { ScoreDocument } from './score-document';
 
 const half = (step: string): string => `<note><pitch><step>${step}</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>`;
@@ -26,54 +26,6 @@ function appendMeasure(score: ScoreDocument): void {
 }
 
 describe('edit history', () => {
-    describe('SnapshotHistory', () => {
-        it('undoes and redoes the whole document, keeping the active row', () => {
-            const history = new SnapshotHistory();
-            const score = ScoreDocument.open(XML);
-            score.selectPart(1);
-            expect(history.canUndo).toBeFalse();
-
-            const before = score.snapshot();
-            setStep(score, 1, 0, 'G');
-            history.record(score, before, false);
-            // Una modifica unita alla precedente non aggiunge un passo.
-            const merged = score.snapshot();
-            setStep(score, 1, 0, 'A');
-            history.record(score, merged, true);
-            expect(history.canUndo).toBeTrue();
-
-            const undone = history.undo(score)!;
-            expect(undone).not.toBe(score);
-            expect(undone.partIndex).toBe(1);
-            expect(steps(undone)).toEqual([
-                ['C', 'D'],
-                ['E', 'F']
-            ]);
-            expect(history.undo(undone)).toBeNull();
-            expect(history.canRedo).toBeTrue();
-
-            const redone = history.redo(undone)!;
-            expect(steps(redone)[1]).toEqual(['A', 'F']);
-            expect(history.redo(redone)).toBeNull();
-        });
-
-        it('takes the snapshot before a change at once and does not know what changed', () => {
-            const history = new SnapshotHistory();
-            const score = ScoreDocument.open(XML);
-            const snapshot = score.snapshot();
-
-            const before = history.checkpoint(score);
-            setStep(score, 0, 0, 'G');
-            expect(before()).toBe(snapshot);
-            history.record(score, before, false);
-
-            expect(history.lastChange).toBeNull();
-            expect(history.modified()).toBeNull();
-            expect(steps(history.undo(score)!)[0]).toEqual(['C', 'D']);
-            history.dispose();
-        });
-    });
-
     describe('MeasureHistory', () => {
         it('records the changed measures of every row and restores them in the same document', () => {
             const score = ScoreDocument.open(XML);
@@ -184,7 +136,7 @@ describe('edit history', () => {
 
         it('ignores a record without changes and keeps the last steps within the limit', () => {
             const score = ScoreDocument.open(XML);
-            const history = new MeasureHistory(score, 2);
+            const history = new MeasureHistory(score, { limit: 2 });
 
             history.record(score, score.snapshot(), false);
             expect(history.canUndo).toBeFalse();
@@ -206,6 +158,29 @@ describe('edit history', () => {
             expect(history.canRedo).toBeFalse();
         });
 
+        it('reads the opened document when asked, after the first page, or before the first operation', () => {
+            const score = ScoreDocument.open(XML);
+            const serialize = spyOn(XMLSerializer.prototype, 'serializeToString').and.callThrough();
+            const history = new MeasureHistory(score, { deferred: true });
+            expect(serialize).not.toHaveBeenCalled();
+
+            history.prepare();
+            const read = serialize.calls.count();
+            expect(read).toBeGreaterThan(0);
+            history.prepare();
+            expect(serialize.calls.count()).toBe(read);
+
+            const other = ScoreDocument.open(XML);
+            const lazy = new MeasureHistory(other, { deferred: true });
+            const before = lazy.checkpoint(other);
+            setStep(other, 0, 0, 'G');
+            lazy.record(other, before, false);
+            expect(lazy.modified(other)).toBeTrue();
+            lazy.undo(other);
+            expect(steps(other)[0]).toEqual(['C', 'D']);
+            expect(lazy.modified(other)).toBeFalse();
+        });
+
         it('tells the rows and measures of the last change and whether the document differs from the opened one', () => {
             const score = ScoreDocument.open(XML);
             const history = new MeasureHistory(score);
@@ -225,11 +200,15 @@ describe('edit history', () => {
             history.redo(score);
             expect(history.modified(score)).toBeTrue();
 
-            // Una modifica non ancora registrata: il confronto non si sa.
+            // Una modifica non ancora registrata, o annullata a mano, si legge di nuovo dal documento.
             setStep(score, 0, 0, 'B');
-            expect(history.modified(score)).toBeNull();
+            expect(history.modified(score)).toBeTrue();
+            setStep(score, 0, 0, 'C');
+            setStep(score, 1, 0, 'E');
+            expect(history.modified(score)).toBeFalse();
             history.dispose();
-            expect(history.modified(score)).toBeNull();
+            expect(history.modified(score)).toBeFalse();
+            expect(history.modified(ScoreDocument.open(XML.replace('Oboe', 'Clarinetto')))).toBeTrue();
         });
 
         it('rebuilds the document before a change only when it is needed', () => {

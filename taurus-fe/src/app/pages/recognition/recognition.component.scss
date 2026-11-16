@@ -1,0 +1,156 @@
+.recognition-collect {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.recognition-collect__text {
+    display: flex;
+    flex: 1 1 18rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.recognition-collect__bar {
+    flex: 1 1 12rem;
+}
+
+// Un riquadro per motore, affiancati quando c'è spazio.
+.recognition-engines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.recognition-engine {
+    margin-bottom: 0;
+}
+
+.recognition-engine__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.recognition-engine__name {
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.recognition-figures {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 1rem;
+    margin: 0;
+}
+
+.recognition-figure {
+    dt {
+        color: var(--p-text-muted-color);
+        font-size: 0.875rem;
+    }
+
+    dd {
+        display: flex;
+        flex-direction: column;
+        gap: 0.125rem;
+        margin: 0.25rem 0 0;
+    }
+}
+
+.recognition-figure__value {
+    font-size: 1.75rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.recognition-section__title {
+    margin: 0 0 0.5rem;
+    font-size: 1.125rem;
+}
+
+.recognition-section__hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+}
+
+.recognition-section__hint:last-child {
+    margin: 0.75rem 0 0;
+}
+
+.recognition-table-wrap {
+    overflow-x: auto;
+}
+
+.recognition-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+
+    th,
+    td {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--p-content-border-color);
+        text-align: left;
+        vertical-align: middle;
+    }
+
+    thead th {
+        color: var(--p-text-muted-color);
+        font-size: 0.875rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    tbody th {
+        font-weight: 500;
+        white-space: nowrap;
+    }
+
+    tbody tr:last-child th,
+    tbody tr:last-child td {
+        border-bottom: 0;
+    }
+}
+
+.recognition-table__action {
+    text-align: right !important;
+    white-space: nowrap;
+}
+
+// La barra ripete il valore scritto accanto: è solo un aiuto alla lettura.
+.recognition-meter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+    min-width: 10rem;
+}
+
+.recognition-meter__track {
+    display: block;
+    flex: 0 0 6rem;
+    height: 0.5rem;
+    overflow: hidden;
+    border-radius: 0.25rem;
+    background: var(--p-content-hover-background);
+}
+
+.recognition-meter__fill {
+    display: block;
+    height: 100%;
+    border-radius: 0.25rem;
+    background: var(--p-primary-color);
+}
+
+.recognition-meter__value {
+    min-width: 2.75rem;
+    font-weight: 600;
+}

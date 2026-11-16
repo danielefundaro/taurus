@@ -18,18 +18,24 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RestController;
 import tech.jhipster.config.JHipsterProperties;
 
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(
@@ -37,6 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SecurityConfigurationTest.CancelAvailabilityController.class,
         SecurityConfigurationTest.ErrorReportController.class,
         SecurityConfigurationTest.InstrumentSuggestionController.class,
+        SecurityConfigurationTest.RecognitionReportController.class,
+        SecurityConfigurationTest.FragmentController.class,
     }
 )
 @Import({
@@ -45,6 +53,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     SecurityConfigurationTest.CancelAvailabilityController.class,
     SecurityConfigurationTest.ErrorReportController.class,
     SecurityConfigurationTest.InstrumentSuggestionController.class,
+    SecurityConfigurationTest.RecognitionReportController.class,
+    SecurityConfigurationTest.FragmentController.class,
 })
 @EnableConfigurationProperties(JHipsterProperties.class)
 @TestPropertySource(properties = "spring.security.oauth2.client.provider.oidc.issuer-uri=https://issuer.example")
@@ -131,6 +141,54 @@ class SecurityConfigurationTest {
         mockMvc
             .perform(post("/api/tracks/4/instrument-suggestions/apply").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
             .andExpect(status().isForbidden());
+    }
+
+    @ParameterizedTest
+    @MethodSource("catalogueManagers")
+    void letsTheCatalogueManagersReadTheRecognitionQuality(String authority) throws Exception {
+        mockMvc
+            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isOk());
+        mockMvc
+            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isOk());
+    }
+
+    @ParameterizedTest
+    @MethodSource("otherRoles")
+    void keepsTheRecognitionQualityClosedToTheOtherRoles(String authority) throws Exception {
+        mockMvc
+            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isForbidden());
+        mockMvc
+            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .andExpect(status().isForbidden());
+    }
+
+    @ParameterizedTest
+    @MethodSource("catalogueManagers")
+    void letsTheCatalogueManagersUseTheFragments(String authority) throws Exception {
+        for (MockHttpServletRequestBuilder request : fragmentRequests()) {
+            mockMvc.perform(request.with(user("member").authorities(new SimpleGrantedAuthority(authority)))).andExpect(status().isOk());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("otherRoles")
+    void keepsTheFragmentsClosedToTheOtherRoles(String authority) throws Exception {
+        for (MockHttpServletRequestBuilder request : fragmentRequests()) {
+            mockMvc.perform(request.with(user("member").authorities(new SimpleGrantedAuthority(authority)))).andExpect(status().isForbidden());
+        }
+    }
+
+    private static List<MockHttpServletRequestBuilder> fragmentRequests() {
+        return List.of(
+            get("/api/score-fragments"),
+            post("/api/score-fragments"),
+            get("/api/score-fragments/3/content"),
+            put("/api/score-fragments/3"),
+            delete("/api/score-fragments/3")
+        );
     }
 
     private static Stream<String> catalogueManagers() {
@@ -221,6 +279,34 @@ class SecurityConfigurationTest {
             "/api/external/tracks/{trackId}/scores/{scoreId}/error-reports",
         })
         void reportError() {
+        }
+    }
+
+    @RestController
+    static class RecognitionReportController {
+
+        @GetMapping({ "/api/score-recognition/report", "/api/score-recognition/pending" })
+        void report() {
+        }
+    }
+
+    @RestController
+    static class FragmentController {
+
+        @GetMapping({ "/api/score-fragments", "/api/score-fragments/{fragmentId}/content" })
+        void read() {
+        }
+
+        @PostMapping("/api/score-fragments")
+        void create() {
+        }
+
+        @PutMapping("/api/score-fragments/{fragmentId}")
+        void update() {
+        }
+
+        @DeleteMapping("/api/score-fragments/{fragmentId}")
+        void remove() {
         }
     }
 

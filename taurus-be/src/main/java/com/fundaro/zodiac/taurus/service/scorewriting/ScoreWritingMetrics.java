@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.Locale;
 
-/** Saves, drafts, edit locks, engravings and extractions of the music editors; tags never carry tenant data or contents. */
+/** Saves, drafts, edit locks, engravings, extractions and fragments of the music editors; tags never carry tenant data or contents. */
 @Component
 public class ScoreWritingMetrics {
 
@@ -54,5 +54,10 @@ public class ScoreWritingMetrics {
     /** A part extracted from the score of its track: target {@code existing} or {@code newPart}. */
     public void extraction(String target) {
         registry.counter("taurus.score.arrangement.extractions", "target", target).increment();
+    }
+
+    /** A fragment saved in the library. */
+    public void fragmentSaved() {
+        registry.counter("taurus.score.fragments.saves").increment();
     }
 }

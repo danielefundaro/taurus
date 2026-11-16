@@ -56,20 +56,22 @@ const STEP_SEMITONES: Readonly<Record<string, number>> = { C: 0, D: 2, E: 4, F: 
 const DYNAMICS: Readonly<Record<string, number>> = { ppp: 30, pp: 40, p: 55, mp: 70, mf: 85, f: 100, ff: 112, fff: 124, sf: 110, sfz: 110, fp: 100 };
 const DEFAULT_VELOCITY = 85;
 
-export function parseMusicXml(xml: string, partIndex = 0): ScorePart {
-    const root = parseDocument(xml);
+/** La parte indicata del file, o dell'elemento radice già analizzato con `parseMusicXmlRoot`. */
+export function parseMusicXml(xml: string | Element, partIndex = 0): ScorePart {
+    const root = typeof xml === 'string' ? parseMusicXmlRoot(xml) : xml;
     const partElement = childElements(root, 'part')[partIndex];
     if (!partElement) throw new Error('Parte non presente');
     return parsePart(root, partElement);
 }
 
 /** Tutte le parti di un file, lette una volta sola: per ascoltare insieme i righi di una partitura. */
-export function parseMusicXmlParts(xml: string): ScorePart[] {
-    const root = parseDocument(xml);
+export function parseMusicXmlParts(xml: string | Element): ScorePart[] {
+    const root = typeof xml === 'string' ? parseMusicXmlRoot(xml) : xml;
     return childElements(root, 'part').map((partElement) => parsePart(root, partElement));
 }
 
-function parseDocument(xml: string): Element {
+/** L'elemento radice del MusicXML, per leggerlo più volte senza analizzarne di nuovo il testo; un errore se è illeggibile. */
+export function parseMusicXmlRoot(xml: string): Element {
     const document = new DOMParser().parseFromString(xml, 'application/xml');
     if (document.getElementsByTagName('parsererror').length > 0) throw new Error('MusicXML non leggibile');
     return document.documentElement;
@@ -261,14 +263,16 @@ function quarterRatio(beatUnit: string | null, dotted: boolean): number {
     return dotted ? ratio * 1.5 : ratio;
 }
 
+/** Il primo figlio con il nome indicato: scorre i fratelli senza copiare i figli, perché si chiama più volte per ogni nota. */
 function child(element: Element | null | undefined, name: string): Element | null {
-    if (!element) return null;
-    for (const item of Array.from(element.children)) if (item.tagName === name) return item;
+    for (let item = element?.firstElementChild ?? null; item; item = item.nextElementSibling) if (item.tagName === name) return item;
     return null;
 }
 
 function childElements(element: Element, name: string): Element[] {
-    return Array.from(element.children).filter((item) => item.tagName === name);
+    const found: Element[] = [];
+    for (let item = element.firstElementChild; item; item = item.nextElementSibling) if (item.tagName === name) found.push(item);
+    return found;
 }
 
 function text(element: Element | null): string | null {

@@ -34,6 +34,11 @@ export interface DrawingOptions {
     condense?: boolean;
     /** Restano i nomi dei righi di una partitura. */
     partNames?: boolean;
+    /**
+     * Le righe vanno a capo solo dove il MusicXML lo indica, come gli estratti che ridisegnano una pagina con i sistemi del
+     * disegno precedente: Verovio non li ricalcola e stringe le battute di un sistema troppo pieno.
+     */
+    encodedSystems?: boolean;
 }
 
 /** Altezza di una pagina quando lo spartito scorre tutto in una pagina sola, in unità di Verovio. */
@@ -50,13 +55,15 @@ export function drawingOptions(width: number, scale: number, options: DrawingOpt
         scale,
         adjustPageHeight: true,
         // Con «smart» e soglia 0 Verovio rispetta tutte le interruzioni di riga e va a capo anche dove la riga è piena.
-        ...(options.encodedBreaks ? { breaks: 'smart', breaksSmartSb: 0 } : { breaks: 'auto' }),
+        ...(options.encodedSystems ? { breaks: 'encoded' } : options.encodedBreaks ? { breaks: 'smart', breaksSmartSb: 0 } : { breaks: 'auto' }),
         // Le opzioni restano nel toolkit: la compressione si imposta sempre, anche per le parti singole.
         condense: options.condense ? 'auto' : 'none',
         condenseFirstPage: !!options.condense,
         header: 'none',
         footer: 'none',
         svgViewBox: true,
+        // SVG senza indentazione: in una partitura grande pesa il 40% in meno, da inserire e da conservare per le pagine.
+        svgFormatRaw: true,
         svgAdditionalAttribute: ['measure@n', 'staff@n']
     };
 }

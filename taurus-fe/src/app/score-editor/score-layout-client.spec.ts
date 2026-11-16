@@ -25,7 +25,7 @@ class FakeWorker extends EventTarget {
     }
 }
 
-const page = (id: string) => ({ svg: `<svg id="${id}"/>`, width: 100, height: 50, measureIds: [id] });
+const page = (id: string) => ({ svg: `<svg id="${id}"/>`, width: 100, height: 50, measureIds: [id], systemIds: [id] });
 
 describe('ScoreLayoutClient', () => {
     let workers: FakeWorker[];

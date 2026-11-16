@@ -27,6 +27,7 @@ export class MenuComponent implements OnInit {
             this.tenantFeatureService.onboardingImportEnabled();
             this.tenantFeatureService.externalCalendarFeedEnabled();
             this.tenantFeatureService.calendarEnabled();
+            this.tenantFeatureService.scorePlaybackEnabled();
             this.buildMenu();
         });
     }
@@ -139,6 +140,13 @@ export class MenuComponent implements OnInit {
                         icon: 'pi pi-fw pi-sliders-h',
                         routerLink: ['/instruments'],
                         hasRoles: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST]
+                    },
+                    {
+                        label: 'Riconoscimento',
+                        icon: 'pi pi-fw pi-chart-bar',
+                        routerLink: ['/recognition'],
+                        hasRoles: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST],
+                        visible: this.tenantFeatureService.loaded() && this.tenantFeatureService.scorePlaybackEnabled()
                     },
                     {
                         separator: true,

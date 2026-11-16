@@ -6,7 +6,8 @@
 - ``python -m accuracy names --url http://localhost:8090 --key ...``: reads the part name on the first page of each
   piece with the text engine and prints the lines the backend would keep;
 - ``python -m accuracy compare corrected.mxl recognized.mxl``: compares a real part recognized by an engine with the
-  version corrected by an archivist, both downloaded from Taurus, and lists the different measures.
+  version corrected by an archivist, both downloaded from Taurus, and lists the different measures;
+- ``python -m accuracy cases``: writes again the comparison cases shared with the frontend (``tests/compare_cases.json``).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ def main(arguments: list[str] | None = None) -> int:
     pair = commands.add_parser("compare", help="confronta una parte riconosciuta con la versione corretta")
     pair.add_argument("reference", type=Path, help="versione corretta (.mxl, .musicxml)")
     pair.add_argument("candidate", type=Path, help="versione riconosciuta (.mxl, .musicxml)")
+    commands.add_parser("cases", help="scrive di nuovo i casi del confronto comuni con il frontend")
     options = parser.parse_args(arguments)
 
     if options.command == "render":
@@ -57,6 +59,12 @@ def main(arguments: list[str] | None = None) -> int:
         print(names_report(read_names(options.url, options.key, options.pieces or None)))
         return 0
 
+    if options.command == "cases":
+        from .cases import write
+
+        print(write())
+        return 0
+
     from .compare import compare, load_file
 
     result = compare(load_file(options.reference), load_file(options.candidate))
@@ -65,6 +73,11 @@ def main(arguments: list[str] | None = None) -> int:
     print(
         f"Battute corrette: {result.correct_measures}/{result.reference_measures} ({result.accuracy:.0%}), "
         f"lette {result.candidate_measures}; struttura: {result.found_marks}/{result.reference_marks}"
+    )
+    kinds = result.kinds
+    print(
+        f"Battute diverse: altezze {kinds['pitch']}, ritmo {kinds['rhythm']}, legature {kinds['tie']}, "
+        f"perse {kinds['missing']}, in più {kinds['extra']}"
     )
     return 0
 

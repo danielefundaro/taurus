@@ -1,4 +1,4 @@
-import { child, element, insertOrdered, NOTE_ORDER, PITCH_ORDER, setChildText, text } from './musicxml-dom';
+import { child, children, element, insertOrdered, NOTE_ORDER, PITCH_ORDER, setChildText, text } from './musicxml-dom';
 import { accidentalAlter, accidentalFor, keyAlter } from './notation-rules';
 import type { ScoreDocument } from './score-document';
 import { isRest, pitchOf } from './score-document';
@@ -90,9 +90,9 @@ export function setAccidental(note: Element, accidental: string | null): void {
 }
 
 function measureNotes(measure: Element): Element[] {
-    return Array.from(measure.children).filter((item) => item.tagName === 'note' && !child(item, 'rest'));
+    return children(measure, 'note').filter((item) => !child(item, 'rest'));
 }
 
 function isTieContinuation(note: Element): boolean {
-    return Array.from(note.children).some((item) => item.tagName === 'tie' && item.getAttribute('type') === 'stop');
+    return children(note, 'tie').some((item) => item.getAttribute('type') === 'stop');
 }

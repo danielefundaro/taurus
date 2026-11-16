@@ -5,9 +5,10 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-/** Recognition, upload and error report metrics; tags never carry tenant data, file contents or report texts. */
+/** Recognition, review, upload and error report metrics; tags never carry tenant data, file contents or report texts. */
 @Component
 public class ScorePlaybackMetrics {
 
@@ -42,6 +43,18 @@ public class ScorePlaybackMetrics {
     /** An error report: outcome {@code created}, {@code closed} or {@code approved} (closed by the approval of a version). */
     public void errorReport(String outcome, int count) {
         registry.counter(PREFIX + "error_reports", "outcome", outcome).increment(count);
+    }
+
+    /**
+     * The first review of a version of an engine, summed over all tenants: its measures by outcome ({@code correct},
+     * {@code pitch}, {@code rhythm}, {@code tie}, {@code missing}, {@code extra}) and its structure marks ({@code found},
+     * {@code missed}). A later approval of the same version replaces the review without counting it again.
+     */
+    public void recognitionReview(String engine, Map<String, Integer> measures, int foundMarks, int missedMarks) {
+        String tag = tag(engine);
+        measures.forEach((outcome, count) -> registry.counter(PREFIX + "recognition.measures", "engine", tag, "outcome", outcome).increment(count));
+        registry.counter(PREFIX + "recognition.marks", "engine", tag, "outcome", "found").increment(foundMarks);
+        registry.counter(PREFIX + "recognition.marks", "engine", tag, "outcome", "missed").increment(missedMarks);
     }
 
     private static String tag(String value) {

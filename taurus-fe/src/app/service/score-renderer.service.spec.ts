@@ -161,7 +161,10 @@ describe('drawingOptions', () => {
         expect(scroll['breaksSmartSb']).toBeUndefined();
 
         const paged = drawingOptions(200, 50, { pageHeight: 600, encodedBreaks: true, condense: true });
-        expect(paged).toEqual(jasmine.objectContaining({ pageWidth: 600, pageHeight: 1200, breaks: 'smart', breaksSmartSb: 0, condense: 'auto', condenseFirstPage: true }));
+        expect(paged).toEqual(jasmine.objectContaining({ pageWidth: 600, pageHeight: 1200, breaks: 'smart', breaksSmartSb: 0, condense: 'auto', condenseFirstPage: true, svgFormatRaw: true }));
+
+        // Un estratto con i sistemi del disegno precedente va a capo solo dove è scritto.
+        expect(drawingOptions(1000, 50, { encodedBreaks: true, encodedSystems: true })['breaks']).toBe('encoded');
     });
 });
 

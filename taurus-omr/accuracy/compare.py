@@ -4,6 +4,10 @@ A measure is correct when it has the same length and the same notes: start, dura
 note, whatever the voices, spelling, beams or rests. Measures are aligned first, so a measure read twice or missed
 counts once and does not shift the rest of the part. Structure marks (repeats, endings, segno, coda, Fine, D.C., D.S.
 and tempo) are compared on the aligned measures. The reading rules follow ``score-player/musicxml-score.ts``.
+
+A different measure has a kind: ``rhythm`` when its length, starts or durations differ, ``pitch`` when only pitches
+differ, ``tie`` when only ties differ; ``missing`` and ``extra`` are the measures of only one part. The frontend compares
+versions with the same rule (``score-player/score-compare.ts``) and the cases of ``tests/compare_cases.json``.
 """
 
 from __future__ import annotations
@@ -50,6 +54,20 @@ class Measure:
         return f"{self.length} q: {notes}"
 
 
+KINDS = ("pitch", "rhythm", "tie", "missing", "extra")
+
+
+@dataclass(frozen=True)
+class Difference:
+    """A different measure, or the structure marks of a reference measure not found: ``measure`` is the number of the
+    reference measure, the one before for an extra measure."""
+
+    kind: str
+    measure: str
+    text: str
+    marks: tuple[str, ...] = ()
+
+
 @dataclass(frozen=True)
 class Comparison:
     reference_measures: int
@@ -57,11 +75,20 @@ class Comparison:
     correct_measures: int
     reference_marks: int
     found_marks: int
-    differences: tuple[str, ...]
+    details: tuple[Difference, ...]
 
     @property
     def accuracy(self) -> float:
         return self.correct_measures / self.reference_measures if self.reference_measures else 1.0
+
+    @property
+    def differences(self) -> tuple[str, ...]:
+        return tuple(detail.text for detail in self.details)
+
+    @property
+    def kinds(self) -> dict[str, int]:
+        """Different measures by kind, without the structure marks."""
+        return {kind: sum(1 for detail in self.details if detail.kind == kind) for kind in KINDS}
 
 
 def load(data: bytes) -> list[Measure]:
@@ -85,7 +112,7 @@ def compare(reference: list[Measure], candidate: list[Measure]) -> Comparison:
     matcher = difflib.SequenceMatcher(None, [m.content for m in reference], [m.content for m in candidate], autojunk=False)
     correct = 0
     pairs: list[tuple[Measure, Measure]] = []
-    differences: list[str] = []
+    differences: list[Difference] = []
     for operation, ref_start, ref_end, cand_start, cand_end in matcher.get_opcodes():
         expected, found = reference[ref_start:ref_end], candidate[cand_start:cand_end]
         if operation == "equal":
@@ -93,16 +120,18 @@ def compare(reference: list[Measure], candidate: list[Measure]) -> Comparison:
         elif operation == "replace":
             for index in range(max(len(expected), len(found))):
                 if index < len(expected) and index < len(found):
-                    differences.append(f"battuta {expected[index].number}: attesa {expected[index].describe()}; letta {found[index].describe()}")
+                    text = f"battuta {expected[index].number}: attesa {expected[index].describe()}; letta {found[index].describe()}"
+                    differences.append(Difference(kind(expected[index], found[index]), expected[index].number, text))
                 elif index < len(expected):
-                    differences.append(f"battuta {expected[index].number}: mancante")
+                    differences.append(Difference("missing", expected[index].number, f"battuta {expected[index].number}: mancante"))
                 else:
-                    differences.append(f"battuta in più dopo la {expected[-1].number}: {found[index].describe()}")
+                    after = expected[-1].number
+                    differences.append(Difference("extra", after, f"battuta in più dopo la {after}: {found[index].describe()}"))
         elif operation == "delete":
-            differences.extend(f"battuta {measure.number}: mancante" for measure in expected)
+            differences.extend(Difference("missing", measure.number, f"battuta {measure.number}: mancante") for measure in expected)
         else:
             after = reference[ref_start - 1].number if ref_start else "0"
-            differences.extend(f"battuta in più dopo la {after}: {measure.describe()}" for measure in found)
+            differences.extend(Difference("extra", after, f"battuta in più dopo la {after}: {measure.describe()}") for measure in found)
         if operation in ("equal", "replace"):
             pairs.extend(zip(expected, found))
     aligned = {id(ref): cand for ref, cand in pairs}
@@ -114,8 +143,25 @@ def compare(reference: list[Measure], candidate: list[Measure]) -> Comparison:
         found_marks += len(found)
         missing = sorted(measure.marks - found)
         if missing:
-            differences.append(f"battuta {measure.number}: struttura non letta: {', '.join(missing)}")
+            differences.append(Difference("marks", measure.number, f"battuta {measure.number}: struttura non letta: {', '.join(missing)}", tuple(missing)))
     return Comparison(len(reference), len(candidate), correct, reference_marks, found_marks, tuple(differences))
+
+
+def kind(reference: Measure, candidate: Measure) -> str:
+    """Why two aligned measures differ: the rhythm, only the pitches or only the ties."""
+    if reference.length != candidate.length or _rhythm(reference) != _rhythm(candidate):
+        return "rhythm"
+    if _pitches(reference) != _pitches(candidate):
+        return "pitch"
+    return "tie"
+
+
+def _rhythm(measure: Measure) -> list[tuple[Fraction, Fraction]]:
+    return sorted((note.start, note.duration) for note in measure.notes)
+
+
+def _pitches(measure: Measure) -> list[tuple[Fraction, Fraction, int]]:
+    return sorted((note.start, note.duration, note.midi) for note in measure.notes)
 
 
 def _measure(element: ElementTree.Element, state: dict[str, Fraction]) -> Measure:

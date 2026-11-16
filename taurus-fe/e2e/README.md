@@ -65,6 +65,16 @@ Le prove sono in `specs`:
   fine rimette in vigore la versione di prima. Una versione pubblicata non si elimina: ogni
   esecuzione lascia nell'ambiente una versione `e2e-…` ritirata. Ciclo di vita, immutabilità,
   cache con `ETag` e vincoli sono in `LegalResourceIT` del backend.
+- `score-writing.spec.ts`: la scrittura della musica — un archivista crea una parte nuova, la scrive
+  in modalità di inserimento con le lettere della tastiera sul desktop e con il pianoforte a schermo
+  sul tablet, annulla e ripristina l'ultima nota, salva e approva la versione; chiude l'editor e
+  riprende la bozza con le note scritte; un amministratore che apre la parte mentre l'archivista la
+  scrive vede la bozza in sola lettura, con «Prendi il controllo» e senza salvataggio, e chi scrive
+  tiene il blocco. Le prove si saltano senza `E2E_SCORE_WRITING_TRACK_ID` e sotto 768 pixel; il
+  profilo tablet è nella matrice (`--project=tablet`). Ogni prova crea una parte `e2e-scrittura-…` e
+  alla fine la rimuove dalla traccia con «Salva traccia»: l'eliminazione è logica, quindi la base dati
+  conserva la parte e le sue versioni. La tastiera MIDI vera, le partiture grandi e i tempi di
+  scrittura degli archivisti restano nelle verifiche a mano del runbook (casi `SCW`).
 
 ## Prerequisiti
 
@@ -111,6 +121,7 @@ quando non sono configurati.
 | `E2E_SECOND_INVENTORY_QR_CODE` | Identificatore di un oggetto del secondo tenant, per provare che dal primo risponde come un codice sconosciuto; facoltativo |
 | `E2E_PREPARATION_EVENT_ID` | Evento del primo tenant con `EVENT_PREPARATION` attivo, piano configurato e programma richiesto, possibilmente con almeno due brani e una criticità; senza di esso le prove della preparazione si saltano |
 | `E2E_LEGAL_PUBLISH` | `true` per pubblicare una versione dei termini nello scenario dei documenti legali; servono il super amministratore e un utente del primo tenant. Senza di essa lo scenario si salta |
+| `E2E_SCORE_WRITING_TRACK_ID` | Traccia del primo tenant con `SCORE_PLAYBACK` e `SCORE_WRITING` attivi, dove le prove della scrittura creano e poi rimuovono le loro parti; servono un archivista e, per la sola lettura, un amministratore. Senza di essa quelle prove si saltano |
 | `E2E_LARGE_TRACK_ID` | Traccia del primo tenant con 200 parti e 1.000 pagine, per il gate prestazionale del workspace; senza di essa quella prova si salta |
 
 I ruoli ammessi sono `SUPERADMIN`, `ADMIN`, `BOARD` (direttivo), `ARCHIVIST`, `USER`, `EXTERNAL` e `TREASURER`.

@@ -4,6 +4,7 @@ import { first, firstValueFrom } from 'rxjs';
 import { openEngraveDialog } from '../../../../dialogs/engrave-dialog/engrave-dialog.component';
 import { ExtractedPartToEngrave, ExtractPartsDialogComponent, ExtractPartsDialogData, ExtractPartsDialogResult } from '../../../../dialogs/extract-parts-dialog/extract-parts-dialog.component';
 import { NewArrangementDialogComponent, NewArrangementDialogData, NewArrangementDialogResult } from '../../../../dialogs/new-arrangement-dialog/new-arrangement-dialog.component';
+import { openCompareDialog } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
 import { editLockMessage } from '../../../../constants';
@@ -296,6 +297,12 @@ export class ScoreArrangementPanelComponent implements OnChanges {
             // L'avviso dell'errore è già mostrato.
         }
         this.changeDetector.markForCheck();
+    }
+
+    /** Confronta la versione con quella da cui deriva, o con la precedente, rigo per rigo. */
+    protected compare(version: ArrangementVersion): void {
+        if (!this.arrangement) return;
+        openCompareDialog(this.dialogService, { trackId: this.trackId, scoreId: null, subject: 'Partitura', versionId: version.id, rows: this.arrangement.rows });
     }
 
     /** Scarica la versione come MusicXML compresso, da aprire in MuseScore. */

@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { HttpErrorResponse } from '@angular/common/http';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { finalize, first, firstValueFrom, Subscription } from 'rxjs';
 import { Popover } from 'primeng/popover';
 import { DrumPad, PianoKeyboardComponent } from '../../components/piano-keyboard/piano-keyboard.component';
+import { openFragmentDialog } from '../score-fragment-dialog/score-fragment-dialog.component';
+import { openFragmentsDialog } from '../score-fragments-dialog/score-fragments-dialog.component';
 import { ImportsModule } from '../../imports';
 import {
     ArrangementDraft,
@@ -20,7 +22,7 @@ import {
     ScoreEditorData,
     ScoreVersion
 } from '../../module';
-import { DocumentChange, DocumentHistory, MeasureHistory, SnapshotHistory } from '../../score-editor/edit-history';
+import { DocumentChange, DocumentHistory, MeasureHistory } from '../../score-editor/edit-history';
 import { excerpt } from '../../score-editor/excerpt';
 import { concertFifths, proposedClef, writtenFifths } from '../../score-editor/new-part';
 import * as arrangements from '../../score-editor/score-arrangement';
@@ -28,6 +30,7 @@ import { Alteration, ALTERATIONS, CLEF_OPTIONS, fraction, KEY_OPTIONS, NOTE_TYPE
 import { RangeInstrument, rangeLabel, RangeWarning, rangeWarnings, writtenRange } from '../../score-editor/score-derivation';
 import { EditError, ScoreDocument, ScoreDocumentChecks } from '../../score-editor/score-document';
 import * as edits from '../../score-editor/score-edits';
+import * as fragments from '../../score-editor/score-fragments';
 import * as input from '../../score-editor/score-input';
 import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
@@ -57,6 +60,7 @@ import {
     ScoreDraftService,
     ScoreEditLockService,
     ScorePlaybackService,
+    ScoreRecognitionService,
     DrawingOptions,
     drawingOptions,
     ScoreRendererService,
@@ -83,6 +87,10 @@ export interface ScoreEditorDialogData {
     engravable?: boolean;
     /** Strumento di una parte con un solo strumento, per segnalare le note fuori dalla sua estensione. */
     range?: EditorRange | null;
+    /** Strumenti della parte, per salvare e inserire i frammenti; nella partitura valgono quelli dei righi. */
+    instruments?: PlaybackInstrument[] | null;
+    /** Correzione: la battuta da selezionare all'apertura, da 0, come quella di una differenza del confronto. */
+    measureIndex?: number | null;
     /**
      * Scrittura della partitura della traccia: tutti i righi, con il blocco, la bozza e le versioni della partitura. Le
      * modifiche della struttura valgono per tutti i righi, le altre per il rigo attivo.
@@ -286,7 +294,8 @@ function fileName(label: string): string {
     imports: [ImportsModule, PianoKeyboardComponent],
     templateUrl: './score-editor-dialog.component.html',
     styleUrl: './score-editor-dialog.component.scss',
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    providers: [DialogService]
 })
 export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     /** Contenitore dello spartito: esiste solo quando l'editor è pronto. */
@@ -366,6 +375,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected rangeFocusId: string | null = null;
     /** Scrittura: passaggio dalla nota selezionata all'estremo mobile, con battute e voci che copre. */
     protected passage: passages.Passage | null = null;
+    /** Un dialogo dei frammenti è aperto sopra l'editor. */
+    private fragmentDialogOpen = false;
     private passageText = '';
     protected note: edits.NoteInfo | null = null;
     protected measure: edits.MeasureInfo | null = null;
@@ -457,8 +468,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private versionXml: string | null = null;
 
     private score?: ScoreDocument;
-    private initialSnapshot = '';
-    private history: DocumentHistory = new SnapshotHistory();
+    /** Cronologia del documento aperto, per battute anche nella parte. */
+    private history: DocumentHistory | null = null;
     private readonly pageUrls = new Map<number, string>();
     private renderToken = 0;
     private renderFrame?: number;
@@ -492,7 +503,9 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         protected readonly clipboard: ScoreClipboardService,
         protected readonly midi: MidiInputService,
         private readonly arrangementService: ArrangementService,
-        private readonly instrumentsService: InstrumentsService
+        private readonly instrumentsService: InstrumentsService,
+        private readonly recognitionService: ScoreRecognitionService,
+        private readonly dialogService: DialogService
     ) {
         this.data = config.data!;
         const arrangement = this.data.arrangement;
@@ -527,8 +540,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.reports = reports.filter((report) => report.scoreId === scoreId && report.status === 'OPEN');
             if (this.writingMode) this.midiSubscription = this.midi.played.subscribe((note) => this.onMidiNote(note));
             if (this.writingMode) await this.prepareWriting();
-            else if (editor) await this.open(editor.musicXml);
-            else throw new EditError('Scegli una versione da correggere');
+            else if (editor) {
+                await this.open(editor.musicXml);
+                const measureIndex = this.data.measureIndex;
+                if (measureIndex !== null && measureIndex !== undefined && measureIndex < (this.score?.measures().length ?? 0)) this.selectMeasure(measureIndex);
+            } else throw new EditError('Scegli una versione da correggere');
         } catch (error) {
             this.failed(error);
         }
@@ -555,15 +571,16 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         for (const url of this.pageUrls.values()) URL.revokeObjectURL(url);
         this.closePager();
         this.layoutClient?.terminate();
-        this.history.dispose();
+        this.history?.dispose();
+        this.history = null;
     }
 
     protected get canUndo(): boolean {
-        return this.history.canUndo && !this.readOnly;
+        return !!this.history?.canUndo && !this.readOnly;
     }
 
     protected get canRedo(): boolean {
-        return this.history.canRedo && !this.readOnly;
+        return !!this.history?.canRedo && !this.readOnly;
     }
 
     /** Un altro autore possiede il blocco, o non si è potuto prendere: si consulta senza modificare. */
@@ -731,7 +748,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     @HostListener('document:keydown', ['$event'])
     protected onKey(event: KeyboardEvent): void {
-        if (this.status !== 'ready' || this.saving) return;
+        // Con un dialogo dei frammenti aperto sopra l'editor i tasti sono suoi.
+        if (this.status !== 'ready' || this.saving || this.fragmentDialogOpen) return;
         const target = event.target as HTMLElement | null;
         const key = event.key;
         if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable || target.closest('.p-select, .p-select-overlay, .p-inputnumber, .p-confirmdialog'))) return;
@@ -1392,6 +1410,87 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     // Bozza della scrittura
 
     /** Riprende la bozza o la copia nel browser proposta all'apertura. */
+    // Frammenti
+
+    /** Salva come frammento le battute intere del passaggio, o la battuta selezionata, del rigo attivo. */
+    protected saveFragment(): void {
+        const score = this.score;
+        if (!score) return;
+        let range: [number, number];
+        if (this.passage) range = fragments.passageMeasures(this.passage);
+        else if (this.measure) range = [this.measure.index, this.measure.index];
+        else {
+            this.message = 'Seleziona prima le battute da salvare come frammento';
+            this.changeDetector.markForCheck();
+            return;
+        }
+        let content: fragments.FragmentContent;
+        try {
+            content = fragments.fragmentContent(score, range[0], range[1], this.fragmentNotation(score));
+        } catch (error) {
+            this.message = error instanceof EditError ? error.message : 'Frammento non preparato';
+            if (!(error instanceof EditError)) console.error(error);
+            this.changeDetector.markForCheck();
+            return;
+        }
+        this.stop();
+        this.message = null;
+        this.fragmentDialogOpen = true;
+        openFragmentDialog(this.dialogService, { content })
+            .pipe(
+                first(),
+                finalize(() => (this.fragmentDialogOpen = false))
+            )
+            .subscribe((saved) => {
+                if (saved) this.info = `Salvato il frammento «${saved.name}» nella biblioteca`;
+                this.changeDetector.markForCheck();
+            });
+    }
+
+    /** Apre la biblioteca dei frammenti per inserirne uno prima della battuta selezionata o in fondo. */
+    protected openFragments(): void {
+        const score = this.score;
+        if (!score) return;
+        if (this.readOnly) {
+            this.message = "L'editor è in sola lettura: prendi il controllo per modificare la parte";
+            this.changeDetector.markForCheck();
+            return;
+        }
+        const before = this.measure?.index ?? null;
+        this.stop();
+        this.message = null;
+        this.fragmentDialogOpen = true;
+        openFragmentsDialog(this.dialogService, {
+            notation: this.fragmentNotation(score),
+            clef: fragments.insertionClef(score, before),
+            endClef: fragments.insertionClef(score, null),
+            measureNumber: before === null ? null : (this.measure?.number ?? String(before + 1)),
+            sound: this.sound,
+            arrangement: !!this.data.arrangement
+        })
+            .pipe(
+                first(),
+                finalize(() => (this.fragmentDialogOpen = false))
+            )
+            .subscribe((result) => {
+                if (!result) return;
+                const at = result.atEnd ? null : before;
+                // Un solo passo della cronologia: «Annulla» toglie tutto il frammento.
+                const applied = this.apply((current) => fragments.insertFragment(current, result.prepared, at, !!this.data.arrangement));
+                if (applied) {
+                    const count = result.fragment.measureCount;
+                    this.info = `Inserito il frammento «${result.fragment.name}»: ${count === 1 ? '1 battuta' : `${count} battute`}`;
+                }
+                this.changeDetector.markForCheck();
+            });
+    }
+
+    /** Come il rigo attivo, o la parte, salva e riceve i frammenti. */
+    private fragmentNotation(score: ScoreDocument): fragments.FragmentNotation {
+        if (this.data.arrangement) return fragments.fragmentNotation(this.rowInstruments(score.partIndex), this.sound, arrangements.isConcertScore(score));
+        return fragments.fragmentNotation(this.data.instruments ?? [], this.sound);
+    }
+
     protected async resumeChoice(): Promise<void> {
         const choice = this.choice;
         if (!choice) return;
@@ -1503,13 +1602,13 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     // Cronologia
 
     protected undo(): void {
-        if (!this.score || this.readOnly) return;
+        if (!this.score || !this.history || this.readOnly) return;
         const previous = this.history.undo(this.score);
         if (previous) this.restored(previous);
     }
 
     protected redo(): void {
-        if (!this.score || this.readOnly) return;
+        if (!this.score || !this.history || this.readOnly) return;
         const next = this.history.redo(this.score);
         if (next) this.restored(next);
     }
@@ -1795,10 +1894,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
                     confirmOutdated: false
                 });
             } else {
+                const content = score.cleanXml();
                 const correction: ScoreCorrection = this.writingMode
-                    ? { parentVersionId: this.baseVersionId, content: score.cleanXml(), approve, origin: 'WRITING', editSession: this.lock.session }
-                    : { parentVersionId: this.editor!.version.id, content: score.cleanXml(), approve, measureSources: score.measureSources(), origin: 'CORRECTION', editSession: this.lock.session };
+                    ? { parentVersionId: this.baseVersionId, content, approve, origin: 'WRITING', editSession: this.lock.session }
+                    : { parentVersionId: this.editor!.version.id, content, approve, measureSources: score.measureSources(), origin: 'CORRECTION', editSession: this.lock.session };
                 version = await this.submit(correction);
+                if (version && approve) this.collectReview(version, content);
             }
             if (!version) {
                 keeper?.resume();
@@ -1811,6 +1912,20 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.saving = false;
             this.changeDetector.markForCheck();
         }
+    }
+
+    /**
+     * Confronta la versione approvata con quella del motore da cui discende e ne invia i conteggi, senza ritardare la
+     * chiusura dell'editor: nella correzione la versione aperta e il suo MusicXML sono già noti.
+     */
+    private collectReview(approved: ScoreVersion, content: string): void {
+        const contents = new Map<number, string>([[approved.id, content]]);
+        const versions: ScoreVersion[] = [];
+        if (!this.writingMode && this.editor) {
+            versions.push(this.editor.version);
+            contents.set(this.editor.version.id, this.editor.musicXml);
+        }
+        void this.recognitionService.collect(this.data.trackId, this.data.scoreId, approved, { versions, contents });
     }
 
     /** Prende il blocco: dopo una conferma se lo possiede un altro, che passa in sola lettura. */
@@ -1865,20 +1980,22 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     /** Apre il contenuto nell'editor e lo disegna; nella partitura segna sui righi i loro strumenti. */
     private async open(xml: string, rows: readonly RowAssignment[] | null = null): Promise<void> {
-        this.score = edits.openScore(xml);
-        if (this.data.arrangement) arrangements.annotateRows(this.score, rows ?? []);
-        this.initialSnapshot = this.score.snapshot();
-        // La partitura registra le battute cambiate, una parte le istantanee del documento.
-        this.history.dispose();
-        this.history = this.data.arrangement ? new MeasureHistory(this.score) : new SnapshotHistory();
+        const score = edits.openScore(xml);
+        this.score = score;
+        if (this.data.arrangement) arrangements.annotateRows(score, rows ?? []);
+        // La cronologia registra le battute cambiate, senza copie del documento.
+        this.history?.dispose();
+        const history = new MeasureHistory(score, { deferred: true });
+        this.history = history;
         this.measureCache = {};
         // Il disegno per pagine riparte dal nuovo documento.
         this.closePager();
         this.dirty = false;
         this.checks = this.score.checks();
+        // Cronologia e controlli dei righi e dell'estensione si completano dopo la prima pagina, che così arriva prima.
+        this.rowCheckList = [];
+        this.rangeWarnings = [];
         this.refreshRows();
-        this.refreshRowChecks();
-        this.checkRange(this.score);
         this.selectedId = this.score.notes()[0]?.getAttribute('id') ?? null;
         this.emptyMeasureId = null;
         this.rangeEnd = null;
@@ -1890,6 +2007,23 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.changeDetector.detectChanges();
         this.refreshSelection();
         await this.render();
+        this.afterFirstPage(score, history);
+    }
+
+    /**
+     * Dopo che la prima pagina è comparsa: la cronologia legge il documento e si controllano righi ed estensione, lavoro
+     * che in una partitura grande ritarderebbe la pagina. Una modifica arrivata prima trova già letto il documento.
+     */
+    private afterFirstPage(score: ScoreDocument, history: DocumentHistory): void {
+        requestAnimationFrame(() =>
+            setTimeout(() => {
+                if (this.score !== score || this.history !== history) return;
+                history.prepare();
+                this.refreshRowChecks();
+                this.checkRange(score);
+                this.changeDetector.markForCheck();
+            })
+        );
     }
 
     private failed(error: unknown): void {
@@ -2255,7 +2389,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
      */
     private apply(change: (score: ScoreDocument) => string | null | void, options: { merge?: boolean; keepPlayed?: boolean } = {}): boolean {
         if (!options.merge && !options.keepPlayed) this.played = null;
-        if (!this.score || this.saving) return false;
+        if (!this.score || !this.history || this.saving) return false;
         if (this.readOnly) {
             this.message = "L'editor è in sola lettura: prendi il controllo per modificare la parte";
             this.changeDetector.markForCheck();
@@ -2299,8 +2433,9 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.score = score;
         this.message = null;
         this.keeper?.changed();
-        this.noteDrawChange(this.history.lastChange);
-        this.afterChange(this.history.lastChange);
+        const change = this.history?.lastChange ?? null;
+        this.noteDrawChange(change);
+        this.afterChange(change);
     }
 
     /** Battute da ridisegnare nel disegno per pagine; con `null` tutte. */
@@ -2320,8 +2455,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private afterChange(change: DocumentChange | null = null): void {
         const score = this.score!;
         this.measureCache = {};
-        // La partitura confronta le battute registrate con quelle di apertura; la parte confronta le istantanee.
-        this.dirty = this.history.modified(score) ?? score.snapshot() !== this.initialSnapshot;
+        // Le battute registrate si confrontano con quelle di apertura.
+        this.dirty = this.history?.modified(score) ?? false;
         this.checks = score.checks();
         this.refreshRows();
         this.refreshRowChecks(change);
@@ -2466,7 +2601,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const created = !this.pager;
         if (!this.pager) {
             host.replaceChildren();
-            this.pager = new PagedNotation(host, { draw: (from, to) => this.drawExcerpt(from, to), positions: () => this.measurePositions(), drawn: () => this.pageDrawn() });
+            this.pager = new PagedNotation(host, { draw: (from, to, systems) => this.drawExcerpt(from, to, systems), positions: () => this.measurePositions(), drawn: () => this.pageDrawn() });
             // Prima dell'impaginazione completa le pagine sono gruppi di battute, all'incirca un sistema della partitura.
             this.pager.provisional(score.measures().length, Math.max(4, Math.round(40 / this.shownRowCount(score))), this.pageHeight(host));
         } else {
@@ -2491,13 +2626,14 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         }
     }
 
-    /** Estratto di una pagina, disegnato subito nel thread principale. */
-    private async drawExcerpt(from: number, to: number): Promise<string[]> {
+    /** Estratto di una pagina, disegnato subito nel thread principale; con `systems` tiene i sistemi del disegno precedente. */
+    private async drawExcerpt(from: number, to: number, systems: readonly number[] | null): Promise<string[]> {
         const score = this.score;
         const host = this.notationHost;
         if (!score || !host) return [];
+        const source = { ...this.drawingSource(), systems: systems ? new Set(systems) : undefined };
         try {
-            return await this.renderer.renderPrepared(drawingExcerpt(score, from, to, this.drawingSource()), host.clientWidth || 900, EDITOR_SCALE, this.drawingFlags());
+            return await this.renderer.renderPrepared(drawingExcerpt(score, from, to, source), host.clientWidth || 900, EDITOR_SCALE, { ...this.drawingFlags(), encodedSystems: !!systems });
         } catch (error) {
             this.message = DRAWING_ERROR;
             this.changeDetector.markForCheck();

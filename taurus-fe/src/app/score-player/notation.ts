@@ -6,7 +6,7 @@ import { ScoreMeasure } from './musicxml-score';
  * per numero di battuta (`data-n`); se i numeri non corrispondono ma restano tanti elementi quante battute, si abbinano
  * per posizione.
  */
-export function measureElements(measures: ScoreMeasure[], elements: Element[]): (Element | undefined)[] {
+export function measureElements(measures: readonly Pick<ScoreMeasure, 'number'>[], elements: readonly Element[]): (Element | undefined)[] {
     const result: (Element | undefined)[] = [];
     let next = 0;
     let current: Element | undefined;

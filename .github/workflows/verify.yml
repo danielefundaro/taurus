@@ -100,6 +100,10 @@ jobs:
       # dell'impaginazione nel browser coincida con le pagine generate.
       - name: Check the Verovio versions
         run: node scripts/ops/check-verovio-versions.mjs
+      # Gli stessi casi per il confronto per battute del browser e per l'accuratezza dei motori,
+      # perche' le due regole restino uguali.
+      - name: Check the measure comparison cases
+        run: node scripts/ops/check-compare-cases.mjs
 
   backend:
     needs: [changes, documentation]

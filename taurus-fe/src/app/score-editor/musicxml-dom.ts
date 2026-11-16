@@ -39,16 +39,17 @@ export const TIME_MODIFICATION_ORDER = ['actual-notes', 'normal-notes', 'normal-
 export const CLEF_ORDER = ['sign', 'line', 'clef-octave-change'] as const;
 export const DIRECTION_ORDER = ['direction-type', 'offset', 'footnote', 'level', 'voice', 'staff', 'sound', 'listening'] as const;
 
+/** Il primo figlio con il nome indicato: scorre i fratelli senza copiare i figli, perché si chiama più volte per ogni nota. */
 export function child(parent: Element | null | undefined, name: string): Element | null {
-    if (!parent) return null;
-    for (const item of Array.from(parent.children)) if (item.tagName === name) return item;
+    for (let item = parent?.firstElementChild ?? null; item; item = item.nextElementSibling) if (item.tagName === name) return item;
     return null;
 }
 
+/** I figli, o quelli con il nome indicato, in un array che non cambia se poi cambia il documento. */
 export function children(parent: Element | null | undefined, name?: string): Element[] {
-    if (!parent) return [];
-    const all = Array.from(parent.children);
-    return name === undefined ? all : all.filter((item) => item.tagName === name);
+    const found: Element[] = [];
+    for (let item = parent?.firstElementChild ?? null; item; item = item.nextElementSibling) if (name === undefined || item.tagName === name) found.push(item);
+    return found;
 }
 
 export function text(element: Element | null | undefined): string | null {

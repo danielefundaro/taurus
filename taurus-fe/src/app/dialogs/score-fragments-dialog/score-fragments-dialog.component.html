@@ -1,0 +1,105 @@
+<app-dialog-shell heading="Frammenti" [subtitle]="subtitle" [dismissOnly]="true" cancelLabel="Chiudi" (cancel)="close()">
+    @if (loading) {
+        <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Lettura della biblioteca…</span>
+    } @else if (loadError) {
+        <app-inline-alert severity="error" heading="Biblioteca non leggibile" detail="I frammenti non si leggono: riprova più tardi." />
+    } @else if (!fragments.length) {
+        <app-empty-state icon="pi pi-bookmark" heading="Nessun frammento" message="Seleziona delle battute nell'editor e usa «Salva come frammento» nella scheda Passaggio." />
+    } @else {
+        <div class="score-fragments">
+            <section class="score-fragments__list" aria-label="Biblioteca">
+                <div class="flex flex-col gap-2">
+                    <p-iconfield>
+                        <p-inputicon class="pi pi-search" />
+                        <input pInputText type="search" class="w-full" [(ngModel)]="query" placeholder="Cerca per nome o nota" aria-label="Cerca un frammento" autocomplete="off" />
+                    </p-iconfield>
+                    <p-select [options]="categories" [(ngModel)]="category" optionLabel="label" optionValue="value" placeholder="Tutte le categorie" [showClear]="true" ariaLabel="Categoria" appendTo="body" class="w-full" />
+                </div>
+                @if (visible.length) {
+                    <ul class="score-fragments__items" aria-label="Frammenti">
+                        @for (fragment of visible; track fragment.id) {
+                            <li>
+                                <button type="button" class="score-fragments__item" [class.is-selected]="selected?.id === fragment.id" [attr.aria-current]="selected?.id === fragment.id ? 'true' : null" (click)="select(fragment)">
+                                    <span class="font-medium">{{ fragment.name }}</span>
+                                    <span class="text-xs text-muted-color">{{ details(fragment) }}</span>
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                } @else {
+                    <span class="text-sm text-muted-color" role="status">Nessun frammento con questa ricerca.</span>
+                }
+            </section>
+
+            <section class="score-fragments__detail" aria-label="Frammento scelto">
+                @if (selected; as fragment) {
+                    <div class="flex flex-wrap items-start justify-between gap-2">
+                        <div class="flex flex-col gap-1 min-w-0">
+                            <h3 class="m-0 text-lg font-semibold break-words">{{ fragment.name }}</h3>
+                            <span class="text-sm text-muted-color">{{ details(fragment) }}</span>
+                            @if (fragment.note) {
+                                <p class="m-0 text-sm whitespace-pre-line">{{ fragment.note }}</p>
+                            }
+                        </div>
+                        <div class="flex gap-1">
+                            <p-button label="Modifica" icon="pi pi-pencil" size="small" severity="secondary" text (onClick)="edit(fragment)" />
+                            <p-button label="Elimina" icon="pi pi-trash" size="small" severity="danger" text (onClick)="remove(fragment)" />
+                        </div>
+                    </div>
+
+                    @if (blocker; as reason) {
+                        <app-inline-alert severity="warn" heading="Il frammento non entra qui" [detail]="reason" />
+                    } @else if (prepareError; as error) {
+                        <app-inline-alert severity="error" heading="Frammento non inseribile" [detail]="error" />
+                    } @else {
+                        @if (prepared?.plan; as plan) {
+                            <app-form-field
+                                label="Ottava"
+                                forId="fragmentOctave"
+                                [hint]="rangeText ? 'Proposta l\'ottava con meno note fuori dall\'estensione di ' + instrumentName + '.' : 'Senza estensione configurata si propone lo stesso suono del frammento.'"
+                            >
+                                <p-select inputId="fragmentOctave" class="w-full" [options]="octaves" [ngModel]="octave" (ngModelChange)="changedOctave($event)" optionLabel="label" optionValue="value" appendTo="body" />
+                            </app-form-field>
+                            @if (keyText) {
+                                <span class="text-sm">{{ keyText }}</span>
+                            }
+                            @if (chosen?.measures?.length) {
+                                <app-inline-alert
+                                    severity="warn"
+                                    heading="Note fuori estensione"
+                                    [detail]="'Note fuori dall\'estensione di ' + instrumentName + ' (' + rangeText + ') nelle battute ' + chosen!.measures.join(', ') + ' del frammento. Si correggono nell\'editor.'"
+                                />
+                            }
+                            @if (plan.enharmonic) {
+                                <app-inline-alert severity="info" heading="Intervallo enarmonico" detail="L'intervallo diretto darebbe un'armatura o note con troppe alterazioni: si usa il suo enarmonico, che suona uguale." />
+                            }
+                        }
+                        <div class="score-fragments__preview" aria-label="Anteprima del frammento come sarà scritto">
+                            @if (preparing) {
+                                <span class="text-sm text-muted-color" role="status"><i class="pi pi-spin pi-spinner mr-2" aria-hidden="true"></i>Preparazione dell'anteprima…</span>
+                            } @else if (drawError) {
+                                <span class="text-sm text-muted-color" role="status">Anteprima non disponibile</span>
+                            }
+                            <div #preview class="score-fragments__notation"></div>
+                        </div>
+                        @if (audioError) {
+                            <span class="text-sm text-muted-color" role="status">Ascolto non disponibile: riprovare più tardi</span>
+                        }
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <p-button [label]="playing ? 'Ferma' : 'Ascolta'" [icon]="playing ? 'pi pi-stop' : 'pi pi-play'" size="small" severity="secondary" outlined [loading]="preparingAudio" [disabled]="!prepared" (onClick)="togglePlay()" />
+                            <div class="flex flex-wrap items-center gap-3">
+                                <label class="flex items-center gap-2 text-sm">
+                                    <p-checkbox inputId="fragmentAtEnd" [binary]="true" [(ngModel)]="atEnd" (ngModelChange)="changedPosition()" [disabled]="data.measureNumber === null" />
+                                    {{ data.arrangement ? 'In fondo alla partitura' : 'In fondo alla parte' }}
+                                </label>
+                                <p-button label="Inserisci" icon="pi pi-check" [disabled]="!canInsert" (onClick)="insert()" />
+                            </div>
+                        </div>
+                    }
+                } @else {
+                    <span class="text-sm text-muted-color">Scegli un frammento per vederne l'anteprima e inserirlo.</span>
+                }
+            </section>
+        </div>
+    }
+</app-dialog-shell>
