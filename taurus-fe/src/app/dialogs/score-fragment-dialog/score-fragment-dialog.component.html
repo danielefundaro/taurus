@@ -1,0 +1,13 @@
+<app-dialog-shell #shell [heading]="heading" [subtitle]="subtitle" [saving]="saving" [invalidCount]="errors.length" [dirty]="dirty" (cancel)="cancel()" (confirm)="save()">
+    <div class="flex flex-col gap-4">
+        <app-form-field label="Nome" forId="fragmentName" required [hint]="'Unico nella biblioteca, al massimo ' + nameLength + ' caratteri.'" [error]="shell.validationAttempted || takenName !== null ? nameError : undefined">
+            <input pInputText id="fragmentName" class="w-full" [(ngModel)]="name" (ngModelChange)="changed()" [maxlength]="nameLength" autocomplete="off" />
+        </app-form-field>
+        <app-form-field label="Categoria" forId="fragmentCategory" required [error]="shell.validationAttempted && !category ? 'Scegli la categoria.' : undefined">
+            <p-select inputId="fragmentCategory" class="w-full" [options]="categories" [(ngModel)]="category" (ngModelChange)="changed()" optionLabel="label" optionValue="value" placeholder="Scegli una categoria" appendTo="body" />
+        </app-form-field>
+        <app-form-field label="Nota" forId="fragmentNote" [hint]="'Facoltativa, al massimo ' + noteLength + ' caratteri: per esempio quando si usa il frammento.'">
+            <textarea pTextarea id="fragmentNote" class="w-full" rows="3" [(ngModel)]="note" (ngModelChange)="changed()" [maxlength]="noteLength"></textarea>
+        </app-form-field>
+    </div>
+</app-dialog-shell>

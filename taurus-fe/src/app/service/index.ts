@@ -38,6 +38,7 @@ export * from './score-audio.service';
 export * from './score-clipboard.service';
 export * from './score-draft.service';
 export * from './score-edit-lock.service';
+export * from './score-fragment.service';
 export * from './score-playback.service';
 export * from './score-recognition.service';
 export * from './score-renderer.service';

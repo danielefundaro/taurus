@@ -3,9 +3,9 @@ import { signal, WritableSignal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { ConfirmationService } from 'primeng/api';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { firstValueFrom, of, Subject, throwError } from 'rxjs';
-import { ArrangementDraft, ArrangementVersion, PlaybackInstrument, ScoreDraft, ScoreEditorData } from '../../module';
+import { ArrangementDraft, ArrangementVersion, PlaybackInstrument, ScoreDraft, ScoreEditorData, ScoreFragment } from '../../module';
 import {
     ArrangementService,
     ConfirmService,
@@ -26,8 +26,11 @@ import {
     ScoreRecognitionService,
     ScoreRendererService
 } from '../../service';
+import { prepareFragment } from '../../score-editor/score-fragments';
 import { LayoutPage } from '../../score-editor/score-layout';
 import { ScoreLayoutClient } from '../../score-editor/score-layout-client';
+import { ScoreFragmentDialogComponent, ScoreFragmentDialogData } from '../score-fragment-dialog/score-fragment-dialog.component';
+import { ScoreFragmentsDialogComponent, ScoreFragmentsDialogData } from '../score-fragments-dialog/score-fragments-dialog.component';
 import { isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData } from './score-editor-dialog.component';
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Tuba</part-name></score-part></part-list><part id="P1">
@@ -1306,6 +1309,142 @@ describe('ScoreEditorDialogComponent', () => {
             expect(arrangements.discardDraft).toHaveBeenCalledWith(4, 'editor-window-1');
             expect(component.status).toBe('ready');
             expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Re5 · minima');
+        });
+    });
+
+    describe('fragments', () => {
+        /** Frammento in suoni reali: una battuta in 3/4 e Si bemolle maggiore, Fa Sol La in chiave di basso. */
+        const FRAGMENT_XML =
+            '<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Frammento</part-name></score-part></part-list><part id="P1">' +
+            '<measure number="1"><attributes><divisions>1</divisions><key><fifths>-2</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>' +
+            ['F', 'G', 'A'].map((step) => `<note><pitch><step>${step}</step><octave>3</octave></pitch><duration>1</duration><voice>1</voice><type>quarter</type></note>`).join('') +
+            '</measure></part></score-partwise>';
+        const FRAGMENT: ScoreFragment = { id: 4, name: 'Squillo', category: 'SIGNAL', kind: 'PITCHED', measureCount: 1, percussionKeys: [], entityVersion: 0 };
+        const TUBA_SOUND = { transpositionSemitones: 0, percussionKeys: [], configured: true, conflicting: false };
+        const measureCount = (xml: string): number[] => Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelectorAll('part')).map((part) => part.querySelectorAll('measure').length);
+        const times = (xml: string): string[] =>
+            Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelector('part')?.querySelectorAll('time') ?? []).map((time) => `${time.querySelector('beats')?.textContent}/${time.querySelector('beat-type')?.textContent}`);
+
+        interface FragmentEditor {
+            info: string | null;
+            message: string | null;
+            dirty: boolean;
+            selectMeasure(index: number): void;
+            selectRow(index: number): void;
+            saveFragment(): void;
+            openFragments(): void;
+            onKey(event: KeyboardEvent): void;
+            undo(): void;
+        }
+
+        async function open(overrides: Partial<ScoreEditorDialogData>): Promise<{ component: FragmentEditor; dialogs: jasmine.Spy; close: Subject<unknown> }> {
+            fixture.destroy();
+            config.data = { ...config.data, mode: 'writing', sound: TUBA_SOUND, ...overrides };
+            fixture = TestBed.createComponent(ScoreEditorDialogComponent);
+            fixture.detectChanges();
+            await fixture.whenStable();
+            fixture.detectChanges();
+            let close = new Subject<unknown>();
+            const dialogs = spyOn(fixture.debugElement.injector.get(DialogService), 'open').and.callFake(() => {
+                close = new Subject<unknown>();
+                return { onClose: close } as never;
+            });
+            return {
+                component: fixture.componentInstance as unknown as FragmentEditor,
+                dialogs,
+                get close() {
+                    return close;
+                }
+            };
+        }
+
+        it('saves the selected measure as a fragment in concert pitch, ignoring the keys of the editor while the dialog is open', async () => {
+            const editor = await open({ instruments: [TUBA] });
+            const component = editor.component;
+            component.selectMeasure(1);
+            component.saveFragment();
+
+            expect(editor.dialogs.calls.mostRecent().args[0]).toBe(ScoreFragmentDialogComponent);
+            const data = editor.dialogs.calls.mostRecent().args[1]!.data as ScoreFragmentDialogData;
+            expect(data.content).toEqual(jasmine.objectContaining({ kind: 'PITCHED', measureCount: 1, percussionKeys: [] }));
+            expect(data.content!.xml).toContain('<step>E</step>');
+            expect(data.content!.xml).not.toContain('<step>C</step>');
+            component.onKey(new KeyboardEvent('keydown', { key: 'Delete' }));
+            expect(component.dirty).toBeFalse();
+
+            editor.close.next({ ...FRAGMENT, name: 'Chiusa' });
+            expect(component.info).toBe('Salvato il frammento «Chiusa» nella biblioteca');
+            component.onKey(new KeyboardEvent('keydown', { key: 'Delete' }));
+            expect(component.dirty).toBeTrue();
+        });
+
+        it('says why a part without its instrument cannot save fragments', async () => {
+            const editor = await open({ instruments: [] });
+            editor.component.selectMeasure(0);
+            editor.component.saveFragment();
+
+            expect(editor.dialogs).not.toHaveBeenCalled();
+            expect(editor.component.message).toBe('Assegna uno strumento alla parte per usare i frammenti');
+        });
+
+        it('inserts the chosen fragment before the selected measure with its time, and undoes it in one step', async () => {
+            const editor = await open({ instruments: [TUBA] });
+            const component = editor.component;
+            component.selectMeasure(1);
+            component.openFragments();
+
+            expect(editor.dialogs.calls.mostRecent().args[0]).toBe(ScoreFragmentsDialogComponent);
+            const data = editor.dialogs.calls.mostRecent().args[1]!.data as ScoreFragmentsDialogData;
+            expect(data).toEqual(jasmine.objectContaining({ clef: 'F4', endClef: 'F4', measureNumber: '2', arrangement: false, sound: TUBA_SOUND }));
+            expect(data.notation).toEqual(jasmine.objectContaining({ kind: 'PITCHED', name: 'Tuba' }));
+            const prepared = prepareFragment(FRAGMENT_XML, FRAGMENT, data.notation, data.clef);
+            editor.close.next({ fragment: FRAGMENT, prepared, atEnd: false });
+
+            expect(component.info).toBe('Inserito il frammento «Squillo»: 1 battuta');
+            const xml = keeperOptions!.content();
+            expect(measureCount(xml)).toEqual([3]);
+            expect(times(xml)).toEqual(['2/4', '3/4', '2/4']);
+            expect(xml).toContain('<fifths>-2</fifths>');
+
+            component.undo();
+            expect(measureCount(keeperOptions!.content())).toEqual([2]);
+            expect(keeperOptions!.content()).not.toContain('<fifths>-2</fifths>');
+        });
+
+        it('inserts at the end of the part and leaves the part as it is when the library closes without a choice', async () => {
+            const editor = await open({ instruments: [TUBA] });
+            editor.component.selectMeasure(0);
+            editor.component.openFragments();
+            const data = editor.dialogs.calls.mostRecent().args[1]!.data as ScoreFragmentsDialogData;
+            editor.close.next({ fragment: FRAGMENT, prepared: prepareFragment(FRAGMENT_XML, FRAGMENT, data.notation, data.endClef), atEnd: true });
+            expect(times(keeperOptions!.content())).toEqual(['2/4', '3/4']);
+
+            editor.component.openFragments();
+            editor.close.next(undefined);
+            expect(measureCount(keeperOptions!.content())).toEqual([3]);
+        });
+
+        it('adds the measures to every row of the score and the notes to the active row, with the instrument of the row', async () => {
+            const version: ArrangementVersion = { id: 21, versionNumber: 1, status: 'UNVERIFIED', concertPitch: false, measureCount: 2, checks: [], createdAt: '2026-11-15T09:00:00Z', current: true };
+            const rows = [
+                { id: 'P1', name: 'Clarinetto', instruments: [CLARINET] },
+                { id: 'P2', name: 'Tuba', instruments: [TUBA] }
+            ];
+            const editor = await open({ scoreId: 0, versionId: 21, partLabel: 'Partitura', sound: { percussionKeys: [], configured: false, conflicting: false }, arrangement: { version, rows } });
+            editor.component.selectRow(0);
+            editor.component.selectMeasure(1);
+            editor.component.openFragments();
+
+            const data = editor.dialogs.calls.mostRecent().args[1]!.data as ScoreFragmentsDialogData;
+            expect(data.arrangement).toBeTrue();
+            expect(data.notation).toEqual(jasmine.objectContaining({ kind: 'PITCHED', name: 'Clarinetto', instrument: jasmine.objectContaining({ transpositionSemitones: -2 }) }));
+            expect(data.clef).toBe('G2');
+            editor.close.next({ fragment: FRAGMENT, prepared: prepareFragment(FRAGMENT_XML, FRAGMENT, data.notation, data.clef), atEnd: false });
+
+            const xml = keeperOptions!.content();
+            expect(measureCount(xml)).toEqual([3, 3]);
+            // Il clarinetto in Si bemolle scrive Fa Sol La un tono sopra: Sol La Si, in Do maggiore.
+            expect(xml).toMatch(/<step>B<\/step><octave>\d<\/octave>/);
         });
     });
 });

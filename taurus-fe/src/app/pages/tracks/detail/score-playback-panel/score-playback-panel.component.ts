@@ -457,6 +457,7 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
             partLabel: partLabel(part),
             sound: part.sound,
             range: editorRange(part),
+            instruments: part.instruments,
             mode: 'writing',
             engravable: this.canEngrave,
             ...options

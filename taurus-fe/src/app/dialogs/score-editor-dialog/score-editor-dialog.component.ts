@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
+import { DialogService, DynamicDialogConfig, DynamicDialogRef } from 'primeng/dynamicdialog';
 import { HttpErrorResponse } from '@angular/common/http';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { finalize, first, firstValueFrom, Subscription } from 'rxjs';
 import { Popover } from 'primeng/popover';
 import { DrumPad, PianoKeyboardComponent } from '../../components/piano-keyboard/piano-keyboard.component';
+import { openFragmentDialog } from '../score-fragment-dialog/score-fragment-dialog.component';
+import { openFragmentsDialog } from '../score-fragments-dialog/score-fragments-dialog.component';
 import { ImportsModule } from '../../imports';
 import {
     ArrangementDraft,
@@ -28,6 +30,7 @@ import { Alteration, ALTERATIONS, CLEF_OPTIONS, fraction, KEY_OPTIONS, NOTE_TYPE
 import { RangeInstrument, rangeLabel, RangeWarning, rangeWarnings, writtenRange } from '../../score-editor/score-derivation';
 import { EditError, ScoreDocument, ScoreDocumentChecks } from '../../score-editor/score-document';
 import * as edits from '../../score-editor/score-edits';
+import * as fragments from '../../score-editor/score-fragments';
 import * as input from '../../score-editor/score-input';
 import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
@@ -84,6 +87,8 @@ export interface ScoreEditorDialogData {
     engravable?: boolean;
     /** Strumento di una parte con un solo strumento, per segnalare le note fuori dalla sua estensione. */
     range?: EditorRange | null;
+    /** Strumenti della parte, per salvare e inserire i frammenti; nella partitura valgono quelli dei righi. */
+    instruments?: PlaybackInstrument[] | null;
     /** Correzione: la battuta da selezionare all'apertura, da 0, come quella di una differenza del confronto. */
     measureIndex?: number | null;
     /**
@@ -289,7 +294,8 @@ function fileName(label: string): string {
     imports: [ImportsModule, PianoKeyboardComponent],
     templateUrl: './score-editor-dialog.component.html',
     styleUrl: './score-editor-dialog.component.scss',
-    changeDetection: ChangeDetectionStrategy.OnPush
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    providers: [DialogService]
 })
 export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     /** Contenitore dello spartito: esiste solo quando l'editor è pronto. */
@@ -369,6 +375,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     protected rangeFocusId: string | null = null;
     /** Scrittura: passaggio dalla nota selezionata all'estremo mobile, con battute e voci che copre. */
     protected passage: passages.Passage | null = null;
+    /** Un dialogo dei frammenti è aperto sopra l'editor. */
+    private fragmentDialogOpen = false;
     private passageText = '';
     protected note: edits.NoteInfo | null = null;
     protected measure: edits.MeasureInfo | null = null;
@@ -496,7 +504,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         protected readonly midi: MidiInputService,
         private readonly arrangementService: ArrangementService,
         private readonly instrumentsService: InstrumentsService,
-        private readonly recognitionService: ScoreRecognitionService
+        private readonly recognitionService: ScoreRecognitionService,
+        private readonly dialogService: DialogService
     ) {
         this.data = config.data!;
         const arrangement = this.data.arrangement;
@@ -738,7 +747,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     @HostListener('document:keydown', ['$event'])
     protected onKey(event: KeyboardEvent): void {
-        if (this.status !== 'ready' || this.saving) return;
+        // Con un dialogo dei frammenti aperto sopra l'editor i tasti sono suoi.
+        if (this.status !== 'ready' || this.saving || this.fragmentDialogOpen) return;
         const target = event.target as HTMLElement | null;
         const key = event.key;
         if (target && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable || target.closest('.p-select, .p-select-overlay, .p-inputnumber, .p-confirmdialog'))) return;
@@ -1399,6 +1409,87 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     // Bozza della scrittura
 
     /** Riprende la bozza o la copia nel browser proposta all'apertura. */
+    // Frammenti
+
+    /** Salva come frammento le battute intere del passaggio, o la battuta selezionata, del rigo attivo. */
+    protected saveFragment(): void {
+        const score = this.score;
+        if (!score) return;
+        let range: [number, number];
+        if (this.passage) range = fragments.passageMeasures(this.passage);
+        else if (this.measure) range = [this.measure.index, this.measure.index];
+        else {
+            this.message = 'Seleziona prima le battute da salvare come frammento';
+            this.changeDetector.markForCheck();
+            return;
+        }
+        let content: fragments.FragmentContent;
+        try {
+            content = fragments.fragmentContent(score, range[0], range[1], this.fragmentNotation(score));
+        } catch (error) {
+            this.message = error instanceof EditError ? error.message : 'Frammento non preparato';
+            if (!(error instanceof EditError)) console.error(error);
+            this.changeDetector.markForCheck();
+            return;
+        }
+        this.stop();
+        this.message = null;
+        this.fragmentDialogOpen = true;
+        openFragmentDialog(this.dialogService, { content })
+            .pipe(
+                first(),
+                finalize(() => (this.fragmentDialogOpen = false))
+            )
+            .subscribe((saved) => {
+                if (saved) this.info = `Salvato il frammento «${saved.name}» nella biblioteca`;
+                this.changeDetector.markForCheck();
+            });
+    }
+
+    /** Apre la biblioteca dei frammenti per inserirne uno prima della battuta selezionata o in fondo. */
+    protected openFragments(): void {
+        const score = this.score;
+        if (!score) return;
+        if (this.readOnly) {
+            this.message = "L'editor è in sola lettura: prendi il controllo per modificare la parte";
+            this.changeDetector.markForCheck();
+            return;
+        }
+        const before = this.measure?.index ?? null;
+        this.stop();
+        this.message = null;
+        this.fragmentDialogOpen = true;
+        openFragmentsDialog(this.dialogService, {
+            notation: this.fragmentNotation(score),
+            clef: fragments.insertionClef(score, before),
+            endClef: fragments.insertionClef(score, null),
+            measureNumber: before === null ? null : (this.measure?.number ?? String(before + 1)),
+            sound: this.sound,
+            arrangement: !!this.data.arrangement
+        })
+            .pipe(
+                first(),
+                finalize(() => (this.fragmentDialogOpen = false))
+            )
+            .subscribe((result) => {
+                if (!result) return;
+                const at = result.atEnd ? null : before;
+                // Un solo passo della cronologia: «Annulla» toglie tutto il frammento.
+                const applied = this.apply((current) => fragments.insertFragment(current, result.prepared, at, !!this.data.arrangement));
+                if (applied) {
+                    const count = result.fragment.measureCount;
+                    this.info = `Inserito il frammento «${result.fragment.name}»: ${count === 1 ? '1 battuta' : `${count} battute`}`;
+                }
+                this.changeDetector.markForCheck();
+            });
+    }
+
+    /** Come il rigo attivo, o la parte, salva e riceve i frammenti. */
+    private fragmentNotation(score: ScoreDocument): fragments.FragmentNotation {
+        if (this.data.arrangement) return fragments.fragmentNotation(this.rowInstruments(score.partIndex), this.sound, arrangements.isConcertScore(score));
+        return fragments.fragmentNotation(this.data.instruments ?? [], this.sound);
+    }
+
     protected async resumeChoice(): Promise<void> {
         const choice = this.choice;
         if (!choice) return;

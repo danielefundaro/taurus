@@ -159,6 +159,16 @@ const DERIVATION_PROBLEMS: Readonly<Record<string, string>> = {
     targetPercussion: 'Non si può ricavare una parte per uno strumento a percussione'
 };
 
+/** Texts of the `reason` of `scoreWriting.fragmentInvalid`. */
+const FRAGMENT_PROBLEMS: Readonly<Record<string, string>> = {
+    malformed: "Il frammento non è un MusicXML valido: riaprire l'editor e salvarlo di nuovo",
+    tooLarge: 'Il frammento è troppo grande: selezionare meno battute',
+    severalParts: 'Un frammento contiene le battute di un solo rigo',
+    structure: 'Un frammento non contiene tempo, salti né battute in levare: selezionare altre battute',
+    empty: 'Le battute selezionate hanno solo pause: un frammento ha almeno una nota',
+    percussionSounds: "I suoni delle voci del frammento non corrispondono alle sue note: riaprire l'editor e salvarlo di nuovo"
+};
+
 /** Time of day of an ISO instant, as HH:mm in the time zone of the browser; empty when unreadable. */
 const timeOfDay = (value: ApiErrorArgValue): string => {
     const date = typeof value === 'string' ? new Date(value) : null;
@@ -686,6 +696,12 @@ export const API_ERROR_MESSAGES: Readonly<Record<string, ApiErrorMessage>> = {
     'scoreWriting.arrangementOutdated': "Nel frattempo è stata salvata un'altra versione della partitura: estrarre le parti da quella",
     'scoreWriting.extractionInvalid': (args) => EXTRACTION_PROBLEMS[formatApiErrorValue(args['reason'])] ?? 'Estrazione non valida: riaprire il dialogo',
     'scoreWriting.instrumentNotConfigured': (args) => `${formatApiErrorValue(args['instrument'])} non ha la trasposizione: configurarla per estrarne la parte`,
+    'scoreWriting.fragmentNotFound': "Il frammento non è più nella biblioteca: ricaricare l'elenco",
+    'scoreWriting.fragmentNameExists': 'Un altro frammento ha già questo nome',
+    'scoreWriting.fragmentInvalid': (args) =>
+        args['reason'] === 'tooManyMeasures'
+            ? `Un frammento ha al massimo ${formatApiErrorValue(args['maxMeasures'])} battute`
+            : (FRAGMENT_PROBLEMS[formatApiErrorValue(args['reason'])] ?? "Frammento non valido: riaprire l'editor e salvarlo di nuovo"),
 
     // Onboarding
     'onboarding.disabled': 'La configurazione iniziale non è disponibile',

@@ -104,7 +104,7 @@ describe('ScorePlaybackPanelComponent writing', () => {
 
         component.write(written);
         expect(opened().component).toBe(ScoreEditorDialogComponent);
-        expect(opened().data).toEqual(jasmine.objectContaining({ trackId: 5, scoreId: 1, versionId: 7, mode: 'writing', resume: false, range: null }));
+        expect(opened().data).toEqual(jasmine.objectContaining({ trackId: 5, scoreId: 1, versionId: 7, mode: 'writing', resume: false, range: null, instruments: written.instruments }));
         close();
         expect(service.playback).toHaveBeenCalledTimes(2);
         expect(toast.success).not.toHaveBeenCalled();

@@ -1,0 +1,107 @@
+// Biblioteca a sinistra e frammento scelto a destra; sul telefono uno sotto l'altro.
+.score-fragments {
+    display: grid;
+    grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+    gap: 1rem;
+    min-height: 24rem;
+}
+
+.score-fragments__list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.score-fragments__items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    max-height: 26rem;
+    margin: 0;
+    padding: 0;
+    overflow: auto;
+    list-style: none;
+}
+
+.score-fragments__item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid transparent;
+    border-radius: var(--p-content-border-radius);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--p-content-hover-background);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--p-primary-color);
+        outline-offset: 1px;
+    }
+
+    &.is-selected {
+        border-color: var(--p-primary-color);
+        background: var(--p-highlight-background);
+    }
+}
+
+.score-fragments__detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    min-width: 0;
+    padding-left: 1rem;
+    border-left: 1px solid var(--p-content-border-color);
+}
+
+.score-fragments__preview {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 6rem;
+}
+
+// Lo spartito si disegna nero su bianco anche nel tema scuro, come nell'editor.
+.score-fragments__notation {
+    max-height: 22rem;
+    overflow: auto;
+    border: 1px solid var(--p-content-border-color);
+    border-radius: var(--p-content-border-radius);
+    background: #fff;
+
+    &:empty {
+        display: none;
+    }
+
+    ::ng-deep svg {
+        display: block;
+        width: 100%;
+        height: auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .score-fragments {
+        grid-template-columns: minmax(0, 1fr);
+        min-height: 0;
+    }
+
+    .score-fragments__items {
+        max-height: 14rem;
+    }
+
+    .score-fragments__detail {
+        padding-top: 1rem;
+        padding-left: 0;
+        border-top: 1px solid var(--p-content-border-color);
+        border-left: 0;
+    }
+}
