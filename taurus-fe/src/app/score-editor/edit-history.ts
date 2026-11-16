@@ -39,23 +39,43 @@ export class EditHistory {
     }
 }
 
+/** Righi e battute toccati da una modifica, per ridisegnare e ricontrollare solo quelli. */
+export interface DocumentChange {
+    /** Posizioni dei righi cambiati. */
+    rows: ReadonlySet<number>;
+    /** `id` delle battute cambiate, aggiunte o tolte. */
+    measures: ReadonlySet<string>;
+}
+
+/** L'istantanea del documento prima di una modifica, o la funzione che la ricava solo se serve. */
+export type Before = string | (() => string);
+
 /** Cronologia di Annulla e Ripristina dell'editor: per una parte le istantanee, per la partitura le battute cambiate. */
 export interface DocumentHistory {
     readonly canUndo: boolean;
     readonly canRedo: boolean;
+    /** Righi e battute dell'ultima modifica registrata, annullata o ripristinata; `null` se è cambiato tutto o non si sa. */
+    readonly lastChange: DocumentChange | null;
+    /** Il documento prima di una modifica, da ricavare solo se serve: per ripristinarlo se la modifica non riesce. */
+    checkpoint(score: ScoreDocument): () => string;
     /**
      * Registra una modifica appena fatta al documento: `before` è l'istantanea di prima; con `merge` la modifica si unisce
      * alla precedente, come i tasti tenuti premuti.
      */
-    record(score: ScoreDocument, before: string, merge: boolean): void;
+    record(score: ScoreDocument, before: Before, merge: boolean): void;
     /** Annulla l'ultima modifica: il documento da usare, lo stesso o uno ricostruito; `null` se non c'è nulla da annullare. */
     undo(score: ScoreDocument): ScoreDocument | null;
     redo(score: ScoreDocument): ScoreDocument | null;
+    /** Il documento è cambiato da quando è stato aperto; `null` se lo dice solo il confronto delle istantanee. */
+    modified(score: ScoreDocument): boolean | null;
+    /** Smette di seguire il documento. */
+    dispose(): void;
 }
 
 /** Istantanee del documento intero, per la parte singola. */
 export class SnapshotHistory implements DocumentHistory {
     private readonly history: EditHistory;
+    readonly lastChange = null;
 
     constructor(limit = 100) {
         this.history = new EditHistory(limit);
@@ -69,8 +89,13 @@ export class SnapshotHistory implements DocumentHistory {
         return this.history.canRedo;
     }
 
-    record(_score: ScoreDocument, before: string, merge: boolean): void {
-        if (!merge || !this.history.canUndo) this.history.record(before);
+    checkpoint(score: ScoreDocument): () => string {
+        const snapshot = score.snapshot();
+        return () => snapshot;
+    }
+
+    record(_score: ScoreDocument, before: Before, merge: boolean): void {
+        if (!merge || !this.history.canUndo) this.history.record(typeof before === 'string' ? before : before());
     }
 
     undo(score: ScoreDocument): ScoreDocument | null {
@@ -81,6 +106,14 @@ export class SnapshotHistory implements DocumentHistory {
     redo(score: ScoreDocument): ScoreDocument | null {
         const next = this.history.redo(score.snapshot());
         return next === null ? null : ScoreDocument.restore(next, score.prefix, score.partIndex);
+    }
+
+    modified(): null {
+        return null;
+    }
+
+    dispose(): void {
+        // Le istantanee non seguono il documento.
     }
 }
 
@@ -101,23 +134,49 @@ interface HistoryState {
     contents: Map<string, string>;
     /** Ogni battuta ha un `id` unico: altrimenti la cronologia registra il documento intero. */
     stable: boolean;
+    /** La sequenza del documento, per ricomporne l'istantanea dai pezzi senza serializzarlo di nuovo. */
+    layout: DocumentLayout;
 }
+
+interface DocumentLayout {
+    /** Ciò che precede l'elemento radice, come la dichiarazione del tipo di documento. */
+    prolog: string;
+    open: string;
+    close: string;
+    /** Elementi fuori dai righi, serializzati, e posizioni dei righi. */
+    items: (string | number)[];
+    /** Tag di apertura e chiusura di ogni rigo. */
+    partTags: [string, string][];
+}
+
+const NO_CHANGE: DocumentChange = { rows: new Set(), measures: new Set() };
 
 /**
  * Cronologia della partitura: ogni modifica registra le battute cambiate di tutti i righi, prima e dopo, invece di una
  * copia del documento, che in una partitura grande pesa diversi megabyte. Le modifiche che cambiano i righi o
  * l'intestazione, come aggiungere un rigo o convertire la notazione, registrano il documento intero.
+ *
+ * Un `MutationObserver` segue il documento: a ogni modifica si serializzano solo le battute toccate, e il documento di
+ * prima si ricompone dai pezzi solo quando serve.
  */
 export class MeasureHistory implements DocumentHistory {
     private readonly undoStack: HistoryEntry[] = [];
     private readonly redoStack: HistoryEntry[] = [];
     private state: HistoryState;
+    private readonly initial: HistoryState;
+    private readonly observer: MutationObserver | null;
+    private watched: Document | null = null;
+    private pending: MutationRecord[] = [];
+    private change: DocumentChange | null = NO_CHANGE;
 
     constructor(
         score: ScoreDocument,
         private readonly limit = 100
     ) {
+        this.observer = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => this.pending.push(...records));
+        this.watch(score.document);
         this.state = capture(score);
+        this.initial = this.state;
     }
 
     get canUndo(): boolean {
@@ -128,10 +187,25 @@ export class MeasureHistory implements DocumentHistory {
         return this.redoStack.length > 0;
     }
 
-    record(score: ScoreDocument, before: string, merge: boolean): void {
-        const next = capture(score);
-        const entry = difference(this.state, next, before, () => score.snapshot());
+    get lastChange(): DocumentChange | null {
+        return this.change;
+    }
+
+    checkpoint(score: ScoreDocument): () => string {
+        if (!this.following(score) || !this.state.stable) {
+            const snapshot = score.snapshot();
+            return () => snapshot;
+        }
+        const state = this.state;
+        let rebuilt: string | undefined;
+        return () => (rebuilt ??= rebuild(state));
+    }
+
+    record(score: ScoreDocument, before: Before, merge: boolean): void {
+        const next = this.refresh(score);
+        const entry = difference(this.state, next, typeof before === 'string' ? () => before : before, () => score.snapshot());
         this.state = next;
+        this.change = entry ? changeOf(entry) : NO_CHANGE;
         if (!entry) return;
         this.redoStack.length = 0;
         const last = this.undoStack[this.undoStack.length - 1];
@@ -145,7 +219,8 @@ export class MeasureHistory implements DocumentHistory {
         if (!entry) return null;
         const result = apply(score, entry, 'before');
         this.redoStack.push(entry);
-        this.state = capture(result);
+        this.state = this.refresh(result);
+        this.change = changeOf(entry);
         return result;
     }
 
@@ -154,26 +229,75 @@ export class MeasureHistory implements DocumentHistory {
         if (!entry) return null;
         const result = apply(score, entry, 'after');
         this.undoStack.push(entry);
-        this.state = capture(result);
+        this.state = this.refresh(result);
+        this.change = changeOf(entry);
         return result;
+    }
+
+    modified(score: ScoreDocument): boolean | null {
+        if (!this.following(score)) return null;
+        return !sameState(this.state, this.initial);
+    }
+
+    dispose(): void {
+        this.observer?.disconnect();
+        this.watched = null;
+        this.pending = [];
+    }
+
+    /** Lo stato registrato corrisponde al documento: lo stesso documento, senza modifiche ancora da registrare. */
+    private following(score: ScoreDocument): boolean {
+        if (!this.observer || score.document !== this.watched) return false;
+        this.pending.push(...this.observer.takeRecords());
+        return this.pending.length === 0;
+    }
+
+    /** Lo stato del documento: solo le battute toccate dalle modifiche si serializzano di nuovo. */
+    private refresh(score: ScoreDocument): HistoryState {
+        if (!this.observer || score.document !== this.watched) {
+            this.watch(score.document);
+            return capture(score);
+        }
+        const records = [...this.pending, ...this.observer.takeRecords()];
+        this.pending = [];
+        return records.length ? capture(score, this.state, touchedMeasures(records)) : this.state;
+    }
+
+    private watch(document: Document): void {
+        if (!this.observer) return;
+        this.observer.disconnect();
+        this.observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+        this.watched = document;
+        this.pending = [];
     }
 }
 
 // Funzioni interne
 
-function capture(score: ScoreDocument): HistoryState {
+/**
+ * Lo stato del documento. Con lo stato precedente e le battute toccate, il contenuto delle altre battute resta quello già
+ * serializzato.
+ */
+function capture(score: ScoreDocument, previous?: HistoryState, touched?: ReadonlySet<Element>): HistoryState {
     const serializer = new XMLSerializer();
-    const root = score.document.documentElement;
+    const document = score.document;
+    const root = document.documentElement;
     const frame: string[] = [Array.from(root.attributes, (attribute) => `${attribute.name}=${attribute.value}`).join(' ')];
     const parts: string[][] = [];
+    const partTags: [string, string][] = [];
+    const items: (string | number)[] = [];
     const contents = new Map<string, string>();
     let stable = true;
     for (const item of children(root)) {
         if (item.tagName !== 'part') {
-            frame.push(serializer.serializeToString(item));
+            const text = serializer.serializeToString(item);
+            frame.push(text);
+            items.push(text);
             continue;
         }
         frame.push(`part ${Array.from(item.attributes, (attribute) => `${attribute.name}=${attribute.value}`).join(' ')}`);
+        items.push(parts.length);
+        partTags.push([startTag(item), `</${item.tagName}>`]);
         const ids: string[] = [];
         for (const node of children(item)) {
             const id = node.getAttribute('id');
@@ -182,16 +306,76 @@ function capture(score: ScoreDocument): HistoryState {
                 continue;
             }
             ids.push(id);
-            contents.set(id, serializer.serializeToString(node));
+            const kept = previous && touched && !touched.has(node) ? previous.contents.get(id) : undefined;
+            contents.set(id, kept ?? serializer.serializeToString(node));
         }
         parts.push(ids);
     }
-    return { frame: frame.join('\n'), parts, contents, stable };
+    const prolog: string[] = [declaration(document)];
+    for (const node of Array.from(document.childNodes)) {
+        if (node === root) break;
+        prolog.push(serializer.serializeToString(node));
+    }
+    return { frame: frame.join('\n'), parts, contents, stable, layout: { prolog: prolog.join(''), open: startTag(root), close: `</${root.tagName}>`, items, partTags } };
 }
 
-function difference(previous: HistoryState, next: HistoryState, before: string, after: () => string): HistoryEntry | null {
+/**
+ * La dichiarazione XML, che non è un nodo del documento: Chrome ricorda versione e codifica e la scrive nelle istantanee;
+ * dove il browser non le ricorda il documento ricomposto ne resta senza, come le sue istantanee.
+ */
+function declaration(document: Document): string {
+    const { xmlVersion, xmlEncoding, xmlStandalone } = document as Document & { xmlVersion?: string | null; xmlEncoding?: string | null; xmlStandalone?: boolean };
+    if (!xmlEncoding) return '';
+    return `<?xml version="${xmlVersion ?? '1.0'}" encoding="${xmlEncoding}"${xmlStandalone ? ' standalone="yes"' : ''}?>`;
+}
+
+/** Le battute dei righi toccate dalle modifiche osservate: quelle che contengono il nodo cambiato e quelle aggiunte. */
+function touchedMeasures(records: readonly MutationRecord[]): Set<Element> {
+    const touched = new Set<Element>();
+    for (const record of records) {
+        const measure = enclosingMeasure(record.target);
+        if (measure) touched.add(measure);
+        if (record.type !== 'childList') continue;
+        for (const node of Array.from(record.addedNodes)) {
+            if (!(node instanceof Element)) continue;
+            if (node.tagName === 'measure') touched.add(node);
+            for (const inner of Array.from(node.getElementsByTagName('measure'))) touched.add(inner);
+        }
+    }
+    return touched;
+}
+
+function enclosingMeasure(node: Node | null): Element | null {
+    for (let current = node; current; current = current.parentNode) {
+        if (current instanceof Element && current.tagName === 'measure' && current.parentElement?.tagName === 'part') return current;
+    }
+    return null;
+}
+
+/** L'istantanea ricomposta dallo stato, senza gli spazi tra gli elementi, che il documento non usa. */
+function rebuild(state: HistoryState): string {
+    const { prolog, open, close, items, partTags } = state.layout;
+    const body = items.map((item) => (typeof item === 'string' ? item : partTags[item][0] + state.parts[item].map((id) => state.contents.get(id) ?? '').join('') + partTags[item][1]));
+    return prolog + open + body.join('') + close;
+}
+
+function startTag(element: Element): string {
+    const attributes = Array.from(element.attributes, (attribute) => ` ${attribute.name}="${attribute.value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}"`);
+    return `<${element.tagName}${attributes.join('')}>`;
+}
+
+function changeOf(entry: HistoryEntry): DocumentChange | null {
+    if (entry.kind === 'document') return null;
+    return { rows: new Set(entry.parts.map((part) => part.index)), measures: new Set([...entry.before.keys(), ...entry.after.keys()]) };
+}
+
+function sameState(left: HistoryState, right: HistoryState): boolean {
+    return left === right || (left.frame === right.frame && left.stable === right.stable && sameMeasures(left, right));
+}
+
+function difference(previous: HistoryState, next: HistoryState, before: () => string, after: () => string): HistoryEntry | null {
     if (!previous.stable || !next.stable || previous.frame !== next.frame || previous.parts.length !== next.parts.length) {
-        return previous.frame === next.frame && previous.stable && next.stable && sameMeasures(previous, next) ? null : { kind: 'document', before, after: after() };
+        return previous.frame === next.frame && previous.stable && next.stable && sameMeasures(previous, next) ? null : { kind: 'document', before: before(), after: after() };
     }
     const parts: PartChange[] = [];
     const beforeContents = new Map<string, string>();

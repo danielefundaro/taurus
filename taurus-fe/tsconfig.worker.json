@@ -1,0 +1,11 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* Web Worker dell'applicazione: il disegno per pagine dell'editor. */
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "./out-tsc/worker",
+        "lib": ["es2022", "webworker"],
+        "types": []
+    },
+    "include": ["src/**/*.worker.ts"]
+}

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { MAX_ENGRAVED_PAGES, numberPage, pageSections, prepareMei, ResolvedOptions, verovioOptions } from '../score-editor/score-engraving';
+import { ScoreLayoutClient } from '../score-editor/score-layout-client';
 
 /**
  * Pacchetto Verovio servito tra gli asset: resta fuori dal bundle, così il service worker lo scarica e lo mette in cache
@@ -25,6 +26,41 @@ export interface EngravingPreview {
     tooManyPages: boolean;
 }
 
+/** Come disegnare lo spartito nel lettore e negli editor. */
+export interface DrawingOptions {
+    /** Le righe vanno a capo anche dove la parte ha un'interruzione di riga o di pagina, come nella scrittura. */
+    encodedBreaks?: boolean;
+    /** Una partitura nasconde i righi che in una riga hanno solo pause, come una partitura stampata. */
+    condense?: boolean;
+    /** Restano i nomi dei righi di una partitura. */
+    partNames?: boolean;
+}
+
+/** Altezza di una pagina quando lo spartito scorre tutto in una pagina sola, in unità di Verovio. */
+const SCROLL_PAGE_HEIGHT = 60000;
+
+/**
+ * Opzioni di Verovio per disegnare lo spartito largo `width` pixel con la dimensione `scale` in percentuale; con
+ * `pageHeight`, in pixel, lo spartito si divide in pagine di quell'altezza, con almeno un sistema per pagina.
+ */
+export function drawingOptions(width: number, scale: number, options: DrawingOptions & { pageHeight?: number } = {}): Record<string, unknown> {
+    return {
+        pageWidth: Math.max(600, Math.round((width * 100) / scale)),
+        pageHeight: options.pageHeight ? Math.round((options.pageHeight * 100) / scale) : SCROLL_PAGE_HEIGHT,
+        scale,
+        adjustPageHeight: true,
+        // Con «smart» e soglia 0 Verovio rispetta tutte le interruzioni di riga e va a capo anche dove la riga è piena.
+        ...(options.encodedBreaks ? { breaks: 'smart', breaksSmartSb: 0 } : { breaks: 'auto' }),
+        // Le opzioni restano nel toolkit: la compressione si imposta sempre, anche per le parti singole.
+        condense: options.condense ? 'auto' : 'none',
+        condenseFirstPage: !!options.condense,
+        header: 'none',
+        footer: 'none',
+        svgViewBox: true,
+        svgAdditionalAttribute: ['measure@n', 'staff@n']
+    };
+}
+
 /** Oggetto globale `verovio` definito dal pacchetto. */
 interface VerovioGlobal {
     module: { onRuntimeInitialized?: () => void };
@@ -48,27 +84,29 @@ export class ScoreRendererService {
      * scrittura; altrimenti seguono solo la larghezza. Con `condense` una partitura nasconde i righi che in una riga hanno
      * solo pause, come una partitura stampata; con `partNames` restano i nomi dei righi.
      */
-    async render(musicXml: string, width: number, scale = 40, options: { encodedBreaks?: boolean; condense?: boolean; partNames?: boolean } = {}): Promise<string[]> {
+    async render(musicXml: string, width: number, scale = 40, options: DrawingOptions = {}): Promise<string[]> {
+        return this.renderPrepared(forDisplay(musicXml, !!options.encodedBreaks, !!options.partNames), width, scale, options);
+    }
+
+    /**
+     * Pagine SVG di un MusicXML già preparato per il disegno, con i nomi e le interruzioni da mostrare, come gli estratti
+     * del disegno per pagine dell'editor.
+     */
+    async renderPrepared(musicXml: string, width: number, scale: number, options: DrawingOptions = {}): Promise<string[]> {
         const toolkit = await this.ready();
-        toolkit.setOptions({
-            pageWidth: Math.max(600, Math.round((width * 100) / scale)),
-            pageHeight: 60000,
-            scale,
-            adjustPageHeight: true,
-            // Con «smart» e soglia 0 Verovio rispetta tutte le interruzioni di riga e va a capo anche dove la riga è piena.
-            ...(options.encodedBreaks ? { breaks: 'smart', breaksSmartSb: 0 } : { breaks: 'auto' }),
-            // Le opzioni restano nel toolkit: la compressione si imposta sempre, anche per le parti singole.
-            condense: options.condense ? 'auto' : 'none',
-            condenseFirstPage: !!options.condense,
-            header: 'none',
-            footer: 'none',
-            svgViewBox: true,
-            svgAdditionalAttribute: ['measure@n', 'staff@n']
-        });
-        if (!toolkit.loadData(forDisplay(musicXml, !!options.encodedBreaks, !!options.partNames))) throw new Error('Spartito non leggibile');
+        toolkit.setOptions(drawingOptions(width, scale, options));
+        if (!toolkit.loadData(musicXml)) throw new Error('Spartito non leggibile');
         const pages: string[] = [];
         for (let page = 1; page <= toolkit.getPageCount(); page++) pages.push(toolkit.renderToSVG(page));
         return pages;
+    }
+
+    /**
+     * Un Web Worker con un suo Verovio, che impagina in background tutta la parte o la partitura: va chiuso con
+     * `terminate` quando non serve più, perché tiene la sua memoria.
+     */
+    layoutWorker(): ScoreLayoutClient {
+        return new ScoreLayoutClient(() => new Worker(new URL('../score-editor/score-layout.worker', import.meta.url), { type: 'module' }));
     }
 
     /**

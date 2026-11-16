@@ -1,4 +1,5 @@
 import { PlaybackInstrument } from '../module';
+import { drawingXml } from './score-pages';
 import {
     addRow,
     alignParts,
@@ -11,7 +12,6 @@ import {
     concertSemitones,
     convertNotation,
     copyRows,
-    displayedXml,
     emptyRow,
     ensembleRows,
     extractedParts,
@@ -385,17 +385,17 @@ describe('score arrangement', () => {
 
         it('draws the shown rows only, with the structure on the first one', () => {
             const score = openScore();
-            const snapshot = score.snapshot();
-            expect(partNames(displayedXml(snapshot, new Set(['P2'])))).toEqual(['Clarinetto', 'Percussioni']);
+            expect(partNames(drawingXml(score, { hidden: new Set(['P2']), partNames: true }))).toEqual(['Clarinetto', 'Percussioni']);
 
-            const withoutFirst = xmlDocument(displayedXml(snapshot, new Set(['P1'])));
+            const withoutFirst = xmlDocument(drawingXml(score, { hidden: new Set(['P1']), partNames: true }));
             expect(withoutFirst.querySelectorAll('part').length).toBe(2);
             expect(withoutFirst.querySelectorAll('rehearsal').length).toBe(0);
 
             addRow(score, { name: 'Flauto', instrumentIds: [FLUTE.id], clef: 'G2', fifths: () => 0 }, 3);
-            const all = xmlDocument(displayedXml(score.snapshot(), new Set()));
+            const all = xmlDocument(drawingXml(score, { partNames: true }));
             expect(Array.from(all.querySelectorAll('part')).map((part) => part.querySelectorAll('rehearsal').length)).toEqual([1, 0, 0, 0]);
-            expect(displayedXml(snapshot, new Set(['P1', 'P2', 'P3']))).toBe(snapshot);
+            // Con tutti i righi nascosti si disegnano tutti.
+            expect(xmlDocument(drawingXml(score, { hidden: new Set(['P1', 'P2', 'P3', 'P4']) })).querySelectorAll('part').length).toBe(4);
         });
 
         it('lists every row to listen to, each with the sound of its instrument', () => {
@@ -434,6 +434,16 @@ describe('score arrangement', () => {
             expect(checks[0].outOfRange.map((warning) => warning.measureNumber)).toEqual(['1']);
             expect(checks[1]).toEqual(jasmine.objectContaining({ wrongDuration: [], empty: [{ index: 1, number: '2' }], range: null, outOfRange: [] }));
             expect(score.partIndex).toBe(0);
+
+            // Dopo una modifica si ricontrollano solo i righi cambiati: gli altri restano quelli di prima.
+            score.selectPart(1);
+            score.measure(1).remove();
+            score.selectPart(0);
+            const kept = rowChecks(score, rows, { checks, changed: new Set([1]) });
+            expect(kept[0]).toBe(checks[0]);
+            expect(kept[1].empty).toEqual([]);
+            // Con un numero diverso di righi si ricontrolla tutto.
+            expect(rowChecks(score, rows, { checks: checks.slice(0, 1), changed: new Set() })[0]).not.toBe(checks[0]);
 
             // In suoni reali l'estensione scritta scende con le note.
             setConcertScore(score, true);

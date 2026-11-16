@@ -473,11 +473,14 @@ export function rowRangeInstrument<T extends RowInstrument>(instruments: readonl
 
 /**
  * Controlli di tutti i righi: battute di durata diversa dal metro o vuote e note fuori dall'estensione scritta del loro
- * strumento, che segue la chiave iniziale del rigo e la notazione della partitura.
+ * strumento, che segue la chiave iniziale del rigo e la notazione della partitura. Con `previous`, i controlli di prima e
+ * i righi cambiati da allora, si ricontrollano solo i righi cambiati.
  */
-export function rowChecks(score: ScoreDocument, rows: readonly { instruments: readonly RowInstrument[] }[]): RowCheck[] {
+export function rowChecks(score: ScoreDocument, rows: readonly { instruments: readonly RowInstrument[] }[], previous?: { checks: readonly RowCheck[]; changed: ReadonlySet<number> }): RowCheck[] {
     const concertPitch = isConcertScore(score);
+    const kept = previous && previous.checks.length === score.parts().length ? previous : null;
     return score.everyPart((index) => {
+        if (kept && !kept.changed.has(index)) return kept.checks[index];
         const measures = score.measures();
         const numbered = (position: number) => ({ index: position, number: measures[position]?.getAttribute('number') ?? String(position + 1) });
         const instrument = rowRangeInstrument(rows[index]?.instruments ?? [], concertPitch);
@@ -628,31 +631,6 @@ export function clearRows(score: ScoreDocument, from: number, to: number): void 
 export function emptyRow(score: ScoreDocument, index: number): boolean {
     const part = score.parts()[index];
     return !!part && Array.from(part.getElementsByTagName('note')).every((note) => !!child(note, 'rest'));
-}
-
-/**
- * MusicXML da disegnare: senza i righi nascosti, che restano nel documento, e con i segni della struttura solo sul primo
- * rigo mostrato, come in una partitura stampata. Se tutti i righi sono nascosti si mostrano tutti.
- */
-export function displayedXml(snapshot: string, hidden: ReadonlySet<string>): string {
-    const document = new DOMParser().parseFromString(snapshot, 'application/xml');
-    const root = document.documentElement;
-    const parts = children(root, 'part');
-    const shown = parts.filter((part) => !hidden.has(part.getAttribute('id') ?? ''));
-    if (!shown.length) return snapshot;
-    const list = child(root, 'part-list');
-    for (const part of parts) {
-        if (shown.includes(part)) continue;
-        const id = part.getAttribute('id');
-        children(list, 'score-part')
-            .find((candidate) => candidate.getAttribute('id') === id)
-            ?.remove();
-        part.remove();
-    }
-    for (const part of shown.slice(1)) {
-        for (const measure of children(part, 'measure')) for (const item of children(measure).filter(isStructureDirection)) item.remove();
-    }
-    return new XMLSerializer().serializeToString(document);
 }
 
 /** La direzione, o il suono, fa parte della struttura comune: segni, salti, tempo o lettere di prova. */

@@ -56,6 +56,22 @@ describe('edit history', () => {
             expect(steps(redone)[1]).toEqual(['A', 'F']);
             expect(history.redo(redone)).toBeNull();
         });
+
+        it('takes the snapshot before a change at once and does not know what changed', () => {
+            const history = new SnapshotHistory();
+            const score = ScoreDocument.open(XML);
+            const snapshot = score.snapshot();
+
+            const before = history.checkpoint(score);
+            setStep(score, 0, 0, 'G');
+            expect(before()).toBe(snapshot);
+            history.record(score, before, false);
+
+            expect(history.lastChange).toBeNull();
+            expect(history.modified()).toBeNull();
+            expect(steps(history.undo(score)!)[0]).toEqual(['C', 'D']);
+            history.dispose();
+        });
     });
 
     describe('MeasureHistory', () => {
@@ -188,6 +204,102 @@ describe('edit history', () => {
             setStep(score, 1, 1, 'C');
             history.record(score, before, false);
             expect(history.canRedo).toBeFalse();
+        });
+
+        it('tells the rows and measures of the last change and whether the document differs from the opened one', () => {
+            const score = ScoreDocument.open(XML);
+            const history = new MeasureHistory(score);
+            expect(history.lastChange).toEqual({ rows: new Set(), measures: new Set() });
+            expect(history.modified(score)).toBeFalse();
+
+            const before = history.checkpoint(score);
+            setStep(score, 1, 0, 'A');
+            history.record(score, before, false);
+            const id = score.parts()[1].querySelector('measure')!.getAttribute('id');
+            expect(history.lastChange).toEqual({ rows: new Set([1]), measures: new Set([id]) });
+            expect(history.modified(score)).toBeTrue();
+
+            history.undo(score);
+            expect(history.lastChange).toEqual({ rows: new Set([1]), measures: new Set([id]) });
+            expect(history.modified(score)).toBeFalse();
+            history.redo(score);
+            expect(history.modified(score)).toBeTrue();
+
+            // Una modifica non ancora registrata: il confronto non si sa.
+            setStep(score, 0, 0, 'B');
+            expect(history.modified(score)).toBeNull();
+            history.dispose();
+            expect(history.modified(score)).toBeNull();
+        });
+
+        it('rebuilds the document before a change only when it is needed', () => {
+            const score = ScoreDocument.open(XML);
+            const history = new MeasureHistory(score);
+            const snapshot = score.snapshot();
+
+            const before = history.checkpoint(score);
+            setStep(score, 0, 1, 'G');
+            expect(before()).toBe(snapshot);
+            expect(before()).toBe(before());
+
+            // Con modifiche non ancora registrate lo stato registrato non vale: si prende l'istantanea.
+            expect(history.checkpoint(score)()).toBe(score.snapshot());
+            // Lo stesso per un altro documento.
+            const other = ScoreDocument.open(XML);
+            setStep(other, 1, 1, 'B');
+            expect(history.checkpoint(other)()).toBe(other.snapshot());
+        });
+
+        it('asks for the document before a change only when the whole document changes', () => {
+            const score = ScoreDocument.open(XML);
+            const history = new MeasureHistory(score);
+
+            const measures = jasmine.createSpy('before').and.returnValue(score.snapshot());
+            setStep(score, 0, 0, 'G');
+            history.record(score, measures, false);
+            expect(measures).not.toHaveBeenCalled();
+
+            const whole = jasmine.createSpy('before').and.returnValue(score.snapshot());
+            score.document.querySelector('part-name')!.textContent = 'Ottavino';
+            history.record(score, whole, false);
+            expect(whole).toHaveBeenCalledTimes(1);
+            expect(history.lastChange).toBeNull();
+            expect(history.undo(score)!.document.querySelector('part-name')?.textContent).toBe('Flauto');
+        });
+
+        it('serializes again only the touched measures, matching the whole document after every change', () => {
+            const score = ScoreDocument.open(XML);
+            const history = new MeasureHistory(score);
+            const initial = score.snapshot();
+            const measures = (row: number): Element[] => Array.from(score.parts()[row].querySelectorAll('measure'));
+            const changes = [
+                () => setStep(score, 0, 0, 'G'),
+                () => appendMeasure(score),
+                () => measures(1)[1].setAttribute('number', '9'),
+                () => measures(0)[2].append(measures(0)[0].querySelector('note')!.cloneNode(true)),
+                () => measures(1)[0].querySelector('note')!.remove(),
+                () => score.parts()[0].prepend(measures(0)[2]),
+                () => measures(1)[1].querySelector('step')!.firstChild!.replaceWith(score.document.createTextNode('A'))
+            ];
+            const snapshots = [initial];
+            for (const change of changes) {
+                const before = history.checkpoint(score);
+                change();
+                history.record(score, before, false);
+                snapshots.push(score.snapshot());
+                expect(history.checkpoint(score)()).toBe(score.snapshot());
+            }
+
+            for (let index = changes.length - 1; index >= 0; index--) {
+                expect(history.undo(score)).toBe(score);
+                expect(score.snapshot()).toBe(snapshots[index]);
+                expect(history.checkpoint(score)()).toBe(snapshots[index]);
+            }
+            expect(history.modified(score)).toBeFalse();
+            for (let index = 1; index <= changes.length; index++) {
+                history.redo(score);
+                expect(score.snapshot()).toBe(snapshots[index]);
+            }
         });
     });
 });

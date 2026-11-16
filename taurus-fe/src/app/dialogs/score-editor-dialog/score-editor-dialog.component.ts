@@ -20,7 +20,7 @@ import {
     ScoreEditorData,
     ScoreVersion
 } from '../../module';
-import { DocumentHistory, MeasureHistory, SnapshotHistory } from '../../score-editor/edit-history';
+import { DocumentChange, DocumentHistory, MeasureHistory, SnapshotHistory } from '../../score-editor/edit-history';
 import { excerpt } from '../../score-editor/excerpt';
 import { concertFifths, proposedClef, writtenFifths } from '../../score-editor/new-part';
 import * as arrangements from '../../score-editor/score-arrangement';
@@ -31,6 +31,8 @@ import * as edits from '../../score-editor/score-edits';
 import * as input from '../../score-editor/score-input';
 import * as notation from '../../score-editor/score-notation';
 import * as passages from '../../score-editor/score-passage';
+import { ScoreLayoutClient } from '../../score-editor/score-layout-client';
+import { DrawingSource, drawingExcerpt, drawingXml, measurePositions } from '../../score-editor/score-pages';
 import * as writing from '../../score-editor/score-writing';
 import { parseMusicXml } from '../../score-player/musicxml-score';
 import { buildPlayback, BuiltPlayback, PlaybackPartInput } from '../../score-player/playback-builder';
@@ -55,10 +57,13 @@ import {
     ScoreDraftService,
     ScoreEditLockService,
     ScorePlaybackService,
+    DrawingOptions,
+    drawingOptions,
     ScoreRendererService,
     withErrorSummary,
     withHandledErrors
 } from '../../service';
+import { PagedNotation } from './paged-notation';
 
 export interface ScoreEditorDialogData {
     trackId: number;
@@ -168,6 +173,17 @@ interface PageHighlight {
 
 /** Dimensione dello spartito nell'editor, più grande che nel lettore per selezionare comodamente le note. */
 const EDITOR_SCALE = 50;
+
+/**
+ * Battute per righi mostrati oltre le quali lo spartito si disegna per pagine: sotto, disegnarlo tutto costa quanto
+ * l'estratto di una pagina.
+ */
+const PAGED_MEASURES = 100;
+/** Attesa dopo l'ultima modifica prima di impaginare di nuovo tutto lo spartito nel Web Worker, in millisecondi. */
+const LAYOUT_DELAY = 400;
+/** Altezza minima di una pagina del disegno per pagine, in pixel. */
+const MIN_PAGE_HEIGHT = 400;
+const DRAWING_ERROR = 'Impossibile disegnare lo spartito dopo questa modifica: annullala';
 
 /** Durata della nota suonata sulla tastiera MIDI o sul pianoforte a schermo, in secondi. */
 const AUDITION_SECONDS = 0.6;
@@ -446,6 +462,19 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private readonly pageUrls = new Map<number, string>();
     private renderToken = 0;
     private renderFrame?: number;
+    /** Disegno per pagine degli spartiti lunghi o con molti righi; `null` quando lo spartito si disegna intero. */
+    private pager: PagedNotation | null = null;
+    /** Larghezza, righi nascosti, compressione e interruzioni del disegno per pagine: se cambiano si ridisegna tutto. */
+    private pagerKey = '';
+    /** Battute cambiate dall'ultimo disegno per pagine; `null` se va ridisegnato tutto. */
+    private drawChange: Set<string> | null = null;
+    /** La pagina della selezione si sta disegnando: quando è pronta lo spartito scorre fino a lei. */
+    private scrollPending = false;
+    /** Posizioni delle battute e inizi delle pause di più battute, ricavati dal documento fino alla prossima modifica. */
+    private measureCache: { positions?: Map<string, number>; restStarts?: number[] } = {};
+    private layoutClient?: ScoreLayoutClient;
+    private layoutTimer?: number;
+    private layoutRevision = 0;
     private stopTimer?: number;
 
     constructor(
@@ -524,6 +553,9 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.midiSubscription?.unsubscribe();
         if (this.renderFrame !== undefined) cancelAnimationFrame(this.renderFrame);
         for (const url of this.pageUrls.values()) URL.revokeObjectURL(url);
+        this.closePager();
+        this.layoutClient?.terminate();
+        this.history.dispose();
     }
 
     protected get canUndo(): boolean {
@@ -1837,7 +1869,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         if (this.data.arrangement) arrangements.annotateRows(this.score, rows ?? []);
         this.initialSnapshot = this.score.snapshot();
         // La partitura registra le battute cambiate, una parte le istantanee del documento.
+        this.history.dispose();
         this.history = this.data.arrangement ? new MeasureHistory(this.score) : new SnapshotHistory();
+        this.measureCache = {};
+        // Il disegno per pagine riparte dal nuovo documento.
+        this.closePager();
         this.dirty = false;
         this.checks = this.score.checks();
         this.refreshRows();
@@ -2046,7 +2082,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     }
 
     /** Cursore dell'inserimento: una barra prima dell'elemento che inizia al cursore, o alla fine della battuta. */
-    private placeCursor(): void {
+    private placeCursor(drawnMeasures = this.drawnMeasures()): void {
         const host = this.notationHost;
         const pane = host?.parentElement;
         const score = this.score;
@@ -2054,8 +2090,10 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.cursorBox = null;
             return;
         }
+        // Nel disegno per pagine la pagina del cursore può non essere ancora disegnata: il cursore torna quando compare.
+        this.pager?.ensure(this.cursor.measureIndex);
         const measures = score.measures();
-        const drawnMeasure = this.drawnMeasure(measures, this.cursor.measureIndex);
+        const drawnMeasure = drawnMeasures(this.cursor.measureIndex);
         const measure = measures[this.cursor.measureIndex];
         if (!drawnMeasure || !measure) {
             this.cursorBox = null;
@@ -2226,13 +2264,17 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.stop();
         this.info = null;
         this.conversionBlock = null;
-        const before = this.score.snapshot();
+        // Il documento di prima si ricompone solo se la modifica non riesce.
+        const before = this.history.checkpoint(this.score);
         let applied = false;
+        let changed: DocumentChange | null = null;
         try {
             const selected = change(this.score);
             // Nella scrittura legature di portamento e forcelle hanno sempre inizio e fine: gli estremi rimasti soli si tolgono.
             if (this.writingMode) notation.balanceSpanners(this.score);
             this.history.record(this.score, before, !!options.merge);
+            changed = this.history.lastChange;
+            this.noteDrawChange(changed);
             if (typeof selected === 'string') {
                 this.selectedId = selected;
                 this.emptyMeasureId = null;
@@ -2241,11 +2283,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
             this.keeper?.changed();
             applied = true;
         } catch (error) {
-            this.score = ScoreDocument.restore(before, this.score.prefix, this.score.partIndex);
+            // Il documento torna com'era, e com'è disegnato.
+            this.score = ScoreDocument.restore(before(), this.score.prefix, this.score.partIndex);
             this.message = error instanceof EditError ? error.message : 'Modifica non riuscita';
             if (!(error instanceof EditError)) console.error(error);
         }
-        this.afterChange();
+        this.afterChange(changed);
         return applied;
     }
 
@@ -2256,7 +2299,14 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.score = score;
         this.message = null;
         this.keeper?.changed();
-        this.afterChange();
+        this.noteDrawChange(this.history.lastChange);
+        this.afterChange(this.history.lastChange);
+    }
+
+    /** Battute da ridisegnare nel disegno per pagine; con `null` tutte. */
+    private noteDrawChange(change: DocumentChange | null): void {
+        if (!change) this.drawChange = null;
+        else if (this.drawChange) for (const id of change.measures) this.drawChange.add(id);
     }
 
     /** Note fuori estensione; l'estensione dipende dalla chiave iniziale, che si può cambiare, e si ricalcola a ogni modifica. */
@@ -2266,12 +2316,15 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.rangeWarnings = rangeWarnings(score, range);
     }
 
-    private afterChange(): void {
+    /** Aggiorna controlli, selezione e disegno dopo una modifica; `change` dice quali righi sono cambiati, se si sa. */
+    private afterChange(change: DocumentChange | null = null): void {
         const score = this.score!;
-        this.dirty = score.snapshot() !== this.initialSnapshot;
+        this.measureCache = {};
+        // La partitura confronta le battute registrate con quelle di apertura; la parte confronta le istantanee.
+        this.dirty = this.history.modified(score) ?? score.snapshot() !== this.initialSnapshot;
         this.checks = score.checks();
         this.refreshRows();
-        this.refreshRowChecks();
+        this.refreshRowChecks(change);
         this.checkRange(score);
         const selectionExists = this.selectedId ? !!score.find(this.selectedId) : !this.emptyMeasureId || !!score.find(this.emptyMeasureId);
         if (!selectionExists) {
@@ -2376,23 +2429,26 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     private async render(): Promise<void> {
         const host = this.notationHost;
-        if (!this.score || !host) return;
+        const score = this.score;
+        if (!score || !host) return;
         const token = ++this.renderToken;
+        if (score.measures().length * this.shownRowCount(score) > PAGED_MEASURES) {
+            await this.renderPages(score, host, token);
+            return;
+        }
+        this.closePager();
         const scrollTop = host.parentElement?.scrollTop ?? 0;
         this.rendering = true;
         this.changeDetector.markForCheck();
         try {
-            // La scrittura mostra le interruzioni di riga e di pagina della parte; la correzione segue la larghezza.
-            const arrangement = !!this.data.arrangement;
-            const xml = arrangement ? arrangements.displayedXml(this.score.snapshot(), this.hiddenRows) : this.score.snapshot();
-            const pages = await this.renderer.render(xml, host.clientWidth || 900, EDITOR_SCALE, { encodedBreaks: this.writingMode, condense: arrangement && this.condense, partNames: arrangement });
+            const pages = await this.renderer.renderPrepared(drawingXml(score, this.drawingSource()), host.clientWidth || 900, EDITOR_SCALE, this.drawingFlags());
             if (token !== this.renderToken) return;
             // L'SVG è generato da Verovio a partire dal MusicXML: i testi sono codificati e non contiene script.
             host.innerHTML = pages.join('');
             if (host.parentElement) host.parentElement.scrollTop = scrollTop;
             this.decorate(true);
         } catch {
-            if (token === this.renderToken) this.message = 'Impossibile disegnare lo spartito dopo questa modifica: annullala';
+            if (token === this.renderToken) this.message = DRAWING_ERROR;
         } finally {
             if (token === this.renderToken) {
                 this.rendering = false;
@@ -2402,44 +2458,198 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     }
 
     /**
+     * Disegno per pagine: la pagina della battuta selezionata si ridisegna subito con un estratto, le altre pagine cambiate
+     * quando si avvicinano alla vista, e il Web Worker impagina di nuovo tutto lo spartito poco dopo l'ultima modifica.
+     */
+    private async renderPages(score: ScoreDocument, host: HTMLElement, token: number): Promise<void> {
+        const key = this.drawingKey(host.clientWidth || 900);
+        const created = !this.pager;
+        if (!this.pager) {
+            host.replaceChildren();
+            this.pager = new PagedNotation(host, { draw: (from, to) => this.drawExcerpt(from, to), positions: () => this.measurePositions(), drawn: () => this.pageDrawn() });
+            // Prima dell'impaginazione completa le pagine sono gruppi di battute, all'incirca un sistema della partitura.
+            this.pager.provisional(score.measures().length, Math.max(4, Math.round(40 / this.shownRowCount(score))), this.pageHeight(host));
+        } else {
+            this.pager.invalidate(key === this.pagerKey ? this.drawChange : null);
+        }
+        const restart = created || key !== this.pagerKey;
+        this.pagerKey = key;
+        this.drawChange = new Set();
+        this.requestLayout(restart);
+        if (created) {
+            this.rendering = true;
+            this.changeDetector.markForCheck();
+        }
+        try {
+            await this.pager.refresh(this.inserting ? this.cursor.measureIndex : (this.measure?.index ?? 0));
+            if (token === this.renderToken) this.decorate(true);
+        } finally {
+            if (created) {
+                this.rendering = false;
+                this.changeDetector.markForCheck();
+            }
+        }
+    }
+
+    /** Estratto di una pagina, disegnato subito nel thread principale. */
+    private async drawExcerpt(from: number, to: number): Promise<string[]> {
+        const score = this.score;
+        const host = this.notationHost;
+        if (!score || !host) return [];
+        try {
+            return await this.renderer.renderPrepared(drawingExcerpt(score, from, to, this.drawingSource()), host.clientWidth || 900, EDITOR_SCALE, this.drawingFlags());
+        } catch (error) {
+            this.message = DRAWING_ERROR;
+            this.changeDetector.markForCheck();
+            throw error;
+        }
+    }
+
+    /** Una pagina è comparsa: tornano selezione, evidenziazioni e cursore, e lo scorrimento rimasto in attesa. */
+    private pageDrawn(): void {
+        const scroll = this.scrollPending;
+        this.scrollPending = false;
+        this.decorate(scroll);
+    }
+
+    /** Impagina di nuovo tutto lo spartito nel Web Worker: subito, o dopo l'ultima di una serie di modifiche. */
+    private requestLayout(immediate: boolean): void {
+        if (this.layoutTimer !== undefined) clearTimeout(this.layoutTimer);
+        const revision = ++this.layoutRevision;
+        this.layoutTimer = window.setTimeout(
+            () => {
+                this.layoutTimer = undefined;
+                void this.layoutAll(revision);
+            },
+            immediate ? 0 : LAYOUT_DELAY
+        );
+    }
+
+    /** L'impaginazione completa vale solo se nel frattempo non sono cambiati il documento e il modo di disegnarlo. */
+    private async layoutAll(revision: number): Promise<void> {
+        const score = this.score;
+        const host = this.notationHost;
+        const pager = this.pager;
+        if (!score || !host || !pager || revision !== this.layoutRevision) return;
+        const width = host.clientWidth || 900;
+        const key = this.drawingKey(width);
+        const options = drawingOptions(width, EDITOR_SCALE, { ...this.drawingFlags(), pageHeight: this.pageHeight(host) });
+        this.layoutClient ??= this.renderer.layoutWorker();
+        try {
+            const pages = await this.layoutClient.layout(options, drawingXml(score, this.drawingSource()));
+            if (!pages || revision !== this.layoutRevision || pager !== this.pager || key !== this.pagerKey) return;
+            pager.layout(pages);
+            this.decorate(false);
+        } catch {
+            // Senza l'impaginazione completa restano le pagine disegnate con gli estratti.
+        }
+    }
+
+    private closePager(): void {
+        if (this.layoutTimer !== undefined) clearTimeout(this.layoutTimer);
+        this.layoutTimer = undefined;
+        this.layoutRevision++;
+        this.pager?.destroy();
+        this.pager = null;
+        this.pagerKey = '';
+        this.drawChange = null;
+        this.scrollPending = false;
+    }
+
+    /** La partitura senza i righi nascosti e con i nomi; la scrittura con le interruzioni di riga e di pagina della parte. */
+    private drawingSource(): DrawingSource {
+        const arrangement = !!this.data.arrangement;
+        return { hidden: arrangement ? this.hiddenRows : undefined, partNames: arrangement, pageBreaksAsSystems: this.writingMode };
+    }
+
+    private drawingFlags(): DrawingOptions {
+        const arrangement = !!this.data.arrangement;
+        return { encodedBreaks: this.writingMode, condense: arrangement && this.condense, partNames: arrangement };
+    }
+
+    private drawingKey(width: number): string {
+        return [width, [...this.hiddenRows].sort().join(','), this.condense, this.writingMode].join('|');
+    }
+
+    /** Righi disegnati: tutti se sono tutti nascosti. */
+    private shownRowCount(score: ScoreDocument): number {
+        const parts = score.parts();
+        return parts.filter((part) => !this.hiddenRows.has(part.getAttribute('id') ?? '')).length || parts.length;
+    }
+
+    /** Una pagina è alta quanto la parte visibile dello spartito, che sul telefono scorre con la finestra. */
+    private pageHeight(host: HTMLElement): number {
+        return Math.max(MIN_PAGE_HEIGHT, Math.min(host.parentElement?.clientHeight ?? 0, window.innerHeight));
+    }
+
+    private measurePositions(): Map<string, number> {
+        if (!this.score) return new Map();
+        return (this.measureCache.positions ??= measurePositions(this.score));
+    }
+
+    /** Le pagine della selezione e del cursore sono disegnate; `false` se una si sta ancora disegnando. */
+    private selectionDrawn(): boolean {
+        const pager = this.pager;
+        if (!pager) return true;
+        const measure = this.measure ? pager.ensure(this.measure.index) : true;
+        const cursor = this.inserting ? pager.ensure(this.cursor.measureIndex) : true;
+        return measure && cursor;
+    }
+
+    /**
      * Evidenzia sullo spartito la nota selezionata, la sua battuta, il passaggio o l'intervallo da ascoltare e le battute da
      * verificare.
      */
     private decorate(scroll: boolean): void {
         const host = this.notationHost;
         if (!this.score || !host) return;
+        // Nel disegno per pagine la selezione può stare in una pagina non ancora disegnata: si scorre quando compare.
+        if (scroll && !this.selectionDrawn()) this.scrollPending = true;
         for (const className of ['is-selected', 'is-current-measure', 'is-in-range', 'is-in-passage', 'is-wrong']) {
             for (const item of Array.from(host.querySelectorAll(`.${className}`))) item.classList.remove(className);
         }
-        const measures = this.score.measures();
-        for (const index of this.checks.wrongDuration) this.drawnMeasure(measures, index)?.classList.add('is-wrong');
+        const drawnMeasure = this.drawnMeasures();
+        for (const index of this.checks.wrongDuration) drawnMeasure(index)?.classList.add('is-wrong');
         const range = this.listenRange;
         if (this.measure && range) {
-            for (let index = range[0]; index <= range[1]; index++) this.drawnMeasure(measures, index)?.classList.add(index === this.measure.index ? 'is-current-measure' : 'is-in-range');
+            for (let index = range[0]; index <= range[1]; index++) drawnMeasure(index)?.classList.add(index === this.measure.index ? 'is-current-measure' : 'is-in-range');
         }
         if (this.passage) {
             for (const note of passages.passageNotes(this.score, this.passage)) host.querySelector(`[id="${note.getAttribute('id')}"]`)?.classList.add('is-in-passage');
         }
         const selected = this.selectedId ? host.querySelector(`[id="${this.selectedId}"]`) : null;
         selected?.classList.add('is-selected');
-        if (scroll) (selected ?? (this.measure ? this.drawnMeasure(measures, this.measure.index) : null))?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-        this.placeCursor();
+        if (scroll) (selected ?? (this.measure ? drawnMeasure(this.measure.index) : null))?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        this.placeCursor(drawnMeasure);
     }
 
-    /** Battuta disegnata; le battute di una pausa di più battute usano quella che apre il gruppo. */
-    private drawnMeasure(measures: Element[], index: number): Element | null {
+    /**
+     * Battute disegnate per posizione. Nella partitura Verovio disegna una battuta per tutti i righi, con l'`id` di uno di
+     * loro; le battute di una pausa di più battute usano quella che apre il gruppo.
+     */
+    private drawnMeasures(): (index: number) => Element | null {
         const host = this.notationHost;
-        if (!host) return null;
-        // Nella partitura Verovio disegna una battuta per tutti i righi, con l'`id` di uno di loro.
-        const lists = this.data.arrangement && this.score ? [measures, ...this.score.parts().map((part) => Array.from(part.children).filter((item) => item.tagName === 'measure'))] : [measures];
-        for (let current = index; current >= 0; current--) {
-            for (const list of lists) {
-                const id = list[current]?.getAttribute('id');
-                const drawn = id ? host.querySelector(`[id="${id}"]`) : null;
-                if (drawn) return drawn;
-            }
+        const score = this.score;
+        if (!host || !score) return () => null;
+        const drawn = new Map<string, Element>();
+        for (const item of Array.from(host.querySelectorAll('g.measure'))) {
+            const id = item.getAttribute('id');
+            if (id && !drawn.has(id)) drawn.set(id, item);
         }
-        return null;
+        const lists = [score.measures(), ...score.parts().map(measuresOf)];
+        const at = (index: number) => {
+            for (const list of lists) {
+                const found = drawn.get(list[index]?.getAttribute('id') ?? '');
+                if (found) return found;
+            }
+            return null;
+        };
+        return (index) => {
+            const found = at(index);
+            if (found) return found;
+            const start = (this.measureCache.restStarts ??= multiRestStarts(score.parts().map(measuresOf)))[index];
+            return start === undefined ? null : at(start);
+        };
     }
 
     /** Partitura: pentagramma disegnato più vicino al punto, con la posizione del suo rigo. */
@@ -2515,11 +2725,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.applySound();
     }
 
-    /** Partitura: controlli di tutti i righi, dopo ogni modifica. */
-    private refreshRowChecks(): void {
+    /** Partitura: controlli di tutti i righi, dopo ogni modifica; con `change` si ricontrollano solo i righi cambiati. */
+    private refreshRowChecks(change: DocumentChange | null = null): void {
         const score = this.score;
         if (!this.data.arrangement || !score) return;
-        this.rowCheckList = arrangements.rowChecks(score, this.editorRows(score));
+        this.rowCheckList = arrangements.rowChecks(score, this.editorRows(score), change ? { checks: this.rowCheckList, changed: change.rows } : undefined);
     }
 
     /** Voci, suoni di batteria e pulsanti a schermo dal suono della parte o del rigo attivo. */
@@ -2673,4 +2883,19 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.playback = null;
         this.changeDetector.markForCheck();
     }
+}
+
+function measuresOf(part: Element): Element[] {
+    return Array.from(part.children).filter((item) => item.tagName === 'measure');
+}
+
+/** Per ogni battuta dentro una pausa di più battute, la posizione della battuta che apre il gruppo. */
+function multiRestStarts(lists: readonly Element[][]): number[] {
+    const starts: number[] = [];
+    for (const list of lists) {
+        list.forEach((measure, index) => {
+            for (let inner = index + 1; inner < index + edits.multiRestCount(measure); inner++) starts[inner] ??= index;
+        });
+    }
+    return starts;
 }

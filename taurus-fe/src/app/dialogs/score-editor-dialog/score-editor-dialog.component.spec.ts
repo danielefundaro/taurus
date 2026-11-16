@@ -25,6 +25,8 @@ import {
     ScorePlaybackService,
     ScoreRendererService
 } from '../../service';
+import { LayoutPage } from '../../score-editor/score-layout';
+import { ScoreLayoutClient } from '../../score-editor/score-layout-client';
 import { isEngraveRequest, ScoreEditorDialogComponent, ScoreEditorDialogData } from './score-editor-dialog.component';
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Tuba</part-name></score-part></part-list><part id="P1">
@@ -53,6 +55,12 @@ const ARRANGEMENT = `<?xml version="1.0" encoding="UTF-8"?><score-partwise versi
 <part id="P2"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>2</beats><beat-type>4</beat-type></time><clef><sign>F</sign><line>4</line></clef></attributes>
 <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note></measure>
 <measure number="2"><note><rest measure="yes"/><duration>2</duration><voice>1</voice></note></measure></part></score-partwise>`;
+
+/** Disegno finto, come Verovio: una battuta disegnata per ogni battuta del primo rigo, con il suo `id`. */
+function fakeDrawing(xml: string): string {
+    const part = /<part [\s\S]*?<\/part>/.exec(xml)?.[0] ?? xml;
+    return `<svg>${Array.from(part.matchAll(/<measure[^>]* id="([^"]+)"/g), (match) => `<g class="measure" id="${match[1]}"></g>`).join('')}</svg>`;
+}
 
 describe('ScoreEditorDialogComponent', () => {
     let fixture: ComponentFixture<ScoreEditorDialogComponent>;
@@ -132,8 +140,8 @@ describe('ScoreEditorDialogComponent', () => {
             keeperOptions = options;
             return keeper as never;
         });
-        renderer = jasmine.createSpyObj('ScoreRendererService', ['render']);
-        renderer.render.and.callFake(async (xml: string) => [`<svg><g class="measure" id="${/<measure[^>]* id="([^"]+)"/.exec(xml)![1]}"></g></svg>`]);
+        renderer = jasmine.createSpyObj('ScoreRendererService', ['renderPrepared', 'layoutWorker']);
+        renderer.renderPrepared.and.callFake(async (xml: string) => [fakeDrawing(xml)]);
         playbackService = jasmine.createSpyObj('ScorePlaybackService', ['editor', 'errorReports', 'correct']);
         playbackService.editor.and.returnValue(of(editor));
         playbackService.errorReports.and.returnValue(of([]));
@@ -201,7 +209,7 @@ describe('ScoreEditorDialogComponent', () => {
 
         const component = fixture.componentInstance as unknown as { status: string; selectionLabel: string };
         expect(component.status).toBe('ready');
-        expect(renderer.render).toHaveBeenCalledTimes(1);
+        expect(renderer.renderPrepared).toHaveBeenCalledTimes(1);
         expect(fixture.nativeElement.querySelector('.score-editor__notation svg')).not.toBeNull();
         expect(fixture.nativeElement.querySelector('.score-editor__notation g.measure.is-current-measure')).not.toBeNull();
         expect(component.selectionLabel).toBe('Battuta 1 · Do3 · semiminima');
@@ -215,12 +223,12 @@ describe('ScoreEditorDialogComponent', () => {
         component.move(1);
         component.move(1);
         component.move(1);
-        expect(renderer.render).toHaveBeenCalledTimes(1);
+        expect(renderer.renderPrepared).toHaveBeenCalledTimes(1);
         await new Promise((resolve) => requestAnimationFrame(resolve));
         await fixture.whenStable();
 
-        expect(renderer.render).toHaveBeenCalledTimes(2);
-        expect(renderer.render.calls.mostRecent().args[0].split('<step>F</step>').length - 1).toBe(1);
+        expect(renderer.renderPrepared).toHaveBeenCalledTimes(2);
+        expect(renderer.renderPrepared.calls.mostRecent().args[0].split('<step>F</step>').length - 1).toBe(1);
     });
 
     it('goes back to the track from the top left button, asking first when there are unsaved corrections', async () => {
@@ -519,7 +527,7 @@ describe('ScoreEditorDialogComponent', () => {
         it('writes slurs, hairpins, grace notes, text and line breaks, keeping slurs whole', async () => {
             const component = await openWriting();
             const content = (): string => keeperOptions!.content();
-            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: false, partNames: false });
+            expect(renderer.renderPrepared.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: false, partNames: false });
 
             key(component, { key: 's' });
             expect(content()).toContain('<slur type="start" number="1"/>');
@@ -908,7 +916,7 @@ describe('ScoreEditorDialogComponent', () => {
                 ['Clarinetto', true],
                 ['Tuba', false]
             ]);
-            expect(renderer.render).toHaveBeenCalledWith(jasmine.any(String), jasmine.any(Number), jasmine.any(Number), { encodedBreaks: true, condense: false, partNames: true });
+            expect(renderer.renderPrepared).toHaveBeenCalledWith(jasmine.any(String), jasmine.any(Number), jasmine.any(Number), { encodedBreaks: true, condense: false, partNames: true });
             expect(component.selectionLabel).toBe('Clarinetto · Battuta 1 · Re5 · minima');
             expect(component.concertKey).toBe(0);
             expect(component.range?.instrumentName).toBe('Clarinetto');
@@ -988,15 +996,97 @@ describe('ScoreEditorDialogComponent', () => {
             expect(xml.split('<step>C</step>').length - 1).toBe(1);
         });
 
+        describe('drawing by pages', () => {
+            let layout: jasmine.Spy<(options: Record<string, unknown>, xml: string) => Promise<LayoutPage[] | null>>;
+            let terminate: jasmine.Spy<() => void>;
+
+            /** Partitura lunga: le battute di pausa si ripetono fino a `count` per rigo. */
+            const long = (count: number): string => ARRANGEMENT.replace(/<measure number="2">[\s\S]*?<\/measure>/g, (measure) => Array.from({ length: count - 1 }, (_, index) => measure.replace('number="2"', `number="${index + 2}"`)).join(''));
+            const firstRowIds = (xml: string): string[] => Array.from(new DOMParser().parseFromString(xml, 'application/xml').querySelector('part')!.querySelectorAll('measure'), (measure) => measure.getAttribute('id') ?? '');
+            /** Impaginazione finta: pagine di dieci battute. */
+            const layoutPages = (xml: string): LayoutPage[] => {
+                const ids = firstRowIds(xml);
+                const pages: LayoutPage[] = [];
+                for (let from = 0; from < ids.length; from += 10) {
+                    const measureIds = ids.slice(from, from + 10);
+                    pages.push({ svg: `<svg>${measureIds.map((id) => `<g class="measure" id="${id}"></g>`).join('')}</svg>`, width: 1000, height: 500, measureIds });
+                }
+                return pages;
+            };
+            const settle = async (milliseconds = 0): Promise<void> => {
+                await new Promise((resolve) => setTimeout(resolve, milliseconds));
+                await nextFrame();
+            };
+            const pages = (): number => fixture.nativeElement.querySelectorAll('.score-editor__page').length;
+
+            beforeEach(() => {
+                layout = jasmine.createSpy('layout').and.callFake(async (_options: Record<string, unknown>, xml: string) => layoutPages(xml));
+                terminate = jasmine.createSpy('terminate');
+                renderer.layoutWorker.and.returnValue({ layout, terminate } as unknown as ScoreLayoutClient);
+                arrangements.content.and.resolveTo(long(60));
+            });
+
+            it('draws the page of the selection at once and lays out the whole score in a worker', async () => {
+                const component = await openScore();
+
+                // Prima dell'impaginazione le pagine sono gruppi di battute: si disegna subito quella della selezione.
+                expect(measures(renderer.renderPrepared.calls.first().args[0])).toEqual([20, 20]);
+                expect(fixture.nativeElement.querySelector('.score-editor__notation g.measure.is-current-measure')).not.toBeNull();
+
+                await settle();
+                expect(layout).toHaveBeenCalledTimes(1);
+                const [options, xml] = layout.calls.mostRecent().args;
+                expect(measures(xml)).toEqual([60, 60]);
+                expect(options['pageHeight']).toBeGreaterThanOrEqual(800);
+                expect(pages()).toBe(6);
+
+                // La battuta selezionata in una pagina lontana compare con la sua pagina.
+                component.selectMeasure(55);
+                expect(fixture.nativeElement.querySelector('g.measure.is-current-measure')?.getAttribute('id')).toBe(firstRowIds(xml)[55]);
+
+                // Dopo una modifica si ridisegna subito la pagina della battuta, e poco dopo si impagina di nuovo tutto.
+                renderer.renderPrepared.calls.reset();
+                component.selectMeasure(3);
+                component.insertMeasure('after');
+                await nextFrame();
+                expect(renderer.renderPrepared.calls.allArgs().map((args) => measures(args[0]))).toContain([11, 11]);
+                expect(layout).toHaveBeenCalledTimes(1);
+                await settle(450);
+                expect(layout).toHaveBeenCalledTimes(2);
+                expect(measures(layout.calls.mostRecent().args[1])).toEqual([61, 61]);
+                expect(pages()).toBe(7);
+
+                fixture.destroy();
+                expect(terminate).toHaveBeenCalled();
+            });
+
+            it('keeps the excerpts when the worker cannot lay out, and draws the whole score again when it gets short', async () => {
+                layout.and.rejectWith(new Error('Impaginazione non disponibile'));
+                const component = await openScore();
+                await settle();
+
+                expect(layout).toHaveBeenCalledTimes(1);
+                expect(pages()).toBe(3);
+                expect(component.message).toBeNull();
+
+                // Con un rigo solo le battute sono poche: lo spartito torna intero.
+                component.toggleRow(component.rowViews[1]);
+                await nextFrame();
+                expect(pages()).toBe(0);
+                expect(measures(renderer.renderPrepared.calls.mostRecent().args[0])).toEqual([60]);
+                expect(fixture.nativeElement.querySelectorAll('.score-editor__notation g.measure').length).toBe(60);
+            });
+        });
+
         it('hides a row from the drawing, keeping at least one visible', async () => {
             const component = await openScore();
-            renderer.render.calls.reset();
+            renderer.renderPrepared.calls.reset();
 
             component.toggleRow(component.rowViews[0]);
             await nextFrame();
             expect(component.rowViews[0].hidden).toBeTrue();
             expect(component.rowViews[1].active).toBeTrue();
-            expect(parts(renderer.render.calls.mostRecent().args[0])).toEqual(['Tuba']);
+            expect(parts(renderer.renderPrepared.calls.mostRecent().args[0])).toEqual(['Tuba']);
 
             component.toggleRow(component.rowViews[1]);
             expect(component.message).toBe('Almeno un rigo resta visibile');
@@ -1004,8 +1094,8 @@ describe('ScoreEditorDialogComponent', () => {
             component.toggleCondense();
             component.showAllRows();
             await nextFrame();
-            expect(parts(renderer.render.calls.mostRecent().args[0])).toEqual(['Clarinetto', 'Tuba']);
-            expect(renderer.render.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: true, partNames: true });
+            expect(parts(renderer.renderPrepared.calls.mostRecent().args[0])).toEqual(['Clarinetto', 'Tuba']);
+            expect(renderer.renderPrepared.calls.mostRecent().args[3]).toEqual({ encodedBreaks: true, condense: true, partNames: true });
         });
 
         it('converts the whole score between transposed and concert pitch in one undo step', async () => {
