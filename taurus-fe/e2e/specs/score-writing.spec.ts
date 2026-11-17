@@ -142,7 +142,7 @@ const editorHeading = (page: Page): Locator => page.getByRole('heading', { level
 /** Note disegnate da Verovio nella pagina dello spartito: pause e battute vuote non contano. */
 const notes = (page: Page): Locator => page.locator('.score-editor__notation svg g.note');
 
-const insertionStatus = (page: Page): Locator => page.getByRole('status').filter({ hasText: /^\W*inserimento · / });
+const insertionStatus = (page: Page): Locator => page.getByRole('status').filter({ hasText: /^\W*inserimento · /i });
 
 /**
  * Crea in fondo alla traccia una parte in 4/4, con chiave, armatura e battute proposte dal dialogo, e aspetta l'editor di

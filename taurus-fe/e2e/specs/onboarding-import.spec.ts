@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { Page, Response } from '@playwright/test';
-import { environmentMissing, expect, expectNoHorizontalOverflow, signIn, test } from '../fixtures/session';
+import { environmentMissing, expect, expectNoHorizontalOverflow, featureEnabled, signIn, test } from '../fixtures/session';
 
 interface Limits {
     maxFileSizeBytes: number;
@@ -17,6 +17,9 @@ interface Context {
 
 const contextResponse = (page: Page): Promise<Response> => page.waitForResponse((response) => new URL(response.url()).pathname.endsWith('/api/onboarding/context'));
 
+/** Con l'importazione spenta la guardia del router riporta alla dashboard senza chiedere il contesto al server. */
+const ONBOARDING_OFF = 'Il tenant di prova non ha la funzionalità di importazione iniziale';
+
 /**
  * La configurazione iniziale vista dal browser. Le prove non caricano nulla e non applicano nulla: un'importazione
  * scriverebbe nell'ambiente di prova dati che nessuna modalità additiva può togliere. Validazione, applicazione,
@@ -29,11 +32,11 @@ test.describe('configurazione iniziale', () => {
         const [first] = environment;
         test.skip(!first.users.admin, 'Serve un amministratore del primo tenant');
         await signIn(page, first.users.admin!, 'admin');
+        test.skip(!(await featureEnabled(page, 'onboardingImportEnabled')), ONBOARDING_OFF);
 
         const response = contextResponse(page);
         await page.goto('/onboarding');
         const received = await response;
-        test.skip(received.status() === 403, 'Il tenant di prova non ha la funzionalità di importazione iniziale');
         expect(received.headers()['cache-control'] ?? '').toContain('no-store');
         const context = (await received.json()) as Context;
 
@@ -50,10 +53,11 @@ test.describe('configurazione iniziale', () => {
         const [first] = environment;
         test.skip(!first.users.admin, 'Serve un amministratore del primo tenant');
         await signIn(page, first.users.admin!, 'admin');
+        test.skip(!(await featureEnabled(page, 'onboardingImportEnabled')), ONBOARDING_OFF);
 
         const response = contextResponse(page);
         await page.goto('/onboarding');
-        test.skip((await response).status() === 403, 'Il tenant di prova non ha la funzionalità di importazione iniziale');
+        await response;
 
         const download = page.waitForEvent('download');
         // Nome non ancorato: l'icona dei pulsanti PrimeNG è contenuto generato e finisce nel nome accessibile.
@@ -79,10 +83,11 @@ test.describe('configurazione iniziale', () => {
         const [first] = environment;
         test.skip(!first.users.admin, 'Serve un amministratore del primo tenant');
         await signIn(page, first.users.admin!, 'admin');
+        test.skip(!(await featureEnabled(page, 'onboardingImportEnabled')), ONBOARDING_OFF);
 
         const response = contextResponse(page);
         await page.goto('/onboarding');
-        test.skip((await response).status() === 403, 'Il tenant di prova non ha la funzionalità di importazione iniziale');
+        await response;
         await expect(page.getByRole('heading', { level: 1, name: 'Configurazione iniziale' })).toBeVisible();
 
         for (const width of [320, 768, 1280]) {
@@ -93,11 +98,7 @@ test.describe('configurazione iniziale', () => {
         // `aria-required-children` resta fuori: p-stepper si dichiara `tablist` e ci annida dentro i
         // propri pannelli `tabpanel`, con i passi a `presentation`. È il markup del componente di
         // PrimeNG, 19 e 21, non del nostro modello, e il difetto è annotato fra i gap del runbook di test.
-        const audit = await new AxeBuilder({ page })
-            .include('app-onboarding')
-            .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-            .disableRules(['aria-required-children'])
-            .analyze();
+        const audit = await new AxeBuilder({ page }).include('app-onboarding').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).disableRules(['aria-required-children']).analyze();
         expect(audit.violations).toEqual([]);
     });
 });

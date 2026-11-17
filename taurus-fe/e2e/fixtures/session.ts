@@ -15,7 +15,20 @@ export interface Tenant {
 export interface Credentials {
     username: string;
     password: string;
+    /** Codice del tenant della prova: lo sceglie chi, come un super amministratore, è iscritto a più tenant. */
+    tenant?: string;
 }
+
+/** I valori dei ruoli nella scelta di Keycloak. */
+const KEYCLOAK_ROLES: Record<Role, string> = {
+    superAdmin: 'ROLE_SUPER_ADMIN',
+    admin: 'ROLE_ADMIN',
+    board: 'ROLE_BOARD',
+    archivist: 'ROLE_ARCHIVIST',
+    user: 'ROLE_USER',
+    external: 'ROLE_USER_EXTERNAL',
+    treasurer: 'ROLE_TREASURER'
+};
 
 const credentials = (tenant: string, role: Role): Credentials | undefined => {
     const prefix = `E2E_${tenant.toUpperCase()}_${role.toUpperCase()}`;
@@ -36,11 +49,43 @@ export const tenants = (): Tenant[] =>
                 (['superAdmin', 'admin', 'board', 'archivist', 'user', 'external', 'treasurer'] as Role[])
                     .map((role) => [role, credentials(slot, role)])
                     .filter(([, value]) => !!value)
+                    .map(([role, value]) => [role, { ...value, tenant: code }])
             )
         }));
 
 /** Il menu principale dell'applicazione: le prove ne leggono le voci, che dipendono dal ruolo. */
 export const mainMenu = (page: Page) => page.getByRole('navigation', { name: /menu principale/i });
+
+/** Le funzionalità del tenant lette dall'applicazione, per pagina. */
+const featuresByPage = new WeakMap<Page, Record<string, unknown>>();
+const trackedPages = new WeakSet<Page>();
+
+/**
+ * Registra le funzionalità del tenant che l'applicazione legge all'avvio. Va chiamata prima dell'accesso:
+ * `signIn` e `enterCredentials` lo fanno da sé.
+ */
+export const trackFeatures = (page: Page): void => {
+    if (trackedPages.has(page)) return;
+    trackedPages.add(page);
+    page.on('response', async (response) => {
+        if (!response.ok() || !new URL(response.url()).pathname.endsWith('/api/tenant-features/current')) return;
+        try {
+            featuresByPage.set(page, (await response.json()) as Record<string, unknown>);
+        } catch {
+            // La pagina si è chiusa prima di leggere la risposta.
+        }
+    });
+};
+
+/**
+ * Vero se la funzionalità è attiva nel tenant dell'utente entrato, per esempio `inventoryQrEnabled`. Con la
+ * funzionalità spenta la guardia del router riporta alla dashboard senza chiamare il server: la prova va saltata,
+ * perché la risposta che aspetterebbe non arriva.
+ */
+export const featureEnabled = async (page: Page, flag: `${string}Enabled`): Promise<boolean> => {
+    await expect.poll(() => featuresByPage.has(page), { message: "Funzionalità del tenant non lette dall'applicazione" }).toBe(true);
+    return featuresByPage.get(page)?.[flag] === true;
+};
 
 /**
  * Compila la pagina di accesso di Keycloak e, quando l'utente ha più ruoli nel tenant, sceglie il
@@ -48,13 +93,18 @@ export const mainMenu = (page: Page) => page.getByRole('navigation', { name: /me
  * sulla pagina di accettazione dei documenti legali.
  */
 export const enterCredentials = async (page: Page, user: Credentials, role?: Role): Promise<void> => {
+    trackFeatures(page);
     await page.goto('/');
 
     const username = page.getByLabel(/username|nome utente|utente/i).first();
     await expect(username).toBeVisible();
     await username.fill(user.username);
-    await page.getByLabel(/password/i).first().fill(user.password);
+    await page
+        .getByLabel(/password/i)
+        .first()
+        .fill(user.password);
     await page.getByRole('button', { name: /sign in|accedi|entra/i }).click();
+    await chooseTenant(page, user, role);
 
     // La scelta del ruolo compare soltanto per gli utenti che ne hanno più di uno nel tenant.
     const roleChoice = page.getByRole('button', { name: roleLabel(role) });
@@ -73,6 +123,20 @@ export const signIn = async (page: Page, user: Credentials, role?: Role): Promis
 
     // La navigazione iniziale del router finisce dopo il menu: un clic anticipato verrebbe annullato.
     await page.waitForLoadState('networkidle');
+};
+
+/**
+ * Chi è iscritto a più tenant, come un super amministratore, sceglie in Keycloak il tenant della prova e, se lì ha più
+ * ruoli, il ruolo; chi ne ha uno solo passa oltre.
+ */
+const chooseTenant = async (page: Page, user: Credentials, role?: Role): Promise<void> => {
+    await page.waitForLoadState('domcontentloaded');
+    const tenantChoice = page.getByRole('combobox', { name: /seleziona il tenant/i });
+    if (!user.tenant || !(await tenantChoice.count())) return;
+    await tenantChoice.selectOption(user.tenant);
+    const roleChoice = page.getByRole('combobox', { name: /seleziona il ruolo/i });
+    if (role && (await roleChoice.isVisible())) await roleChoice.selectOption(KEYCLOAK_ROLES[role]);
+    await page.getByRole('button', { name: /invia/i }).click();
 };
 
 /** Vero quando il menu laterale sta fuori dallo schermo e va aperto prima di usarlo. */
