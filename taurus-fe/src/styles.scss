@@ -101,6 +101,14 @@ app-preview .print-sheet-preview--march .print-sheet-preview__slot--blank {
 }
 
 @media print {
+    /*
+     * I componenti vuoti del layout attorno all'anteprima (barra, menu, piè di pagina) restano nel flusso: senza un nome di
+     * pagina Chromium apre per loro una pagina vuota prima e dopo i fogli. Con `march` sul body ogni pagina è un A4.
+     */
+    body:has(app-preview .print-sheet--march) {
+        page: march;
+    }
+
     app-preview .print-sheet.print-sheet--march {
         page: march;
         display: flex;
