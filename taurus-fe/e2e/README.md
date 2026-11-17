@@ -201,8 +201,10 @@ La scrittura, con l'ascolto e la scrittura accesi nel primo tenant, passa sul de
 in 2,4 minuti, dopo aver reso indifferente alle maiuscole l'espressione dello stato di inserimento.
 Rieseguite sul desktop e sul mobile le sei suite toccate, 61 prove passano, 3 si saltano — la
 scrittura sotto 768 pixel — e 2 falliscono: la scheda di scansione a 320 pixel, che ora ha un
-oggetto vero, mostra il pulsante pieno «Segnala guasto» a 2,8:1. È il difetto dei pulsanti pieni
-delle severità, annotato fra i gap del runbook di test.
+oggetto vero, mostrava il pulsante pieno «Segnala guasto» a 2,8:1. Lo stesso giorno il tema
+accessibile porta alla tinta 700 il fondo dei pulsanti pieni delle severità: con quei colori,
+applicati alle pagine vere, axe non trova violazioni sulla scansione, sulle segnalazioni
+dell'oggetto e sulla conferma di eliminazione.
 
 Su Windows WebKit di Playwright non porta a termine l'accesso: dopo il ritorno da Keycloak la pagina
 resta bianca e si chiude entro pochi secondi, in ogni prova che entra nell'applicazione e non solo
