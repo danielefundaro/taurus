@@ -212,6 +212,16 @@ export function addChordPitchAt(score: ScoreDocument, noteId: string, step: Step
 }
 
 /**
+ * La figura degli elementi di un gruppo irregolare lungo quanto `type`: crome per una terzina al posto di una
+ * semiminima, semiminime per una terzina al posto di una minima. `null` quando la figura è troppo breve per il gruppo.
+ */
+export function tupletMemberType(type: NoteType, actual: number): NoteType | null {
+    const option = TUPLETS.find((candidate) => candidate.actual === actual);
+    const member = option ? inferType(toNumber(noteQuarters(type, 0)) / option.normal) : null;
+    return member && !member.dots ? member.type : null;
+}
+
+/**
  * Crea al cursore un gruppo irregolare lungo quanto la figura corrente: terzina di crome al posto di una semiminima,
  * quintina e sestina di semicrome. Il gruppo nasce di pause, il cursore resta al suo inizio e la figura da usare per
  * riempirlo è quella dei suoi elementi.
@@ -220,11 +230,11 @@ export function writeTuplet(score: ScoreDocument, cursor: WritingCursor, figure:
     const option = TUPLETS.find((candidate) => candidate.actual === actual);
     if (!option) throw new EditError('Gruppo irregolare non previsto');
     if (figure.dots) throw new EditError('Togli il punto di valore per creare un gruppo irregolare');
-    const member = inferType(toNumber(noteQuarters(figure.type, 0)) / option.normal);
-    if (!member || member.dots) throw new EditError('Per questo gruppo irregolare scegli una figura più lunga');
+    const memberType = tupletMemberType(figure.type, actual);
+    if (!memberType) throw new EditError('Per questo gruppo irregolare scegli una figura più lunga');
     const at = enterMeasure(score, cursor);
     const ratio = { actual: option.actual, normal: option.normal };
-    const divisions = prepare(score, at, [noteQuarters(figure.type, 0), noteQuarters(member.type, 0, ratio.actual, ratio.normal)]);
+    const divisions = prepare(score, at, [noteQuarters(figure.type, 0), noteQuarters(memberType, 0, ratio.actual, ratio.normal)]);
     const measure = score.measure(at.measureIndex);
     const position = toNumber(at.offset) * divisions;
     const total = toNumber(noteQuarters(figure.type, 0)) * divisions;
@@ -237,14 +247,14 @@ export function writeTuplet(score: ScoreDocument, cursor: WritingCursor, figure:
         const rest = restTemplate(score, at.voice);
         rest.setAttribute('id', score.newId('n'));
         placeholder.before(rest);
-        writeFigure(score, [rest], member.type, 0, ratio);
+        writeFigure(score, [rest], memberType, 0, ratio);
         members.push(rest);
     }
     for (const piece of rests) for (const item of piece) item.remove();
     addTuplet(members[0], 'start');
     addTuplet(members[members.length - 1], 'stop');
     finish(score, [at.measureIndex]);
-    return { noteId: members[0].getAttribute('id')!, cursor: at, figure: { type: member.type, dots: 0 } };
+    return { noteId: members[0].getAttribute('id')!, cursor: at, figure: { type: memberType, dots: 0 } };
 }
 
 // Scrittura sulla selezione

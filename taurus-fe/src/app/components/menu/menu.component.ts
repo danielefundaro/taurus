@@ -73,6 +73,13 @@ export class MenuComponent implements OnInit {
                         hasRoles: [RoleEnums.SUPER_ADMIN]
                     },
                     {
+                        label: 'Riconoscimento',
+                        icon: 'pi pi-fw pi-chart-bar',
+                        routerLink: ['/recognition'],
+                        hasRoles: [RoleEnums.SUPER_ADMIN],
+                        visible: this.tenantFeatureService.loaded() && this.tenantFeatureService.scorePlaybackEnabled()
+                    },
+                    {
                         separator: true,
                         hasRoles: [RoleEnums.SUPER_ADMIN]
                     },
@@ -140,13 +147,6 @@ export class MenuComponent implements OnInit {
                         icon: 'pi pi-fw pi-sliders-h',
                         routerLink: ['/instruments'],
                         hasRoles: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST]
-                    },
-                    {
-                        label: 'Riconoscimento',
-                        icon: 'pi pi-fw pi-chart-bar',
-                        routerLink: ['/recognition'],
-                        hasRoles: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST],
-                        visible: this.tenantFeatureService.loaded() && this.tenantFeatureService.scorePlaybackEnabled()
                     },
                     {
                         separator: true,

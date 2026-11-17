@@ -143,19 +143,18 @@ class SecurityConfigurationTest {
             .andExpect(status().isForbidden());
     }
 
-    @ParameterizedTest
-    @MethodSource("catalogueManagers")
-    void letsTheCatalogueManagersReadTheRecognitionQuality(String authority) throws Exception {
+    @Test
+    void letsTheSuperAdministratorReadTheRecognitionQuality() throws Exception {
         mockMvc
-            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(AuthoritiesConstants.SUPER_ADMIN))))
             .andExpect(status().isOk());
         mockMvc
-            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
+            .perform(get("/api/score-recognition/pending").with(user("member").authorities(new SimpleGrantedAuthority(AuthoritiesConstants.SUPER_ADMIN))))
             .andExpect(status().isOk());
     }
 
     @ParameterizedTest
-    @MethodSource("otherRoles")
+    @MethodSource("allButTheSuperAdministrator")
     void keepsTheRecognitionQualityClosedToTheOtherRoles(String authority) throws Exception {
         mockMvc
             .perform(get("/api/score-recognition/report").with(user("member").authorities(new SimpleGrantedAuthority(authority))))
@@ -197,6 +196,10 @@ class SecurityConfigurationTest {
 
     private static Stream<String> otherRoles() {
         return Stream.of(AuthoritiesConstants.USER, AuthoritiesConstants.USER_EXTERNAL, AuthoritiesConstants.TREASURER);
+    }
+
+    private static Stream<String> allButTheSuperAdministrator() {
+        return Stream.concat(catalogueManagers().filter(authority -> !authority.equals(AuthoritiesConstants.SUPER_ADMIN)), otherRoles());
     }
 
     private static Stream<Arguments> allowedErrorReports() {

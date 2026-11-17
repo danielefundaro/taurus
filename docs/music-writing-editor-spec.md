@@ -363,7 +363,7 @@ Introduzioni, marce d'ordinanza, segnali e rulli di tamburo si scrivono una volt
 
 ### Qualità del riconoscimento
 
-Le correzioni degli archivisti dicono dove sbagliano i motori. Taurus ne conserva i conteggi, non il contenuto, e li mostra a chi gestisce l'archivio.
+Le correzioni degli archivisti dicono dove sbagliano i motori. Taurus ne conserva i conteggi, non il contenuto, e li mostra al super amministratore, che gestisce l'installazione.
 
 - **Raccolta**: all'approvazione di una versione di una parte che discende, risalendo le versioni della stessa parte, da una versione di un motore (origine `OMR_AUDIVERIS` o `OMR_HOMR`), il browser confronta le due versioni con la regola del [confronto](#confronto-tra-versioni) e invia i conteggi. Conta il primo motore che si incontra risalendo.
   - Ogni battuta della versione approvata cade in un solo tipo: corretta, con altezze diverse, con ritmo diverso, con sole legature di valore diverse, o persa dal motore; a parte si contano le battute in più del motore e i segni di struttura attesi e letti. Una battuta diversa solo nei segni di struttura è corretta.
@@ -372,7 +372,7 @@ Le correzioni degli archivisti dicono dove sbagliano i motori. Taurus ne conserv
   - Vale per **Approva** nel dialogo delle versioni e per **Salva e approva** negli editor di correzione e di scrittura. La raccolta segue l'approvazione: se non riesce non la annulla e non mostra errori, e la parte resta tra le approvazioni da raccogliere.
   - Per ogni versione del motore conta l'ultima approvazione, che sostituisce i conteggi della precedente; una raccolta di un'approvazione più vecchia di quella contata non cambia nulla.
 - **Approvazioni precedenti**: la pagina Riconoscimento dice quante parti approvate non sono ancora contate, e **Raccogli dalle approvazioni precedenti** le confronta nel browser una alla volta, con l'avanzamento e **Interrompi**. Quelle che non si possono confrontare restano da raccogliere, e l'avviso finale le conta.
-- **Pagina Riconoscimento**: nel menu, dopo Strumenti, per chi gestisce il catalogo (super amministratore, amministratore, direttivo e archivista) con l'ascolto attivo. Il periodo, gli ultimi 12 mesi dal primo giorno del mese o tutto, vale per la data del riconoscimento. La pagina mostra:
+- **Pagina Riconoscimento**: nel menu, sotto Tenant, solo per il super amministratore, con l'ascolto attivo: è un riepilogo tecnico dei motori, e ha una [guida di pagina](guided-tour-spec.md#guide-di-pagina). Il periodo, gli ultimi 12 mesi dal primo giorno del mese o tutto, vale per la data del riconoscimento. La pagina mostra:
   - per ogni motore le parti approvate, la quota di battute corrette e quella dei segni di struttura letti, con l'andamento per mese del riconoscimento, nel fuso del tenant, che mostra l'effetto di un aggiornamento dei motori;
   - gli errori più frequenti, per tipo e per motore, con la quota sulle battute della versione approvata; per le battute in più sulle battute del motore, per i segni su quelli attesi;
   - le 20 parti con più battute corrette dagli archivisti, con traccia, parte, motore e quota, e **Confronta**, che apre il confronto tra la versione del motore e quella approvata. Una parte eliminata resta nei conteggi ed esce dall'elenco.
@@ -402,7 +402,7 @@ L'editor si apre a schermo intero, come quello di correzione.
 - **Workspace Parti**: l'etichetta «Da impaginare», con **Impagina**.
 - **Confronto**: **Confronta** nel dialogo Versioni e suono e nelle versioni della partitura, **Confronta con l'estrazione** e **Confronta le versioni di origine** nella scheda Ascolto; il dialogo del [confronto](#confronto-tra-versioni) affianca le due versioni con l'elenco delle differenze.
 - **Frammenti**: **Salva come frammento** nella scheda Passaggio e **Inserisci un frammento** nella scheda Battuta dell'editor di scrittura, con la biblioteca dei [frammenti](#frammenti).
-- **Riconoscimento**: la pagina della [qualità del riconoscimento](#qualità-del-riconoscimento), nel menu dopo Strumenti.
+- **Riconoscimento**: la pagina della [qualità del riconoscimento](#qualità-del-riconoscimento), nel menu sotto Tenant, solo per il super amministratore.
 - **Programma dell'evento**: l'etichetta «Da impaginare» e **Impagina** tra gli spartiti di ogni brano, e **Stampa la scaletta** sopra la scaletta.
 - **Impagina**: un dialogo con le opzioni a sinistra e l'anteprima delle pagine a destra, una sotto l'altra sul telefono; durante il job lo stato, al termine le miniature con le scelte di assegnazione, **Scarica il PDF** e **Impagina di nuovo**. Per le parti estratte lo stesso dialogo impagina più parti e mostra lo stato di ognuna.
 
@@ -426,7 +426,7 @@ L'editor si apre a schermo intero, come quello di correzione.
 | `Ctrl` + `A` | seleziona tutta la parte |
 | `S` | legatura di portamento sulla selezione o fino alla nota seguente; sulla nota legata la toglie |
 | `<` `>` | forcella di crescendo o di diminuendo sulla selezione o fino all'elemento seguente |
-| `Alt` + `3` | terzina al cursore, lunga quanto la durata corrente (con `5`, `6` gli altri gruppi irregolari) |
+| `Alt` + `3` | terzina lunga quanto la figura corrente, al cursore, o quanto la nota selezionata fuori dall'inserimento: tre crome al posto di una semiminima, tre semiminime al posto di una minima. Con `5` e `6` quintina e sestina, fatte di figure di un quarto; su una nota di un gruppo lo toglie. Nella correzione raggruppa le note dalla selezionata. Il suggerimento dei pulsanti dice la figura che avranno le note |
 | `Ctrl` + `Alt` + `1`–`4` | voce attiva |
 | `Alt` + `↑` `↓` | nella partitura, rigo sopra o sotto, alla stessa posizione |
 | `Ctrl` + `C`, `X`, `V` | copia, taglia, incolla, anche in un'altra parte |
@@ -554,7 +554,7 @@ Sotto `/api/tracks/{trackId}`, per super amministratore, amministratore e archiv
 
 `GET /api/instruments/playback-suggestion` aggiunge alla proposta l'estensione (`lowestWrittenPitch`, `highestWrittenPitch`), e lo strumento la salva con gli altri campi. L'organico si salva con `PUT /api/instruments/ensemble`, per chi gestisce gli strumenti: riceve l'elenco ordinato degli strumenti che ne fanno parte (`instrumentIds`) e quello letto (`previousInstrumentIds`), e risponde `version.conflict` (409) se nel frattempo l'organico è cambiato. `PUT` risponde con l'organico salvato, `instrument.ensemble.invalid` (400) per uno strumento inesistente, eliminato o ripetuto. `GET /api/instruments/ensemble`, per tutti gli utenti autenticati, restituisce gli strumenti dell'organico nel loro ordine (`id`, `name`, `ensemblePosition`, `family`), vuoto senza organico: lo usano l'anteprima e la stampa. `GET /api/instruments/ensemble/reference` restituisce tutti gli strumenti del tenant nell'ordine di riferimento, con la famiglia riconosciuta e la posizione attuale, senza salvarlo; gli strumenti espongono `ensemblePosition` in sola lettura.
 
-La qualità del riconoscimento sta sotto `/api/score-recognition`, per chi gestisce il catalogo (super amministratore, amministratore, direttivo e archivista) con `SCORE_PLAYBACK`:
+La qualità del riconoscimento sta sotto `/api/score-recognition`, solo per il super amministratore, con `SCORE_PLAYBACK`. La raccolta all'approvazione resta sul percorso della traccia, per chi gestisce il catalogo:
 
 | Metodo e percorso | Descrizione |
 | --- | --- |
@@ -581,7 +581,7 @@ Un job fallito riporta il codice del servizio (`unreadableScore`, `invalidOption
 
 - Scrittura, bozze, blocchi, estrazione e impaginazione sono riservati a super amministratore, amministratore e archivista, sui percorsi di gestione; utenti ed esterni continuano a vedere solo le versioni, con le regole di visibilità dell'ascolto.
 - Bozze e blocchi stanno nello schema del tenant; il blocco riporta il nome di chi scrive solo agli utenti dello stesso tenant.
-- Confronto e qualità del riconoscimento sono per chi gestisce il catalogo, compreso il direttivo, con l'ascolto (`SCORE_PLAYBACK`), perché servono anche alla correzione; i frammenti per gli stessi ruoli con la scrittura. Frammenti e raccolte stanno nello schema del tenant, e le metriche dell'installazione non portano identificativi.
+- Il confronto e la raccolta dei conteggi all'approvazione sono per chi gestisce il catalogo, compreso il direttivo, con l'ascolto (`SCORE_PLAYBACK`), perché servono anche alla correzione; la pagina Riconoscimento e le sue API solo per il super amministratore; i frammenti per chi gestisce il catalogo con la scrittura. Frammenti e raccolte stanno nello schema del tenant, e le metriche dell'installazione non portano identificativi.
 - Le bozze di un utente cancellato restano finché il bersaglio esiste, perché il contenuto è musica dell'archivio e non un dato personale; il nome dell'autore nel blocco scompare alla scadenza.
 
 ## Osservabilità e sicurezza
@@ -870,6 +870,12 @@ Decise il 16/11/2026, nel dettaglio della fase 6:
    - le misure fatte a mano, che non si ripetono uguali;
    - una suite Karma, che non rallenta il processore.
 3. **Prove automatiche e manuali**: le prove Playwright della scrittura, sui profili desktop e tablet, affiancano i casi manuali del runbook di test. Richiedono un'istanza completa, come il resto della suite end to end. Scartati i soli casi manuali, che lascerebbero da ripetere a mano anche i percorsi principali.
+
+## Decisioni della settima revisione
+
+Decisa il 17/11/2026, dopo la fase 6:
+
+1. **Pagina Riconoscimento al super amministratore**: la pagina è un riepilogo tecnico della qualità dei motori, che serve a chi gestisce l'installazione. Sta nel menu sotto Tenant, la vede solo il super amministratore e ha una guida di pagina. La raccolta dei conteggi all'approvazione non cambia e resta a chi approva le parti. Scartata la pagina per chi gestisce il catalogo, troppo tecnica per archivisti e direttivo.
 
 ## Estensioni approvate
 

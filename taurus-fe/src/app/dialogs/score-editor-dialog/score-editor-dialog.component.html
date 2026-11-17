@@ -314,29 +314,19 @@
                             }
                             @if (inserting) {
                                 @for (option of tuplets; track option.actual) {
-                                    <p-button
-                                        [label]="option.label"
-                                        size="small"
-                                        severity="secondary"
-                                        outlined
-                                        [pTooltip]="'Gruppo di ' + option.actual + ' al cursore, lungo quanto la figura (Alt+' + option.actual + ')'"
-                                        [disabled]="readOnly"
-                                        (onClick)="tuplet(option.actual)"
-                                    />
+                                    <p-button [label]="option.label" size="small" severity="secondary" outlined [pTooltip]="tupletHint(option)" [disabled]="readOnly" (onClick)="tuplet(option.actual)" />
                                 }
                             } @else if (note?.tuplet) {
-                                <p-button [label]="'Togli gruppo di ' + note!.tuplet" size="small" severity="secondary" (onClick)="tuplet(note!.tuplet!)" />
+                                <p-button
+                                    [label]="'Togli gruppo di ' + note!.tuplet"
+                                    size="small"
+                                    severity="secondary"
+                                    [pTooltip]="(writingMode ? 'Il gruppo torna una sola nota, con il contenuto della prima' : 'Le note restano, senza il gruppo') + ' (Alt+' + note!.tuplet + ')'"
+                                    (onClick)="tuplet(note!.tuplet!)"
+                                />
                             } @else {
                                 @for (option of tuplets; track option.actual) {
-                                    <p-button
-                                        [label]="option.label"
-                                        size="small"
-                                        severity="secondary"
-                                        outlined
-                                        [pTooltip]="option.actual + ' note al posto di ' + option.normal + ', dalla nota selezionata'"
-                                        [disabled]="!note"
-                                        (onClick)="tuplet(option.actual)"
-                                    />
+                                    <p-button [label]="option.label" size="small" severity="secondary" outlined [pTooltip]="tupletHint(option)" [disabled]="!note" (onClick)="tuplet(option.actual)" />
                                 }
                             }
                         </div>
@@ -453,7 +443,7 @@
                     <div class="score-editor__group-row">
                         <div class="score-editor__group" role="group" aria-label="Metro">
                             <span class="score-editor__label">Metro{{ measure?.timeChange ? ' (cambia qui)' : '' }}</span>
-                            <p-inputnumber [(ngModel)]="timeBeats" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Numeratore del metro" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="timeBeats" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Numeratore del metro" [disabled]="!measure" />
                             <span>/</span>
                             <p-select [options]="beatTypes" [(ngModel)]="timeBeatType" optionLabel="label" optionValue="value" size="small" ariaLabel="Denominatore del metro" appendTo="body" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure" (onClick)="applyTime()" />
@@ -515,7 +505,7 @@
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Numero di battute">
                             <span class="score-editor__label">Numero di battute</span>
-                            <p-inputnumber [(ngModel)]="measureCount" [min]="1" [max]="200" [showButtons]="true" inputStyleClass="w-14" size="small" ariaLabel="Numero di battute" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="measureCount" [min]="1" [max]="200" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Numero di battute" [disabled]="!measure" />
                             <p-button
                                 label="Aggiungi dopo"
                                 size="small"
@@ -583,7 +573,7 @@
                                     <option [value]="value"></option>
                                 }
                             </datalist>
-                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure || !tempo" (onClick)="applyTempo(tempo)" />
                             <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.tempo" (onClick)="applyTempo(null)" />
                         </div>
@@ -696,7 +686,7 @@
                             </div>
                             <div class="score-editor__group" role="group" aria-label="Battute per riga">
                                 <span class="score-editor__label">Battute per riga</span>
-                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
+                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
                                 <p-button
                                     label="Applica a tutta la parte"
                                     size="small"

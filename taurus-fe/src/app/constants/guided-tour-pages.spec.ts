@@ -111,6 +111,10 @@ const STEP_COUNTS: Record<string, [number[], number[]]> = {
         [3, 0, 0, 0, 0, 0, 0],
         [3, 0, 0, 0, 0, 0, 0]
     ],
+    '/recognition': [
+        [6, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0]
+    ],
     '/legal-documents': [
         [2, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0]
@@ -167,9 +171,12 @@ describe('Page guides catalog', () => {
         for (const role of ROLES.filter((candidate) => candidate !== RoleEnums.SUPER_ADMIN)) {
             expect(ids('/tenants', role)).withContext(role).toEqual([]);
             expect(ids('/legal-documents', role)).withContext(role).toEqual([]);
+            expect(ids('/recognition', role)).withContext(role).toEqual([]);
         }
         expect(ids('/tracks', RoleEnums.TREASURER)).toEqual([]);
         expect(ids('/tenants', RoleEnums.SUPER_ADMIN)).toEqual(['page.tenants.create', 'page.tenants.list']);
+        expect(ids('/recognition', RoleEnums.SUPER_ADMIN)).toEqual(['page.recognition.period', 'page.recognition.collect', 'page.recognition.engines', 'page.recognition.months', 'page.recognition.errors', 'page.recognition.parts']);
+        expect(ids('/recognition', RoleEnums.SUPER_ADMIN, (feature) => feature !== TenantFeature.SCORE_PLAYBACK)).toEqual([]);
         expect(ids('/finance', RoleEnums.TREASURER)).toContain('page.finance.movements');
     });
 

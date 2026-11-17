@@ -76,7 +76,7 @@ export const appRoutes: Routes = [
                 path: 'recognition',
                 loadComponent: () => import('./app/pages/recognition/recognition.component').then((module) => module.RecognitionComponent),
                 canActivate: [canActivateAuthRole, tenantFeatureGuard],
-                data: { role: [RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN, RoleEnums.BOARD, RoleEnums.ARCHIVIST], feature: TenantFeature.SCORE_PLAYBACK }
+                data: { role: [RoleEnums.SUPER_ADMIN], feature: TenantFeature.SCORE_PLAYBACK }
             },
             {
                 path: 'inventory',
