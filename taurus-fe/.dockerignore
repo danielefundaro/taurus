@@ -17,3 +17,5 @@ src/assets/soundfonts
 .gitignore
 Dockerfile
 .dockerignore
+# La configurazione della macchina di sviluppo, con la chiave della PrimeUI License: non entra nell'immagine.
+src/assets/config.local.json
