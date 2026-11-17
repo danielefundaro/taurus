@@ -715,7 +715,7 @@ Le guide di pagina non salvano nulla. Le ragioni:
 - registrare le tappe viste farebbe crescere `seen_steps` oltre il limite di 100 per gli amministratori, che hanno molte pagine;
 - senza scritture il backend resta com'è e la guida non aggiunge dati personali.
 
-Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali e a 4 con la tappa Compensi della guida di Economia a 5 con la tappa Organico della guida degli strumenti e a 6 con la tappa Partitura della guida della traccia: sale a ogni tappa aggiunta o che cambia significato.
+Ogni tappa ha comunque `introducedIn`, che vale 2 per le tappe di questa fase, così la [fase 3](#fase-3--novità) potrà segnalare le tappe nuove di una pagina dopo un rilascio. `GUIDED_TOUR_CATALOG_REVISION` passa a 2 con il rilascio della fase 2, a 3 con le tappe del dettaglio dei documenti legali, a 4 con la tappa Compensi della guida di Economia, a 5 con la tappa Organico della guida degli strumenti, a 6 con la tappa Partitura della guida della traccia e a 7 con la guida della pagina Riconoscimento: sale a ogni tappa aggiunta o che cambia significato.
 
 ### Catalogo, ancore e caricamento
 
@@ -965,6 +965,19 @@ La tappa 9 è stata aggiunta il 2026-11-13 con la revisione 4 del catalogo (`int
 | `/legal-documents` | 1 | `page.legalDocuments.create` | `legalDocuments.create` | «Pubblica una nuova versione di privacy o condizioni d'uso: gli utenti la accettano al prossimo ingresso.» |
 | `/legal-documents` | 2 | `page.legalDocuments.versions` | `legalDocuments.notice` | «Le versioni pubblicate non si modificano: per cambiare un testo pubblicane una nuova.» |
 
+#### Riconoscimento — `/recognition`, SA; `SCORE_PLAYBACK`
+
+| Ordine | ID | Ancora | Testo |
+| ---: | --- | --- | --- |
+| 1 | `page.recognition.period` | `recognition.period` | «Scegli gli ultimi 12 mesi o tutto: ogni parte conta nel mese in cui il motore l'ha riconosciuta.» |
+| 2 | `page.recognition.collect` | `recognition.collect` | «Le parti approvate prima della raccolta non sono contate: «Raccogli dalle approvazioni precedenti» le confronta nel browser una alla volta, e la puoi interrompere.» |
+| 3 | `page.recognition.engines` | `recognition.engines` | «Per Audiveris e homr le parti approvate, la quota di battute giuste e quella dei segni di struttura letti, misurate sulle correzioni degli archivisti.» |
+| 4 | `page.recognition.months` | `recognition.months` | «Le battute giuste mese per mese: dopo un aggiornamento dei motori il cambiamento si vede dal mese in cui è entrato.» |
+| 5 | `page.recognition.errors` | `recognition.errors` | «Gli errori di ogni motore dal più frequente: altezze, ritmo, legature, battute perse o in più, segni non letti.» |
+| 6 | `page.recognition.parts` | `recognition.parts` | «Le parti in cui gli archivisti hanno corretto più battute: «Confronta» affianca la versione del motore a quella approvata.» |
+
+La guida è stata aggiunta il 2026-11-17 con la revisione 7 del catalogo (`introducedIn: 7`), quando la pagina della [qualità del riconoscimento](music-writing-editor-spec.md#qualità-del-riconoscimento) è passata al solo super amministratore, nel menu sotto Tenant. La tappa 2 compare solo quando ci sono approvazioni da raccogliere o una raccolta in corso; le tappe da 3 a 6 solo quando il riepilogo ha almeno un motore.
+
 ### Pagine senza guida
 
 Restano senza guida le pagine fuori dal layout (accettazione dei documenti legali, firma pubblica, pagine di errore) e il reindirizzamento `/calendar/uid/:uid`, che porta al dettaglio dell'evento. Sulle pagine senza tappe per la sessione la voce **Guida di questa pagina** non compare.
@@ -1009,7 +1022,7 @@ La fase 2 si rilascia in tre blocchi, ciascuno con i propri test, controllo dell
 
 1. **Blocco A, pagine di tutti i ruoli**: profilo, dashboard, calendario e dettaglio evento, tracce e dettaglio, album e dettaglio, anteprima, inventario personale e consegna.
 2. **Blocco B, pagine di gestione**: utenti, economia, oggetti, modello del foglio e scansione dell'inventario, strumenti, configurazione iniziale, consegne notifiche e feed calendario.
-3. **Blocco C, pagine del Super amministratore**: tenant e documenti legali.
+3. **Blocco C, pagine del Super amministratore**: tenant e documenti legali; dalla revisione 7 anche la pagina Riconoscimento.
 
 Il nuovo testo di `common.help` e il passaggio di `GUIDED_TOUR_CATALOG_REVISION` a 2 entrano con il blocco A.
 
