@@ -1,12 +1,12 @@
 <app-page-header heading="Riconoscimento" subtitle="Dove sbagliano i motori, dalle parti riconosciute e poi corrette e approvate">
-    <div pageActions>
+    <div pageActions appTourAnchor="recognition.period">
         <p-selectbutton [options]="periods" [ngModel]="period" (ngModelChange)="changePeriod($event)" optionLabel="label"
             optionValue="value" [allowEmpty]="false" [disabled]="loading" ariaLabel="Periodo del riepilogo" />
     </div>
 </app-page-header>
 
 @if (collection) {
-<section class="card recognition-collect" aria-live="polite">
+<section class="card recognition-collect" appTourAnchor="recognition.collect" aria-live="polite">
     <div class="recognition-collect__text">
         <strong>Raccolta dalle approvazioni precedenti</strong>
         <span class="text-muted-color">Confrontate {{ collection.done }} di {{ collection.total }}{{ collection.failed ? ' · non riuscite ' + collection.failed : '' }}</span>
@@ -15,7 +15,7 @@
     <p-button label="Interrompi" icon="pi pi-stop" severity="secondary" [outlined]="true" [disabled]="collection.stopping" (onClick)="stop()" />
 </section>
 } @else if (pendingTotal) {
-<section class="card recognition-collect">
+<section class="card recognition-collect" appTourAnchor="recognition.collect">
     <div class="recognition-collect__text">
         <strong>{{ pendingTotal === 1 ? '1 parte approvata non è ancora contata' : pendingTotal + ' parti approvate non sono ancora contate' }}</strong>
         <span class="text-muted-color">Sono approvazioni fatte prima della raccolta, o la cui raccolta non è riuscita: il browser le confronta una alla volta.</span>
@@ -38,7 +38,7 @@
         [message]="period === 'year' ? 'Negli ultimi 12 mesi nessuna parte riconosciuta da un motore è stata approvata. Le parti si contano all\'approvazione.' : 'Nessuna parte riconosciuta da un motore è stata approvata. Le parti si contano all\'approvazione.'" />
 </div>
 } @else if (report) {
-<section class="recognition-engines" aria-label="Motori">
+<section class="recognition-engines" appTourAnchor="recognition.engines" aria-label="Motori">
     @for (card of engines; track card.engine) {
     <article class="card recognition-engine">
         <header class="recognition-engine__header">
@@ -65,7 +65,7 @@
     }
 </section>
 
-<section class="card recognition-section">
+<section class="card recognition-section" appTourAnchor="recognition.months">
     <h2 class="recognition-section__title">Andamento per mese</h2>
     <p class="recognition-section__hint text-muted-color">Battute giuste delle parti riconosciute in ogni mese: un aggiornamento dei motori si vede dal mese in cui è entrato.</p>
     <div class="recognition-table-wrap">
@@ -102,7 +102,7 @@
     </div>
 </section>
 
-<section class="card recognition-section">
+<section class="card recognition-section" appTourAnchor="recognition.errors">
     <h2 class="recognition-section__title">Errori più frequenti</h2>
     @if (errors.length) {
     <div class="recognition-table-wrap">
@@ -133,7 +133,7 @@
     }
 </section>
 
-<section class="card recognition-section">
+<section class="card recognition-section" appTourAnchor="recognition.parts">
     <h2 class="recognition-section__title">Parti più corrette</h2>
     @if (report.parts.length) {
     <div class="recognition-table-wrap">

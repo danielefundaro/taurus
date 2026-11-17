@@ -94,12 +94,38 @@ describe('MenuComponent for the board', () => {
         const component = TestBed.runInInjectionContext(() => new MenuComponent(service as never));
         TestBed.tick();
 
-        for (const label of ['Utenti', 'Economia', 'Inventario', 'Album', 'Tracce', 'Strumenti', 'Riconoscimento', 'Calendario']) {
+        for (const label of ['Utenti', 'Economia', 'Inventario', 'Album', 'Tracce', 'Strumenti', 'Calendario']) {
             expect(menuItem(component, label)?.['hasRoles']).withContext(label).toContain(RoleEnums.BOARD);
         }
         for (const label of ['Configurazione iniziale', 'Consegne notifiche', 'Feed calendario']) {
             expect(menuItem(component, label)?.['hasRoles']).withContext(label).toEqual([RoleEnums.SUPER_ADMIN, RoleEnums.ADMIN]);
         }
+    });
+
+    it('keeps the recognition quality to the super administrator, right after the tenants', () => {
+        const service = {
+            loaded: signal(true),
+            financeEnabled: signal(true),
+            inventoryEnabled: signal(true),
+            onboardingImportEnabled: signal(true),
+            externalCalendarFeedEnabled: signal(true),
+            calendarEnabled: signal(true),
+            scorePlaybackEnabled: signal(true),
+            refresh: jasmine.createSpy().and.returnValue(of({}))
+        };
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: TenantFeatureService, useValue: service },
+                { provide: TenantStatusService, useValue: { bootstrap: signal(false) } }
+            ]
+        });
+        const component = TestBed.runInInjectionContext(() => new MenuComponent(service as never));
+        TestBed.tick();
+
+        const items = component.model.flatMap((section) => section.items ?? []);
+        const tenants = items.findIndex((item) => item.label === 'Tenant');
+        expect(items[tenants + 1]?.label).toBe('Riconoscimento');
+        expect(menuItem(component, 'Riconoscimento')?.['hasRoles']).toEqual([RoleEnums.SUPER_ADMIN]);
     });
 });
 

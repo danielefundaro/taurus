@@ -1141,6 +1141,66 @@ export const GUIDED_TOUR_PAGES: readonly GuidedTourPageDefinition[] = [
         ]
     },
     {
+        pages: ['/recognition'],
+        requires: [TenantFeature.SCORE_PLAYBACK],
+        steps: [
+            {
+                id: 'page.recognition.period',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.period'],
+                icon: 'pi pi-calendar',
+                title: 'Periodo',
+                body: "Scegli gli ultimi 12 mesi o tutto: ogni parte conta nel mese in cui il motore l'ha riconosciuta.",
+                introducedIn: 7
+            },
+            {
+                id: 'page.recognition.collect',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.collect'],
+                icon: 'pi pi-replay',
+                title: 'Approvazioni precedenti',
+                body: 'Le parti approvate prima della raccolta non sono contate: «Raccogli dalle approvazioni precedenti» le confronta nel browser una alla volta, e la puoi interrompere.',
+                introducedIn: 7
+            },
+            {
+                id: 'page.recognition.engines',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.engines'],
+                icon: 'pi pi-chart-bar',
+                title: 'Motori',
+                body: 'Per Audiveris e homr le parti approvate, la quota di battute giuste e quella dei segni di struttura letti, misurate sulle correzioni degli archivisti.',
+                introducedIn: 7
+            },
+            {
+                id: 'page.recognition.months',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.months'],
+                icon: 'pi pi-chart-line',
+                title: 'Andamento per mese',
+                body: 'Le battute giuste mese per mese: dopo un aggiornamento dei motori il cambiamento si vede dal mese in cui è entrato.',
+                introducedIn: 7
+            },
+            {
+                id: 'page.recognition.errors',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.errors'],
+                icon: 'pi pi-exclamation-triangle',
+                title: 'Errori più frequenti',
+                body: 'Gli errori di ogni motore dal più frequente: altezze, ritmo, legature, battute perse o in più, segni non letti.',
+                introducedIn: 7
+            },
+            {
+                id: 'page.recognition.parts',
+                roles: [SUPER_ADMIN],
+                anchors: ['recognition.parts'],
+                icon: 'pi pi-clone',
+                title: 'Parti più corrette',
+                body: 'Le parti in cui gli archivisti hanno corretto più battute: «Confronta» affianca la versione del motore a quella approvata.',
+                introducedIn: 7
+            }
+        ]
+    },
+    {
         pages: ['/legal-documents'],
         steps: [
             {
