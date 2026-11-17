@@ -98,16 +98,9 @@ p {
 
 .parts-filter,
 .parts-filter input,
+// L'elemento è la radice dell'autocomplete: con `fluid` resta una riga flessibile a tutta larghezza, con la freccia
+// accanto agli strumenti. Un display proprio manderebbe la freccia sotto.
 .instrument-picker {
-    width: 100%;
-}
-
-.instrument-picker {
-    display: block;
-}
-
-:host ::ng-deep .instrument-picker .p-autocomplete,
-:host ::ng-deep .instrument-picker .p-autocomplete-input-multiple {
     width: 100%;
 }
 

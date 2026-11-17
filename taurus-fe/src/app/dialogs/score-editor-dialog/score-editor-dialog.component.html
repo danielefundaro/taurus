@@ -453,7 +453,7 @@
                     <div class="score-editor__group-row">
                         <div class="score-editor__group" role="group" aria-label="Metro">
                             <span class="score-editor__label">Metro{{ measure?.timeChange ? ' (cambia qui)' : '' }}</span>
-                            <p-inputnumber [(ngModel)]="timeBeats" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Numeratore del metro" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="timeBeats" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Numeratore del metro" [disabled]="!measure" />
                             <span>/</span>
                             <p-select [options]="beatTypes" [(ngModel)]="timeBeatType" optionLabel="label" optionValue="value" size="small" ariaLabel="Denominatore del metro" appendTo="body" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure" (onClick)="applyTime()" />
@@ -515,7 +515,7 @@
                         </div>
                         <div class="score-editor__group" role="group" aria-label="Numero di battute">
                             <span class="score-editor__label">Numero di battute</span>
-                            <p-inputnumber [(ngModel)]="measureCount" [min]="1" [max]="200" [showButtons]="true" inputStyleClass="w-14" size="small" ariaLabel="Numero di battute" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="measureCount" [min]="1" [max]="200" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Numero di battute" [disabled]="!measure" />
                             <p-button
                                 label="Aggiungi dopo"
                                 size="small"
@@ -583,7 +583,7 @@
                                     <option [value]="value"></option>
                                 }
                             </datalist>
-                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-16" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
+                            <p-inputnumber [(ngModel)]="tempo" [min]="20" [max]="400" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Semiminime al minuto" pTooltip="Semiminime al minuto" [disabled]="!measure" />
                             <p-button label="Applica" size="small" severity="secondary" [disabled]="!measure || !tempo" (onClick)="applyTempo(tempo)" />
                             <p-button label="Togli" size="small" severity="secondary" text [disabled]="!measure?.tempo" (onClick)="applyTempo(null)" />
                         </div>
@@ -696,7 +696,7 @@
                             </div>
                             <div class="score-editor__group" role="group" aria-label="Battute per riga">
                                 <span class="score-editor__label">Battute per riga</span>
-                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-12" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
+                                <p-inputnumber [(ngModel)]="breaksEvery" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-20" size="small" ariaLabel="Battute per riga" [disabled]="readOnly" />
                                 <p-button
                                     label="Applica a tutta la parte"
                                     size="small"

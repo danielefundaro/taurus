@@ -83,7 +83,7 @@
                         <app-form-field label="Rigo" forId="engraveStaff" [hint]="'Altezza del rigo, da 4 a 9,6 mm.'" [error]="shell.validationAttempted && problem?.startsWith('La dimensione') ? problem! : undefined">
                             <p-inputnumber
                                 inputId="engraveStaff"
-                                class="w-full"
+                                [fluid]="true"
                                 name="staffSize"
                                 [(ngModel)]="options.staffSize"
                                 (ngModelChange)="changed()"
@@ -101,7 +101,7 @@
                         <app-form-field label="Margini" forId="engraveMargin" [hint]="'Da 3 a 30 mm, su tutti i lati.'" [error]="shell.validationAttempted && problem?.startsWith('I margini') ? problem! : undefined">
                             <p-inputnumber
                                 inputId="engraveMargin"
-                                class="w-full"
+                                [fluid]="true"
                                 name="margin"
                                 [(ngModel)]="options.margin"
                                 (ngModelChange)="changed()"
@@ -140,7 +140,7 @@
                         </div>
                     </fieldset>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="flex flex-col gap-4">
                         <app-form-field label="Numeri di battuta" forId="engraveMeasureNumbers" hint="Su ogni battuta per le parti di studio.">
                             <p-select
                                 inputId="engraveMeasureNumbers"
@@ -154,7 +154,7 @@
                                 appendTo="body"
                             />
                         </app-form-field>
-                        <div class="flex items-center gap-2 sm:pt-7">
+                        <div class="flex items-center gap-2">
                             <p-checkbox inputId="engravePageNumbers" name="pageNumbers" [binary]="true" [(ngModel)]="options.pageNumbers" (ngModelChange)="changed()" />
                             <label for="engravePageNumbers">Numeri di pagina dalla seconda pagina</label>
                         </div>

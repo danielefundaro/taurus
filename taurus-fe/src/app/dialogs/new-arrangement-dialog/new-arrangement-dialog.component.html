@@ -51,19 +51,19 @@
                     </app-form-field>
                     <app-form-field label="Metro" forId="newArrangementBeats" required [error]="shell.validationAttempted ? (error('Il numeratore') ?? error('Il denominatore')) : undefined">
                         <div class="flex items-center gap-2">
-                            <p-inputnumber inputId="newArrangementBeats" [(ngModel)]="beats" (ngModelChange)="changed()" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-14" ariaLabel="Numeratore del metro" />
+                            <p-inputnumber inputId="newArrangementBeats" [(ngModel)]="beats" (ngModelChange)="changed()" [min]="1" [max]="32" [showButtons]="true" inputStyleClass="w-24" ariaLabel="Numeratore del metro" />
                             <span aria-hidden="true">/</span>
                             <p-select [options]="beatTypes" [(ngModel)]="beatType" (ngModelChange)="changed()" optionLabel="label" optionValue="value" ariaLabel="Denominatore del metro" appendTo="body" />
                         </div>
                     </app-form-field>
                     <app-form-field label="Tempo" forId="newArrangementTempo" hint="Semiminime al minuto. Vuoto: nessuna indicazione di tempo." [error]="shell.validationAttempted ? error('Il tempo') : undefined">
-                        <p-inputnumber inputId="newArrangementTempo" class="w-full" [(ngModel)]="tempo" (ngModelChange)="changed()" [min]="20" [max]="400" [showButtons]="true" [step]="5" />
+                        <p-inputnumber inputId="newArrangementTempo" [fluid]="true" [(ngModel)]="tempo" (ngModelChange)="changed()" [min]="20" [max]="400" [showButtons]="true" [step]="5" />
                     </app-form-field>
                     <app-form-field label="Battute" forId="newArrangementMeasures" required hint="Battute intere, levare esclusa." [error]="shell.validationAttempted ? error('Le battute') : undefined">
-                        <p-inputnumber inputId="newArrangementMeasures" class="w-full" [(ngModel)]="measures" (ngModelChange)="changed()" [min]="1" [max]="maxMeasures" [showButtons]="true" />
+                        <p-inputnumber inputId="newArrangementMeasures" [fluid]="true" [(ngModel)]="measures" (ngModelChange)="changed()" [min]="1" [max]="maxMeasures" [showButtons]="true" />
                     </app-form-field>
                     <app-form-field [label]="pickupLabel" forId="newArrangementPickup" hint="0 se la partitura non inizia in levare." [error]="shell.validationAttempted ? error('La levare') : undefined">
-                        <p-inputnumber inputId="newArrangementPickup" class="w-full" [(ngModel)]="pickupBeats" (ngModelChange)="changed()" [min]="0" [max]="beats - 1" [showButtons]="true" />
+                        <p-inputnumber inputId="newArrangementPickup" [fluid]="true" [(ngModel)]="pickupBeats" (ngModelChange)="changed()" [min]="0" [max]="beats - 1" [showButtons]="true" />
                     </app-form-field>
                 </div>
             } @else {
