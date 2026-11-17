@@ -101,6 +101,22 @@ export const ACCESSIBLE_BUTTON_LIGHT: Record<ButtonSeverity, string> = {
     danger: '{red.700}'
 };
 
+/** Le severità piene dei badge che il tema accessibile scurisce. */
+export type BadgeSeverity = 'success' | 'info' | 'warn' | 'danger';
+
+/**
+ * Il fondo chiaro dei badge pieni. I preset scrivono il numero in bianco, in grassetto a 10 pixel, sul
+ * fondo alla tinta 500 della tavolozza (600 in Nora), e si fermano fra 2,2:1 e 4,1:1; la tinta 700
+ * arriva almeno a 4,5:1 per tutte. A differenza dei pulsanti pieni, i badge sono pochi e piccoli, come
+ * il contatore delle notifiche: scurirli non cambia l'aspetto dell'applicazione.
+ */
+export const ACCESSIBLE_BADGE_LIGHT: Record<BadgeSeverity, string> = {
+    success: '{green.700}',
+    info: '{sky.700}',
+    warn: '{orange.700}',
+    danger: '{red.700}'
+};
+
 /** Le tavolozze con cui Aura e Lara colorano le severità di p-message e p-toast. */
 export const SEVERITY_PALETTES = { info: 'blue', success: 'green', warn: 'yellow', error: 'red' } as const;
 
@@ -143,9 +159,17 @@ type ButtonVariant = Record<ButtonSeverity, { color: string }>;
 
 export type AccessibleComponents = {
     button: { outlined: ButtonVariant; text: ButtonVariant };
+    badge: Record<BadgeSeverity, { background: string }>;
     message?: typeof ACCESSIBLE_MESSAGE;
     toast?: typeof ACCESSIBLE_TOAST;
 };
+
+/** I fondi dei badge pieni, con le metà scure del preset. */
+function accessibleBadge(preset: ThemePreset): AccessibleComponents['badge'] {
+    const badge = preset.components?.['badge'] ?? {};
+    const entries = (Object.keys(ACCESSIBLE_BADGE_LIGHT) as BadgeSeverity[]).map((severity) => [severity, { background: withLight(ACCESSIBLE_BADGE_LIGHT[severity], badge[severity]?.background) }]);
+    return Object.fromEntries(entries) as AccessibleComponents['badge'];
+}
 
 /** Le varianti «outlined» e «text» dei pulsanti, con le metà scure del preset. */
 function accessibleButton(preset: ThemePreset): AccessibleComponents['button'] {
@@ -163,6 +187,7 @@ function accessibleButton(preset: ThemePreset): AccessibleComponents['button'] {
  */
 export function accessibleComponents(name: string | undefined, preset: ThemePreset): AccessibleComponents {
     const button = accessibleButton(preset);
-    if (name === 'Nora') return { button };
-    return { button, message: ACCESSIBLE_MESSAGE, toast: ACCESSIBLE_TOAST };
+    const badge = accessibleBadge(preset);
+    if (name === 'Nora') return { button, badge };
+    return { button, badge, message: ACCESSIBLE_MESSAGE, toast: ACCESSIBLE_TOAST };
 }

@@ -169,7 +169,7 @@
                         <i class="pi pi-bell"></i>
                         <span>Notifiche</span>
                         @if (layoutService.notificationNumber()) {
-                            &ngsp;<p-overlaybadge class="blink-animation" [value]="layoutService.notificationNumber()" severity="info"></p-overlaybadge>
+                            &ngsp;<p-overlaybadge class="notification-badge" [value]="layoutService.notificationNumber()" severity="info"></p-overlaybadge>
                         }
                     </button>
                     <button type="button" class="layout-topbar-action" [routerLink]="['/profile']" aria-label="Profilo" appTourAnchor="topbar.profile" pTooltip="Profilo" tooltipPosition="bottom">

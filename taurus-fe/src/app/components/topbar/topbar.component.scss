@@ -97,18 +97,24 @@
     }
 }
 
-.blink-animation {
-    animation: blink 2s infinite cubic-bezier(0.4, 0.13, 0, 0.99);
+// Il contatore delle notifiche si annuncia con due impulsi di un anello attorno al badge: il numero resta sempre pieno e
+// leggibile, l'animazione finisce entro 5 secondi (WCAG 2.2.2) e non parte con il movimento ridotto.
+.notification-badge ::ng-deep .p-badge {
+    animation: notification-pulse 2s ease-out 2;
 }
 
-@keyframes blink {
-
-    0%,
-    100% {
-        opacity: 1;
+@keyframes notification-pulse {
+    from {
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--p-badge-info-background) 60%, transparent);
     }
 
-    50% {
-        opacity: 0;
+    to {
+        box-shadow: 0 0 0 0.5rem transparent;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notification-badge ::ng-deep .p-badge {
+        animation: none;
     }
 }
