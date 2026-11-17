@@ -203,6 +203,18 @@ describe('Track DetailComponent', () => {
         expect(new DetailComponent(null!, null!, null!, { currentUserRole: RoleEnums.USER } as any, null!, null!, null!, null!, null!, features, telemetry())['canEngrave']).toBeFalse();
     });
 
+    it('does not engrave from the workspace on a phone, where the Partitura tab shows only the state', () => {
+        const media = spyOn(window, 'matchMedia').and.returnValue({ matches: false } as MediaQueryList);
+        const features = { scorePlaybackEnabled: () => true, scoreWritingEnabled: () => true, loaded: () => true } as any;
+        const archivist = { currentUserRole: RoleEnums.ARCHIVIST } as any;
+        expect(new DetailComponent(null!, null!, null!, archivist, null!, null!, null!, null!, null!, features, telemetry())['canEngraveParts']).toBeTrue();
+
+        media.and.returnValue({ matches: true } as MediaQueryList);
+        const phone = new DetailComponent(null!, null!, null!, archivist, null!, null!, null!, null!, null!, features, telemetry());
+        expect(phone['canEngrave']).toBeTrue();
+        expect(phone['canEngraveParts']).toBeFalse();
+    });
+
     it('takes the track of the applied instruments as saved and reads the instruments again', () => {
         const instrumentsService = jasmine.createSpyObj('InstrumentsService', ['getAll']);
         instrumentsService.getAll.and.returnValue(of({ content: [{ id: 4, name: 'Arpa' }], totalElements: 1 }));

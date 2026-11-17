@@ -14,7 +14,7 @@ Applicazione Angular 22 di Taurus per utenti e amministratori, con componenti Pr
 | `src/app/score-player`, `src/app/score-editor` | lettore ed editor dell'[ascolto delle parti](../docs/track-score-playback-spec.md) |
 | `src/assets` | risorse statiche, compresi Verovio, SpessaSynth e il SoundFont |
 | `src/environments` | indirizzi di backend e Keycloak compilati nel bundle: `environment.ts` per lo sviluppo, `environment.prod.ts` come ripiego della configurazione a runtime |
-| `src/runtime-config.ts` | configurazione letta da `assets/config.json` prima dell'avvio: nel container la scrive l'entrypoint dalle variabili d'ambiente |
+| `src/runtime-config.ts` | configurazione letta da `assets/config.json` prima dell'avvio: nel container la scrive l'entrypoint dalle variabili d'ambiente; in sviluppo vale sopra di essa `assets/config.local.json` |
 
 ## Sviluppo
 
@@ -26,6 +26,16 @@ npm start
 ```
 
 L'applicazione è su `http://localhost:4200` e chiama il backend su `http://localhost:8080/api` e Keycloak su `http://localhost:9080`.
+
+La configurazione della propria macchina va in `src/assets/config.local.json`, che ha la forma di `assets/config.json` e vale sopra di essa solo in sviluppo. È escluso da git e dall'immagine, e la build di produzione non lo legge. Vi si mette per esempio la chiave della PrimeUI License, senza la quale PrimeNG mostra il suo avviso:
+
+```json
+{
+    "primeuiLicense": "la-tua-chiave"
+}
+```
+
+Dopo averlo creato o modificato basta ricaricare la pagina.
 
 `npm start` e `npm run build` eseguono prima `scripts/fetch-soundfont.mjs`, che procura il SoundFont MuseScore General (circa 38 MB, non versionato) e ne verifica lo SHA-256. Le fonti, in ordine: `TAURUS_SOUNDFONT_PATH` per una copia già sulla macchina, `TAURUS_SOUNDFONT_URL` per una copia controllata e, in mancanza di entrambe, il mirror pubblico. Qualunque sia la fonte, una copia con un'impronta diversa viene rifiutata. `TAURUS_SKIP_SOUNDFONT=1` salta il passaggio, per esempio nei job che non usano il lettore.
 

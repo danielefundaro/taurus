@@ -5,6 +5,7 @@ import { EngraveDialogComponent } from '../../../../dialogs/engrave-dialog/engra
 import { NewPartDialogComponent } from '../../../../dialogs/new-part-dialog/new-part-dialog.component';
 import { ScoreCompareDialogComponent } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { ScoreEditorDialogComponent } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
+import { PHONE_QUERY } from '../../../../constants';
 import { Arrangement, ArrangementRowState, PartPlayback, PlaybackSound, RecognitionJob, TrackPlayback } from '../../../../module';
 import { RECOGNITION_POLL_MILLIS, ScorePlaybackPanelComponent } from './score-playback-panel.component';
 
@@ -27,6 +28,12 @@ function part(sound: Partial<PlaybackSound>, overrides: Partial<PartPlayback> = 
 
 function job(scoreId: number, status: RecognitionJob['status'], overrides: Partial<RecognitionJob> = {}): RecognitionJob {
     return { id: scoreId * 10, scoreId, status, attempts: 1, requestedAt: '2026-10-17T10:00:00Z', engines: [], ...overrides };
+}
+
+/** Larghezza vista dal pannello: la finestra di Karma è stretta e, senza questo, sembrerebbe un telefono. */
+function viewport(phone = false): void {
+    const media = jasmine.isSpy(window.matchMedia) ? (window.matchMedia as jasmine.Spy) : spyOn(window, 'matchMedia');
+    media.and.callFake((query: string) => ({ matches: phone && query === PHONE_QUERY }) as MediaQueryList);
 }
 
 function playback(parts: PartPlayback[], recognitionAvailable = true): TrackPlayback {
@@ -63,7 +70,8 @@ describe('ScorePlaybackPanelComponent', () => {
 describe('ScorePlaybackPanelComponent writing', () => {
     const version = { id: 7, versionNumber: 2, status: 'UNVERIFIED' as const, origin: 'OMR_AUDIVERIS' as const, measureCount: 8, checks: null as never, pagesChanged: false };
 
-    function setup(parts: PartPlayback[], { canManage = true, writing = true, recognitionAvailable = true } = {}) {
+    function setup(parts: PartPlayback[], { canManage = true, writing = true, recognitionAvailable = true, phone = false } = {}) {
+        viewport(phone);
         const closes: Subject<unknown>[] = [];
         const service = { canManage, playback: jasmine.createSpy().and.returnValue(of(playback(parts, recognitionAvailable))) };
         const dialogs = {
@@ -96,6 +104,17 @@ describe('ScorePlaybackPanelComponent writing', () => {
         expect(setup([]).component.canWrite).toBeTrue();
         expect(setup([], { writing: false }).component.canWrite).toBeFalse();
         expect(setup([], { canManage: false }).component.canWrite).toBeFalse();
+    });
+
+    it('hides the writing actions on a phone, where the written parts are only read and played', () => {
+        const { component } = setup([], { phone: true });
+        expect(component.canWrite).toBeTrue();
+        expect(component.writingActions).toBeFalse();
+        expect(component.canEngrave).toBeFalse();
+
+        const desktop = setup([]).component;
+        expect(desktop.writingActions).toBeTrue();
+        expect(desktop.canEngrave).toBeTrue();
     });
 
     it('opens the writing editor on the current version and reloads the parts when it closes', () => {
@@ -252,6 +271,7 @@ describe('ScorePlaybackPanelComponent engraving', () => {
     const version = { id: 7, versionNumber: 2, status: 'APPROVED' as const, origin: 'WRITING' as const, measureCount: 8, checks: null as never, pagesChanged: false };
 
     function setup(parts: PartPlayback[], { writing = true, recognitionAvailable = true, arrangement = null as Arrangement | null } = {}) {
+        viewport();
         const closes: Subject<unknown>[] = [];
         const service = { canManage: true, playback: jasmine.createSpy().and.returnValue(of(playback(parts, recognitionAvailable))) };
         const arrangements = { arrangement: jasmine.createSpy('arrangement').and.resolveTo(arrangement) };

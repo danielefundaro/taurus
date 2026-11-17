@@ -1,7 +1,23 @@
 import Aura from '@primeuix/themes/aura-compat';
 import Lara from '@primeuix/themes/lara-compat';
 import Nora from '@primeuix/themes/nora-compat';
-import { ACCESSIBLE_BUTTON_LIGHT, ACCESSIBLE_LIGHT_SCHEME, ACCESSIBLE_MESSAGE, ACCESSIBLE_TOAST, accessibleComponents, accessibleSemantic, ButtonSeverity, lightDarkParts, MessageSeverity, SEVERITY_PALETTES, withLight } from './accessible-theme';
+import {
+    ACCESSIBLE_BADGE_LIGHT,
+    ACCESSIBLE_BUTTON_LIGHT,
+    ACCESSIBLE_LIGHT_SCHEME,
+    ACCESSIBLE_MESSAGE,
+    ACCESSIBLE_TOAST,
+    accessibleComponents,
+    accessibleSemantic,
+    BadgeSeverity,
+    ButtonSeverity,
+    FILLED_BUTTON_PALETTES,
+    FilledButtonSeverity,
+    lightDarkParts,
+    MessageSeverity,
+    SEVERITY_PALETTES,
+    withLight
+} from './accessible-theme';
 
 type Rgb = [number, number, number];
 type Scheme = 'light' | 'dark';
@@ -122,10 +138,52 @@ describe('accessible theme', () => {
         it(`keeps the light primary and muted text of ${name} at 4.5:1 or more`, () => {
             const resolve = resolver(preset, 'light');
             const semantic = accessibleSemantic(preset);
-            expect(contrast(resolve(semantic.primary.contrastColor), resolve(semantic.primary.color))).withContext('label on primary').toBeGreaterThanOrEqual(4.5);
+            expect(contrast(resolve(semantic.primary.contrastColor), resolve(semantic.primary.color)))
+                .withContext('label on primary')
+                .toBeGreaterThanOrEqual(4.5);
             for (const surface of surfaces.light) {
-                expect(contrast(resolve(semantic.primary.color), resolve(surface))).withContext(`primary on ${surface}`).toBeGreaterThanOrEqual(4.5);
-                expect(contrast(resolve(semantic.text.mutedColor), resolve(surface))).withContext(`muted text on ${surface}`).toBeGreaterThanOrEqual(4.5);
+                expect(contrast(resolve(semantic.primary.color), resolve(surface)))
+                    .withContext(`primary on ${surface}`)
+                    .toBeGreaterThanOrEqual(4.5);
+                expect(contrast(resolve(semantic.text.mutedColor), resolve(surface)))
+                    .withContext(`muted text on ${surface}`)
+                    .toBeGreaterThanOrEqual(4.5);
+            }
+        });
+    }
+
+    // L'etichetta dei pulsanti pieni è bianca su un fondo colorato in tutti i preset, Nora compreso.
+    const filledSeverities = Object.keys(FILLED_BUTTON_PALETTES) as FilledButtonSeverity[];
+    const filledStates = [
+        ['color', 'background'],
+        ['hoverColor', 'hoverBackground'],
+        ['activeColor', 'activeBackground']
+    ] as const;
+    for (const [name, preset] of Object.entries({ Aura, Lara, Nora } as Record<string, any>)) {
+        it(`keeps the light filled buttons of ${name} at 4.5:1 or more`, () => {
+            const resolve = resolver(preset, 'light');
+            const root = accessibleComponents(name, preset).button.root;
+            for (const severity of filledSeverities) {
+                for (const [label, background] of filledStates) {
+                    expect(contrast(resolve(preset.components.button.root[severity][label]), resolve(root[severity][background])))
+                        .withContext(`${severity} ${background}`)
+                        .toBeGreaterThanOrEqual(4.5);
+                }
+                expect(half(root[severity].borderColor, 'light')).withContext(`${severity} border`).toBe(half(root[severity].background, 'light'));
+            }
+        });
+    }
+
+    // Il numero dei badge pieni è bianco su un fondo colorato in tutti i preset, Nora compreso.
+    const badgeSeverities = Object.keys(ACCESSIBLE_BADGE_LIGHT) as BadgeSeverity[];
+    for (const [name, preset] of Object.entries({ Aura, Lara, Nora } as Record<string, any>)) {
+        it(`keeps the light filled badges of ${name} at 4.5:1 or more`, () => {
+            const resolve = resolver(preset, 'light');
+            const badge = accessibleComponents(name, preset).badge;
+            for (const severity of badgeSeverities) {
+                expect(contrast(resolve(preset.components.badge[severity].color), resolve(badge[severity].background)))
+                    .withContext(`badge ${severity}`)
+                    .toBeGreaterThanOrEqual(4.5);
             }
         });
     }
@@ -143,10 +201,17 @@ describe('accessible theme', () => {
             const button = accessibleComponents(name, preset).button;
             for (const variant of ['outlined', 'text'] as const) {
                 for (const severity of buttonSeverities) {
-                    expect(half(button[variant][severity].color, 'dark'))
-                        .withContext(`${variant} ${severity}`)
-                        .toBe(half(preset.components.button[variant][severity].color, 'dark'));
+                    expect(half(button[variant][severity].color, 'dark')).withContext(`${variant} ${severity}`).toBe(half(preset.components.button[variant][severity].color, 'dark'));
                 }
+            }
+            for (const severity of filledSeverities) {
+                for (const [token, value] of Object.entries(button.root[severity])) {
+                    expect(half(value, 'dark')).withContext(`filled ${severity} ${token}`).toBe(half(preset.components.button.root[severity][token], 'dark'));
+                }
+            }
+            const badge = accessibleComponents(name, preset).badge;
+            for (const severity of badgeSeverities) {
+                expect(half(badge[severity].background, 'dark')).withContext(`badge ${severity}`).toBe(half(preset.components.badge[severity].background, 'dark'));
             }
         });
     }

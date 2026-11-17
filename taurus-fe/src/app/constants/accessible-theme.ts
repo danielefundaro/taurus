@@ -86,11 +86,8 @@ export type ButtonSeverity = 'secondary' | 'success' | 'info' | 'warn' | 'help' 
  * Le tinte chiare dei pulsanti, per lo stesso motivo. Le varianti «outlined» e «text» scrivono
  * l'etichetta direttamente sul fondo della pagina con la tinta 500 della propria tavolozza, che si
  * ferma fra 2,3:1 e 4,34:1; la tinta 700 passa per tutte, e «secondary» usa surface.600, la stessa
- * che il pulsante pieno adotta già.
- *
- * Le severità piene (success, info, warn, help, danger) restano come le dà il preset, con il fondo
- * alla tinta 500 e l'etichetta bianca: sono fra 2,3:1 e 4:1, ma scurirle cambierebbe il colore di
- * quei pulsanti in tutta l'applicazione. Il difetto è annotato fra i gap del runbook di test.
+ * che il pulsante pieno adotta già. I pulsanti pieni delle stesse severità sono in
+ * `FILLED_BUTTON_PALETTES`.
  */
 export const ACCESSIBLE_BUTTON_LIGHT: Record<ButtonSeverity, string> = {
     secondary: '{surface.600}',
@@ -98,6 +95,52 @@ export const ACCESSIBLE_BUTTON_LIGHT: Record<ButtonSeverity, string> = {
     info: '{sky.700}',
     warn: '{orange.700}',
     help: '{purple.700}',
+    danger: '{red.700}'
+};
+
+/** Le severità dei pulsanti pieni che il tema accessibile scurisce. */
+export type FilledButtonSeverity = 'success' | 'info' | 'warn' | 'help' | 'danger';
+
+/** Le tavolozze con cui i preset colorano i pulsanti pieni delle severità. */
+export const FILLED_BUTTON_PALETTES: Record<FilledButtonSeverity, string> = {
+    success: 'green',
+    info: 'sky',
+    warn: 'orange',
+    help: 'purple',
+    danger: 'red'
+};
+
+/**
+ * Le tinte chiare dei pulsanti pieni delle severità. I preset scrivono l'etichetta in bianco sul fondo
+ * alla tinta 500 della tavolozza (600 in Nora), e quasi tutte restano sotto 4,5:1, fino a 2,3:1; la tinta 700 arriva
+ * almeno a 5:1 per tutte, e le tinte 800 e 900 restano più scure per il passaggio del puntatore e per
+ * l'attivazione, come per il colore primario. Valgono per ogni pulsante pieno dell'applicazione,
+ * compresa l'azione delle conferme di eliminazione.
+ */
+export const ACCESSIBLE_FILLED_BUTTON_SHADES = {
+    background: 700,
+    hoverBackground: 800,
+    activeBackground: 900,
+    borderColor: 700,
+    hoverBorderColor: 800,
+    activeBorderColor: 900
+} as const;
+
+export type FilledButtonTokens = Record<keyof typeof ACCESSIBLE_FILLED_BUTTON_SHADES, string>;
+
+/** Le severità piene dei badge che il tema accessibile scurisce. */
+export type BadgeSeverity = 'success' | 'info' | 'warn' | 'danger';
+
+/**
+ * Il fondo chiaro dei badge pieni. I preset scrivono il numero in bianco, in grassetto a 10 pixel, sul
+ * fondo alla tinta 500 della tavolozza (600 in Nora), e si fermano fra 2,2:1 e 4,1:1; la tinta 700
+ * arriva almeno a 4,5:1 per tutte. A differenza dei pulsanti pieni, i badge sono pochi e piccoli, come
+ * il contatore delle notifiche: scurirli non cambia l'aspetto dell'applicazione.
+ */
+export const ACCESSIBLE_BADGE_LIGHT: Record<BadgeSeverity, string> = {
+    success: '{green.700}',
+    info: '{sky.700}',
+    warn: '{orange.700}',
     danger: '{red.700}'
 };
 
@@ -142,19 +185,32 @@ export const ACCESSIBLE_TOAST = bySeverity((color) => ({ color }));
 type ButtonVariant = Record<ButtonSeverity, { color: string }>;
 
 export type AccessibleComponents = {
-    button: { outlined: ButtonVariant; text: ButtonVariant };
+    button: { root: Record<FilledButtonSeverity, FilledButtonTokens>; outlined: ButtonVariant; text: ButtonVariant };
+    badge: Record<BadgeSeverity, { background: string }>;
     message?: typeof ACCESSIBLE_MESSAGE;
     toast?: typeof ACCESSIBLE_TOAST;
 };
 
-/** Le varianti «outlined» e «text» dei pulsanti, con le metà scure del preset. */
+/** I fondi dei badge pieni, con le metà scure del preset. */
+function accessibleBadge(preset: ThemePreset): AccessibleComponents['badge'] {
+    const badge = preset.components?.['badge'] ?? {};
+    const entries = (Object.keys(ACCESSIBLE_BADGE_LIGHT) as BadgeSeverity[]).map((severity) => [severity, { background: withLight(ACCESSIBLE_BADGE_LIGHT[severity], badge[severity]?.background) }]);
+    return Object.fromEntries(entries) as AccessibleComponents['badge'];
+}
+
+/** I pulsanti pieni delle severità e le varianti «outlined» e «text», con le metà scure del preset. */
 function accessibleButton(preset: ThemePreset): AccessibleComponents['button'] {
     const button = preset.components?.['button'] ?? {};
     const variant = (name: 'outlined' | 'text'): ButtonVariant => {
         const entries = (Object.keys(ACCESSIBLE_BUTTON_LIGHT) as ButtonSeverity[]).map((severity) => [severity, { color: withLight(ACCESSIBLE_BUTTON_LIGHT[severity], button[name]?.[severity]?.color) }]);
         return Object.fromEntries(entries) as ButtonVariant;
     };
-    return { outlined: variant('outlined'), text: variant('text') };
+    const filled = (severity: FilledButtonSeverity): FilledButtonTokens => {
+        const tokens = Object.entries(ACCESSIBLE_FILLED_BUTTON_SHADES).map(([token, shade]) => [token, withLight(`{${FILLED_BUTTON_PALETTES[severity]}.${shade}}`, button['root']?.[severity]?.[token])]);
+        return Object.fromEntries(tokens) as FilledButtonTokens;
+    };
+    const root = Object.fromEntries((Object.keys(FILLED_BUTTON_PALETTES) as FilledButtonSeverity[]).map((severity) => [severity, filled(severity)]));
+    return { root: root as AccessibleComponents['button']['root'], outlined: variant('outlined'), text: variant('text') };
 }
 
 /**
@@ -163,6 +219,7 @@ function accessibleButton(preset: ThemePreset): AccessibleComponents['button'] {
  */
 export function accessibleComponents(name: string | undefined, preset: ThemePreset): AccessibleComponents {
     const button = accessibleButton(preset);
-    if (name === 'Nora') return { button };
-    return { button, message: ACCESSIBLE_MESSAGE, toast: ACCESSIBLE_TOAST };
+    const badge = accessibleBadge(preset);
+    if (name === 'Nora') return { button, badge };
+    return { button, badge, message: ACCESSIBLE_MESSAGE, toast: ACCESSIBLE_TOAST };
 }

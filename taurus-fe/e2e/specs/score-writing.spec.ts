@@ -9,9 +9,10 @@ import { environmentMissing, expect, signIn, test } from '../fixtures/session';
  * Le prove lavorano sulla traccia indicata in `E2E_SCORE_WRITING_TRACK_ID`, del primo tenant con
  * l'ascolto e la scrittura attivi, e si saltano senza. Ogni prova crea una parte `e2e-scrittura-…` e alla
  * fine la rimuove dalla traccia con «Salva traccia»: la parte è eliminata in modo logico, quindi la
- * base dati conserva lei e le sue versioni. Sotto 768 pixel la prova si salta, perché la scrittura è
- * pensata per schermi da tablet in su; la tastiera MIDI vera resta nelle verifiche a mano del
- * runbook, perché nessun browser automatico ne ha una.
+ * base dati conserva lei e le sue versioni. Sotto 768 pixel queste prove si saltano, perché la scrittura è
+ * pensata per schermi da tablet in su, e si prova invece che sul telefono le azioni di scrittura non
+ * compaiano; la tastiera MIDI vera resta nelle verifiche a mano del runbook, perché nessun browser
+ * automatico ne ha una.
  */
 test.describe('scrittura della musica', () => {
     test.skip(environmentMissing(), 'Servono due tenant di prova: vedi e2e/README.md');
@@ -118,6 +119,25 @@ test.describe('scrittura della musica', () => {
     });
 });
 
+test.describe('scrittura della musica sul telefono', () => {
+    test.skip(environmentMissing(), 'Servono due tenant di prova: vedi e2e/README.md');
+
+    const trackId = process.env['E2E_SCORE_WRITING_TRACK_ID'];
+    test.skip(!trackId, 'Serve una traccia con ascolto e scrittura attivi in E2E_SCORE_WRITING_TRACK_ID');
+
+    test('sul telefono le parti si ascoltano, senza le azioni di scrittura', async ({ page, environment }) => {
+        test.skip((page.viewportSize()?.width ?? 0) > 768, 'Si prova sul telefono');
+        const [first] = environment;
+        test.skip(!first.users.archivist, 'Serve un archivista del primo tenant');
+
+        await signIn(page, first.users.archivist!, 'archivist');
+        await openPlayback(page, trackId!);
+        for (const action of ['Nuova parte scritta', 'Scrivi', 'Riprendi la bozza', 'Ricava una parte', 'Impagina']) {
+            await expect(page.getByRole('button', { name: new RegExp(`^\\W*${action}$`, 'i') })).toHaveCount(0);
+        }
+    });
+});
+
 /** Una scheda senza sessione, con le opzioni del profilo in uso. */
 const freshContext = (browser: Browser): Promise<BrowserContext> => {
     const { baseURL, locale, timezoneId, ignoreHTTPSErrors, viewport, hasTouch, isMobile, userAgent, deviceScaleFactor } = test.info().project.use;
@@ -142,7 +162,7 @@ const editorHeading = (page: Page): Locator => page.getByRole('heading', { level
 /** Note disegnate da Verovio nella pagina dello spartito: pause e battute vuote non contano. */
 const notes = (page: Page): Locator => page.locator('.score-editor__notation svg g.note');
 
-const insertionStatus = (page: Page): Locator => page.getByRole('status').filter({ hasText: /^\W*inserimento · / });
+const insertionStatus = (page: Page): Locator => page.getByRole('status').filter({ hasText: /^\W*inserimento · /i });
 
 /**
  * Crea in fondo alla traccia una parte in 4/4, con chiave, armatura e battute proposte dal dialogo, e aspetta l'editor di
@@ -191,11 +211,17 @@ const writeFourNotes = async (page: Page): Promise<void> => {
     await expect(notes(page)).toHaveCount(4);
 };
 
-/** Toglie dalla traccia le parti create dalla prova, dal workspace delle parti. */
+/**
+ * Toglie dalla traccia le parti create dalla prova, dal workspace delle parti, e aspetta il salvataggio. Si salta solo
+ * una parte che non c'è, perché la prova si è fermata prima di crearla; ogni altro intoppo fa fallire la prova, invece di
+ * lasciare la parte sulla traccia.
+ */
 const removeParts = async (page: Page, trackId: string, names: string[]): Promise<void> => {
     await page.goto(`/tracks/${trackId}?tab=parts`);
     const list = page.getByRole('listbox', { name: /parti della traccia/i });
-    await expect(list).toBeVisible();
+    const empty = page.getByRole('heading', { name: 'Nessuna parte', exact: true });
+    await expect(list.or(empty)).toBeVisible();
+    let removed = 0;
     for (const name of names) {
         const option = list.getByRole('option', { name: new RegExp(`^${name},`) });
         if (!(await option.count())) continue;
@@ -206,9 +232,12 @@ const removeParts = async (page: Page, trackId: string, names: string[]): Promis
             .filter({ hasText: name })
             .getByRole('button', { name: /rimuovi/i })
             .click();
+        await expect(option).toHaveCount(0);
+        removed++;
     }
+    if (!removed) return;
     const save = page.getByRole('button', { name: /salva traccia/i });
-    if (!(await save.isEnabled())) return;
+    await expect(save).toBeEnabled();
     await save.click();
     await expect(page.getByText(/tutte le modifiche salvate/i)).toBeVisible();
 };

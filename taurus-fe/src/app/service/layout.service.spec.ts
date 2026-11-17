@@ -81,6 +81,34 @@ describe('LayoutService', () => {
         expect(storage.get('preset')?.value).toBe('Lara');
     });
 
+    // At start-up the server preferences and the configurator write back the values the layout already has.
+    it('neither animates nor notifies when the configuration gets the values it already has', () => {
+        const startTransition = document.startViewTransition as jasmine.Spy;
+        const updates = jasmine.createSpy('configUpdate');
+        service.configUpdate$.subscribe(updates);
+        const current = service.layoutConfig();
+
+        service.layoutConfig.update((config) => ({ ...config, preset: 'Aura', primary: 'emerald', surface: '', darkTheme: false }));
+        TestBed.tick();
+
+        expect(service.layoutConfig()).toBe(current);
+        expect(startTransition).not.toHaveBeenCalled();
+        expect(updates).not.toHaveBeenCalled();
+    });
+
+    it('still animates a change of theme', () => {
+        const startTransition = document.startViewTransition as jasmine.Spy;
+
+        service.layoutConfig.update((config) => ({ ...config, darkTheme: true }));
+        TestBed.tick();
+
+        expect(startTransition).toHaveBeenCalledTimes(1);
+        expect(document.documentElement.classList).toContain('app-dark');
+
+        service.layoutConfig.update((config) => ({ ...config, darkTheme: false }));
+        TestBed.tick();
+    });
+
     describe('on a public page', () => {
         afterEach(() => history.replaceState(null, '', start));
 

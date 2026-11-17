@@ -716,13 +716,14 @@ Rispetto agli obiettivi:
   - il confronto di due versioni di 300 battute, nel calcolo e nel dialogo.
 
   Nel backend `ScorePlaybackIT` misura il riepilogo della pagina Riconoscimento con 5.000 parti approvate. Con il servizio musicale in esecuzione si misura l'impaginazione di una parte di due pagine.
-- **End to end**: `e2e/specs/score-writing.spec.ts`, sui profili desktop e tablet, su un'istanza completa con `SCORE_WRITING` attiva per il tenant di prova. Prova:
+- **End to end**: `e2e/specs/score-writing.spec.ts`, sui profili desktop, tablet e mobile, su un'istanza completa con `SCORE_WRITING` attiva per il tenant di prova. Prova:
   - una parte scritta da zero, con la tastiera e, sul tablet, con il pianoforte a schermo;
   - il salvataggio e l'approvazione;
   - la ripresa della bozza dopo la chiusura;
-  - la sola lettura per un secondo utente mentre il primo scrive.
+  - la sola lettura per un secondo utente mentre il primo scrive;
+  - sul telefono, la scheda Ascolto senza le azioni di scrittura.
 
-  La traccia di prova arriva da `E2E_SCORE_WRITING_TRACK_ID`, senza la quale le prove si saltano, come sotto 768 pixel. Ogni prova crea una parte `e2e-scrittura-…` e alla fine la rimuove dalla traccia; l'eliminazione è logica, quindi la base dati conserva la parte e le sue versioni.
+  La traccia di prova arriva da `E2E_SCORE_WRITING_TRACK_ID`, senza la quale le prove si saltano; sotto 768 pixel si fa solo la prova del telefono. Ogni prova crea una parte `e2e-scrittura-…` e alla fine la rimuove dalla traccia, aspettando il salvataggio; l'eliminazione è logica, quindi la base dati conserva la parte e le sue versioni.
 - **Manuale**: i casi `SCW` del runbook di test:
   - prove con archivisti su parti reali, con il tempo per scrivere una parte di una pagina;
   - uso su tablet;

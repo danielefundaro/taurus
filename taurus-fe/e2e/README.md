@@ -33,7 +33,8 @@ Le prove sono in `specs`:
   sezione della scheda, apertura diretta della consegna quando il socio ne ha una sola, axe-core e
   nessuno scorrimento orizzontale a 320 pixel con azioni alte almeno 44 pixel. La rotazione non è
   provata perché invaliderebbe le etichette dell'ambiente: resta nelle verifiche fisiche. Le prove
-  sull'oggetto si saltano senza `E2E_INVENTORY_QR_CODE`.
+  sull'oggetto si saltano senza `E2E_INVENTORY_QR_CODE`, e tutte si saltano se il tenant di prova
+  non ha inventario e QR attivi.
 - `onboarding-import.spec.ts`: la configurazione iniziale — amministratore che apre la procedura
   guidata con il nome dell'organizzazione, **Ultima importazione** e i limiti del tenant in risposta
   `no-store` e senza stati tecnici a schermo, scaricamento del modello XLSX, socio che non vede la
@@ -70,8 +71,10 @@ Le prove sono in `specs`:
   sul tablet, annulla e ripristina l'ultima nota, salva e approva la versione; chiude l'editor e
   riprende la bozza con le note scritte; un amministratore che apre la parte mentre l'archivista la
   scrive vede la bozza in sola lettura, con «Prendi il controllo» e senza salvataggio, e chi scrive
-  tiene il blocco. Le prove si saltano senza `E2E_SCORE_WRITING_TRACK_ID` e sotto 768 pixel; il
-  profilo tablet è nella matrice (`--project=tablet`). Ogni prova crea una parte `e2e-scrittura-…` e
+  tiene il blocco. Sul profilo mobile, sotto 768 pixel, prova invece che la scheda Ascolto non mostri
+  le azioni di scrittura. Le prove si saltano senza `E2E_SCORE_WRITING_TRACK_ID`; il profilo tablet
+  è nella matrice (`--project=tablet`), ma su Windows WebKit non lo esegue (vedi
+  [Esecuzione del 2026-11-17](#esecuzione-del-2026-11-17)). Ogni prova crea una parte `e2e-scrittura-…` e
   alla fine la rimuove dalla traccia con «Salva traccia»: l'eliminazione è logica, quindi la base dati
   conserva la parte e le sue versioni. La tastiera MIDI vera, le partiture grandi e i tempi di
   scrittura degli archivisti restano nelle verifiche a mano del runbook (casi `SCW`).
@@ -100,6 +103,15 @@ I due tenant non nascono da soli: il codice del tenant vive in tre posti, che va
    `ROLE_SUPER_ADMIN`: l'authenticator legge i tenant dai gruppi e i ruoli da quell'attributo.
 3. **Schema del tenant**: per ogni utente una riga in `public.user_identity`, una in
    `public.tenant_user_membership` e una in `<schema>.app_user` con il suo `<schema>.app_user_role`.
+
+Chi è iscritto a più tenant, come il super amministratore, in Keycloak sceglie il tenant prima di
+entrare: le prove scelgono il tenant della variabile da cui vengono le credenziali — il primo per
+`E2E_FIRST_…`, il secondo per `E2E_SECOND_…` — e, se lì l'utente ha più ruoli, quello della prova.
+
+Le prove di una funzionalità del tenant, come i QR inventario o la configurazione iniziale, si
+saltano se il tenant di prova non la ha attiva: la guardia del router riporterebbe alla dashboard
+senza chiamare il server, e la risposta che la prova aspetta non arriverebbe. `featureEnabled`
+legge le funzionalità che l'applicazione chiede all'avvio (`/api/tenant-features/current`).
 
 Le prove sull'elenco delle tracce vogliono almeno una traccia nel primo tenant; quelle del workspace
 aprono la prima traccia dell'elenco che ha parti, e si saltano se non ne ha due: le parti nascono
@@ -169,3 +181,33 @@ La calibrazione ha riguardato sette punti, utili a chi scriverà nuove prove:
   attribuiti allo stepper della configurazione iniziale, che in realtà non sporge;
 - axe va lanciato su una pagina ferma: subito dopo `goto` l'analisi muore con «Execution context
   was destroyed», perché il router sta ancora navigando.
+
+## Esecuzione del 2026-11-17
+
+Il 2026-11-17 il gate gira sulla stessa istanza dopo l'arrivo dell'editor di scrittura: **56 prove
+passate, 29 saltate e 15 fallite** in 27,5 minuti. Le cadute avevano tre cause:
+
+- il gate di accessibilità trovava sulla dashboard il contatore delle notifiche a 1,02:1, perché il
+  badge lampeggiava senza fine portando a zero la propria opacità. Ora si annuncia con due impulsi
+  di un anello attorno al numero, che resta pieno, e nessuno con il movimento ridotto; il tema
+  accessibile porta il fondo chiaro dei badge pieni alla tinta 700, sopra 4,5:1;
+- le prove dei QR inventario e della configurazione iniziale scadevano: con la funzionalità spenta
+  nel tenant la guardia del router riporta alla dashboard e la risposta attesa non arriva. Ora si
+  saltano, e nel primo tenant di prova inventario, QR e importazione iniziale sono stati accesi,
+  con un oggetto di prova assegnato all'utente e indicato in `E2E_INVENTORY_QR_CODE`;
+- le prove del super amministratore si fermavano sulla scelta del tenant di Keycloak, perché quel
+  profilo è iscritto a più tenant: `signIn` ora sceglie il tenant e il ruolo.
+
+La scrittura, con l'ascolto e la scrittura accesi nel primo tenant, passa sul desktop: 3 prove su 3
+in 2,4 minuti, dopo aver reso indifferente alle maiuscole l'espressione dello stato di inserimento.
+Rieseguite sul desktop e sul mobile le sei suite toccate, 61 prove passano, 3 si saltano — la
+scrittura sotto 768 pixel — e 2 falliscono: la scheda di scansione a 320 pixel, che ora ha un
+oggetto vero, mostrava il pulsante pieno «Segnala guasto» a 2,8:1. Lo stesso giorno il tema
+accessibile porta alla tinta 700 il fondo dei pulsanti pieni delle severità: con quei colori,
+applicati alle pagine vere, axe non trova violazioni sulla scansione, sulle segnalazioni
+dell'oggetto e sulla conferma di eliminazione.
+
+Su Windows WebKit di Playwright non porta a termine l'accesso: dopo il ritorno da Keycloak la pagina
+resta bianca e si chiude entro pochi secondi, in ogni prova che entra nell'applicazione e non solo
+in quelle della scrittura. I profili tablet e webkit della matrice vanno eseguiti su macOS o Linux;
+fino ad allora la scrittura sul tablet resta al caso a mano `SCW-003` su un iPad vero.

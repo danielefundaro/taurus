@@ -48,3 +48,6 @@ Thumbs.db
 # Score player SoundFont, downloaded by scripts/fetch-soundfont.mjs
 /src/assets/soundfonts/*.sf3
 /src/assets/soundfonts/*.part
+
+# Configurazione della propria macchina, solo in sviluppo: per esempio la chiave della PrimeUI License.
+/src/assets/config.local.json

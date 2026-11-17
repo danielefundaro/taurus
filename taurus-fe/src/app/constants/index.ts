@@ -9,3 +9,4 @@ export * from './api-error-messages';
 export * from './signature-labels';
 export * from './public-pages';
 export * from './legal-labels';
+export * from './phone-viewport';

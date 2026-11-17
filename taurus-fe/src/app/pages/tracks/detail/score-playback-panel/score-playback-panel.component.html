@@ -17,7 +17,7 @@
                         (onClick)="recognizeAll()"
                     />
                 }
-                @if (canWrite) {
+                @if (writingActions) {
                     <p-button label="Nuova parte scritta" icon="pi pi-plus" severity="secondary" outlined [disabled]="trackDirty" pTooltip="Aggiunge in fondo alla traccia una parte senza pagine, da scrivere nell'editor" (onClick)="newPart()" />
                 }
                 <p-button label="Ascolta la partitura" icon="pi pi-play" [disabled]="!anyAvailable" (onClick)="openPlayer('score')" />
@@ -94,16 +94,20 @@
                             }
                         }
                         @if (canWrite && part.pendingPages; as pending) {
-                            <button
-                                type="button"
-                                class="p-0 border-0 bg-transparent cursor-pointer"
-                                [attr.aria-label]="'Assegna le pagine impaginate di ' + label(part)"
-                                [disabled]="trackDirty"
-                                [pTooltip]="pendingHint(part)"
-                                (click)="engrave(part, pending.versionId, pending.versionNumber)"
-                            >
+                            @if (writingActions) {
+                                <button
+                                    type="button"
+                                    class="p-0 border-0 bg-transparent cursor-pointer"
+                                    [attr.aria-label]="'Assegna le pagine impaginate di ' + label(part)"
+                                    [disabled]="trackDirty"
+                                    [pTooltip]="pendingHint(part)"
+                                    (click)="engrave(part, pending.versionId, pending.versionNumber)"
+                                >
+                                    <p-tag severity="warn" icon="pi pi-file-pdf" value="Pagine da assegnare" />
+                                </button>
+                            } @else {
                                 <p-tag severity="warn" icon="pi pi-file-pdf" value="Pagine da assegnare" />
-                            </button>
+                            }
                         }
                         @if (canManage && part.editing; as editing) {
                             <p-tag severity="info" icon="pi pi-pencil" [value]="editingLabel(editing)" />
@@ -181,7 +185,7 @@
                                 (onClick)="correct(part)"
                             />
                         }
-                        @if (canWrite) {
+                        @if (writingActions) {
                             @if (part.draft) {
                                 <p-button label="Riprendi la bozza" icon="pi pi-file-edit" size="small" severity="secondary" outlined [disabled]="trackDirty" (onClick)="write(part, true)" />
                                 <p-button
@@ -207,7 +211,7 @@
                                 />
                             }
                         }
-                        @if (canWrite && part.version) {
+                        @if (writingActions && part.version) {
                             <span [pTooltip]="deriveBlocker(part) ?? 'Trasporta la versione ascoltata per un altro strumento, in una parte nuova da scrivere'">
                                 <p-button label="Ricava una parte" icon="pi pi-share-alt" size="small" severity="secondary" outlined [disabled]="trackDirty || !!deriveBlocker(part)" (onClick)="derive(part)" />
                             </span>
