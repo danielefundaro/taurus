@@ -26,6 +26,15 @@ interface MenuChangeEvent {
     routeEvent?: boolean;
 }
 
+/** Il valore come si salva fra le preferenze: `null` e la stringa vuota sono la stessa scelta. */
+const storedValue = (value: unknown): string => (value == null ? '' : String(value));
+
+/** Due configurazioni sono uguali quando lo sono i valori che se ne salvano. */
+const sameLayoutConfig = (a: LayoutConfig, b: LayoutConfig): boolean => {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)] as (keyof LayoutConfig)[]);
+    return [...keys].every((key) => storedValue(a[key]) === storedValue(b[key]));
+};
+
 @Injectable({
     providedIn: 'root'
 })
@@ -46,7 +55,12 @@ export class LayoutService {
         menuHoverActive: false
     };
 
-    layoutConfig = signal<LayoutConfig>(this._config);
+    /**
+     * All'avvio le preferenze del server e il configuratore riscrivono la configurazione con i
+     * valori che ha già: quelle scritture non notificano, altrimenti ogni pagina partirebbe con la
+     * transizione del tema, che per mezzo secondo copre la pagina e ne intercetta i clic.
+     */
+    layoutConfig = signal<LayoutConfig>(this._config, { equal: sameLayoutConfig });
 
     layoutState = signal<LayoutState>(this._state);
 

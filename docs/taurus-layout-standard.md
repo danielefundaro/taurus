@@ -192,6 +192,8 @@ Le pagine senza doppia vista — `finance` e `legal-documents` — non scrivono 
 
 L'idratazione delle preferenze dal backend esiste già. `AppComponent.ngOnInit` recupera tutte le preferenze dell'utente con una sola `getAll` e scrive ciascuna in `localStorage` tramite `LocalStorageService`; solo dopo applica alle signal di `LayoutService` le chiavi note, tramite uno `switch` esplicito su `preset`, `primary`, `menuMode`, `surface`, `darkTheme` e sugli stati del menu.
 
+Quelle chiavi, come il preset che il configuratore della topbar riapplica quando nasce, di solito riscrivono valori che `layoutConfig` ha già. La signal confronta i valori nella forma in cui `saveConfig` li salva, con `null` uguale alla stringa vuota, e una configurazione uguale non notifica. Senza questo confronto ogni pagina partiva con la View Transition del cambio di tema, che per circa mezzo secondo copre il documento e ne intercetta i clic. Un cambio vero, come il passaggio al tema scuro, resta animato.
+
 La lettura parte solo dopo `GET /api/tenant-status`. Se il tenant della sessione non ha ancora uno schema, come nella modalità bootstrap del primo accesso descritta nel [runbook operativo, §5.2](runbook-operativo.md#52-primo-accesso-su-ambiente-vuoto), le preferenze non vengono lette: `ListLayoutService` viene idratato con un elenco vuoto e tema e liste usano i valori predefiniti.
 
 Poiché la scrittura in `localStorage` avviene per ogni preferenza restituita e non solo per quelle riconosciute dallo `switch`, le chiavi `listLayout.<pagina>` sono idratate automaticamente senza modificare `AppComponent`. Le pagine elenco leggono la propria vista in modo sincrono da `localStorage`, senza attendere alcuna chiamata e senza aggiungere casi allo `switch`.
