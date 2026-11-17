@@ -14,9 +14,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.LocalDate;
 
 /**
- * Quality of the optical music recognition of the tenant, for those who manage the catalogue: the summary of the
- * reviews collected at approval and the approvals still to collect. Access is restricted by the security configuration
- * of {@code /api/score-recognition/**}.
+ * Quality of the optical music recognition of the tenant, for the super administrator only: the summary of the reviews
+ * collected at approval and the approvals still to collect. Access is restricted by the security configuration of
+ * {@code /api/score-recognition/**}.
  */
 @RestController
 @RequestMapping("/api/score-recognition")

@@ -218,6 +218,10 @@ public class SecurityConfiguration {
                     // stay readable by every role.
                     .requestMatchers("/api/tenant-features/capabilities")
                     .hasAuthority(AuthoritiesConstants.SUPER_ADMIN)
+                    // The quality of the recognition engines is a technical summary of the installation: the counts
+                    // are still collected at every approval under /api/tracks.
+                    .requestMatchers("/api/score-recognition/**")
+                    .hasAuthority(AuthoritiesConstants.SUPER_ADMIN)
                     .requestMatchers("/api/legal/**").denyAll()
 
                     // User administration. Self-service endpoints are matched above.
@@ -227,7 +231,7 @@ public class SecurityConfiguration {
                     .hasAnyAuthority(RoleGroups.tenantManagers())
 
                     // Catalogue administration.
-                    .requestMatchers("/api/albums/**", "/api/tracks/**", "/api/instruments/**", "/api/score-recognition/**", "/api/score-fragments/**")
+                    .requestMatchers("/api/albums/**", "/api/tracks/**", "/api/instruments/**", "/api/score-fragments/**")
                     .hasAnyAuthority(RoleGroups.catalogueManagers())
 
                     // Read-only catalogue APIs for standard and external users; listeners can report the errors they hear.
