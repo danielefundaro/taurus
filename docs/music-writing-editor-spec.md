@@ -723,7 +723,7 @@ Rispetto agli obiettivi:
   - la sola lettura per un secondo utente mentre il primo scrive;
   - sul telefono, la scheda Ascolto senza le azioni di scrittura.
 
-  La traccia di prova arriva da `E2E_SCORE_WRITING_TRACK_ID`, senza la quale le prove si saltano; sotto 768 pixel si fa solo la prova del telefono. Ogni prova crea una parte `e2e-scrittura-…` e alla fine la rimuove dalla traccia; l'eliminazione è logica, quindi la base dati conserva la parte e le sue versioni.
+  La traccia di prova arriva da `E2E_SCORE_WRITING_TRACK_ID`, senza la quale le prove si saltano; sotto 768 pixel si fa solo la prova del telefono. Ogni prova crea una parte `e2e-scrittura-…` e alla fine la rimuove dalla traccia, aspettando il salvataggio; l'eliminazione è logica, quindi la base dati conserva la parte e le sue versioni.
 - **Manuale**: i casi `SCW` del runbook di test:
   - prove con archivisti su parti reali, con il tempo per scrivere una parte di una pagina;
   - uso su tablet;

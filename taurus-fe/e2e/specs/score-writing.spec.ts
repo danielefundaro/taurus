@@ -211,11 +211,17 @@ const writeFourNotes = async (page: Page): Promise<void> => {
     await expect(notes(page)).toHaveCount(4);
 };
 
-/** Toglie dalla traccia le parti create dalla prova, dal workspace delle parti. */
+/**
+ * Toglie dalla traccia le parti create dalla prova, dal workspace delle parti, e aspetta il salvataggio. Si salta solo
+ * una parte che non c'è, perché la prova si è fermata prima di crearla; ogni altro intoppo fa fallire la prova, invece di
+ * lasciare la parte sulla traccia.
+ */
 const removeParts = async (page: Page, trackId: string, names: string[]): Promise<void> => {
     await page.goto(`/tracks/${trackId}?tab=parts`);
     const list = page.getByRole('listbox', { name: /parti della traccia/i });
-    await expect(list).toBeVisible();
+    const empty = page.getByRole('heading', { name: 'Nessuna parte', exact: true });
+    await expect(list.or(empty)).toBeVisible();
+    let removed = 0;
     for (const name of names) {
         const option = list.getByRole('option', { name: new RegExp(`^${name},`) });
         if (!(await option.count())) continue;
@@ -226,9 +232,12 @@ const removeParts = async (page: Page, trackId: string, names: string[]): Promis
             .filter({ hasText: name })
             .getByRole('button', { name: /rimuovi/i })
             .click();
+        await expect(option).toHaveCount(0);
+        removed++;
     }
+    if (!removed) return;
     const save = page.getByRole('button', { name: /salva traccia/i });
-    if (!(await save.isEnabled())) return;
+    await expect(save).toBeEnabled();
     await save.click();
     await expect(page.getByText(/tutte le modifiche salvate/i)).toBeVisible();
 };
