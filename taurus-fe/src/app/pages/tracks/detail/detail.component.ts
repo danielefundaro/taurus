@@ -11,7 +11,7 @@ import { ScoreWorkspaceComponent } from './score-workspace/score-workspace.compo
 import { compareScores, DraftComparison, mergeServerScores } from './score-workspace/score-workspace.operations';
 import { ScoreArrangementPanelComponent } from './score-arrangement-panel/score-arrangement-panel.component';
 import { ScorePlaybackPanelComponent } from './score-playback-panel/score-playback-panel.component';
-import { RoleEnums, StateEnums, StateLabel, StateLabelsMap } from '../../../constants';
+import { isPhoneViewport, RoleEnums, StateEnums, StateLabel, StateLabelsMap } from '../../../constants';
 import { PdfManipulatorDialogComponent } from '../../../dialogs/pdf-manipulator-dialog/pdf-manipulator-dialog.component';
 import { ImageEditorDialogComponent } from '../../../dialogs/image-editor-dialog/image-editor-dialog.component';
 import { openEngraveDialog } from '../../../dialogs/engrave-dialog/engrave-dialog.component';
@@ -37,6 +37,8 @@ export class DetailComponent extends DetailPageBase implements OnInit, OnDestroy
     protected RolesEnum: typeof RoleEnums = RoleEnums;
     protected readonly StateEnum: typeof StateEnums = StateEnums;
     protected readonly previewTooltip = "Aggiungi almeno una parte per abilitare l'anteprima";
+    /** Telefono: le parti scritte si consultano, senza impaginarle dal Workspace Parti. */
+    protected readonly phone = isPhoneViewport();
     protected selectedFile: File | null = null;
     protected annotations: PdfAnnotations | null = null;
     protected uploading = false;
@@ -145,9 +147,14 @@ export class DetailComponent extends DetailPageBase implements OnInit, OnDestroy
         this.track = { ...this.track, version };
     }
 
-    /** Impaginazione delle parti scritte dal Workspace Parti: per chi gestisce la traccia, con ascolto e scrittura attivi. */
+    /** Scheda Partitura e impaginazione delle parti scritte: per chi gestisce la traccia, con ascolto e scrittura attivi. */
     protected get canEngrave(): boolean {
         return this.canManagePdf && this.scorePlaybackEnabled && this.tenantFeatureService.scoreWritingEnabled();
+    }
+
+    /** Impaginazione dal Workspace Parti: non sul telefono, come le altre azioni di scrittura. */
+    protected get canEngraveParts(): boolean {
+        return this.canEngrave && !this.phone;
     }
 
     /** Impagina la versione ascoltata di una parte senza pagine; senza servizio musicale l'errore lo spiega. */

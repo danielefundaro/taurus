@@ -9,9 +9,10 @@ import { environmentMissing, expect, signIn, test } from '../fixtures/session';
  * Le prove lavorano sulla traccia indicata in `E2E_SCORE_WRITING_TRACK_ID`, del primo tenant con
  * l'ascolto e la scrittura attivi, e si saltano senza. Ogni prova crea una parte `e2e-scrittura-…` e alla
  * fine la rimuove dalla traccia con «Salva traccia»: la parte è eliminata in modo logico, quindi la
- * base dati conserva lei e le sue versioni. Sotto 768 pixel la prova si salta, perché la scrittura è
- * pensata per schermi da tablet in su; la tastiera MIDI vera resta nelle verifiche a mano del
- * runbook, perché nessun browser automatico ne ha una.
+ * base dati conserva lei e le sue versioni. Sotto 768 pixel queste prove si saltano, perché la scrittura è
+ * pensata per schermi da tablet in su, e si prova invece che sul telefono le azioni di scrittura non
+ * compaiano; la tastiera MIDI vera resta nelle verifiche a mano del runbook, perché nessun browser
+ * automatico ne ha una.
  */
 test.describe('scrittura della musica', () => {
     test.skip(environmentMissing(), 'Servono due tenant di prova: vedi e2e/README.md');
@@ -115,6 +116,25 @@ test.describe('scrittura della musica', () => {
         await expect(page.getByText('Sola lettura', { exact: true })).toHaveCount(0);
         await page.getByRole('button', { name: /torna alla traccia/i }).click();
         await expect(editorHeading(page)).toHaveCount(0);
+    });
+});
+
+test.describe('scrittura della musica sul telefono', () => {
+    test.skip(environmentMissing(), 'Servono due tenant di prova: vedi e2e/README.md');
+
+    const trackId = process.env['E2E_SCORE_WRITING_TRACK_ID'];
+    test.skip(!trackId, 'Serve una traccia con ascolto e scrittura attivi in E2E_SCORE_WRITING_TRACK_ID');
+
+    test('sul telefono le parti si ascoltano, senza le azioni di scrittura', async ({ page, environment }) => {
+        test.skip((page.viewportSize()?.width ?? 0) > 768, 'Si prova sul telefono');
+        const [first] = environment;
+        test.skip(!first.users.archivist, 'Serve un archivista del primo tenant');
+
+        await signIn(page, first.users.archivist!, 'archivist');
+        await openPlayback(page, trackId!);
+        for (const action of ['Nuova parte scritta', 'Scrivi', 'Riprendi la bozza', 'Ricava una parte', 'Impagina']) {
+            await expect(page.getByRole('button', { name: new RegExp(`^\\W*${action}$`, 'i') })).toHaveCount(0);
+        }
     });
 });
 

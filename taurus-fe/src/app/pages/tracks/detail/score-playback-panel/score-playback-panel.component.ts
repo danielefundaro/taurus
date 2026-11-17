@@ -11,7 +11,7 @@ import { ScoreReportsDialogComponent, ScoreReportsDialogData, ScoreReportsDialog
 import { ScoreUploadDialogComponent, ScoreUploadDialogData } from '../../../../dialogs/score-upload-dialog/score-upload-dialog.component';
 import { ScoreVersionsDialogComponent, ScoreVersionsDialogData, ScoreVersionsDialogResult } from '../../../../dialogs/score-versions-dialog/score-versions-dialog.component';
 import { ImportsModule } from '../../../../imports';
-import { editLockMessage } from '../../../../constants';
+import { editLockMessage, isPhoneViewport } from '../../../../constants';
 import { ArrangementRowState, DraftSummary, EditLock, PartPlayback, RecognitionJob, ScoreVersion, TrackPlayback } from '../../../../module';
 import { drumName, programName } from '../../../../score-player/general-midi';
 import { checksSummary, isRecognitionActive, partLabel, recognitionLabel } from '../../../../score-player/playback-labels';
@@ -53,6 +53,8 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
     protected referenceScoreId: number | null = null;
     /** Righi della partitura collegati alle parti, per l'origine delle parti estratte; vuoto senza scrittura. */
     protected extractions = new Map<number, ArrangementRowState>();
+    /** Telefono: le parti scritte si consultano e si ascoltano, senza le azioni di scrittura. */
+    protected readonly phone = isPhoneViewport();
     private polling?: Subscription;
 
     constructor(
@@ -82,9 +84,14 @@ export class ScorePlaybackPanelComponent implements OnChanges, OnDestroy {
         return this.canManage && this.tenantFeatureService.scoreWritingEnabled();
     }
 
-    /** Impaginazione delle parti: con la scrittura attiva e il servizio musicale configurato. */
+    /** Azioni di scrittura (scrivere, ricavare, impaginare): con la scrittura, tranne che sul telefono. */
+    protected get writingActions(): boolean {
+        return this.canWrite && !this.phone;
+    }
+
+    /** Impaginazione delle parti: con le azioni di scrittura e il servizio musicale configurato. */
     protected get canEngrave(): boolean {
-        return this.canWrite && !!this.playback?.recognitionAvailable;
+        return this.writingActions && !!this.playback?.recognitionAvailable;
     }
 
     /** Parte con una versione e senza pagine: si legge e si ascolta, ma non compare in anteprima né in stampa. */

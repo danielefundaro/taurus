@@ -7,13 +7,10 @@ import { NewArrangementDialogComponent, NewArrangementDialogData, NewArrangement
 import { openCompareDialog } from '../../../../dialogs/score-compare-dialog/score-compare-dialog.component';
 import { ScoreEditorDialogComponent, ScoreEditorDialogData } from '../../../../dialogs/score-editor-dialog/score-editor-dialog.component';
 import { ScorePlayerDialogComponent, ScorePlayerDialogData } from '../../../../dialogs/score-player-dialog/score-player-dialog.component';
-import { editLockMessage } from '../../../../constants';
+import { editLockMessage, isPhoneViewport } from '../../../../constants';
 import { ImportsModule } from '../../../../imports';
 import { Arrangement, ArrangementRowStatus, ArrangementVersion, DraftSummary, EditLock, TrackPlayback } from '../../../../module';
 import { ArrangementService, ConfirmService, ScorePlaybackService, ToastService, withErrorSummary } from '../../../../service';
-
-/** Telefono: la scheda mostra solo lo stato della partitura, che si scrive da un computer o da un tablet. */
-const PHONE_QUERY = '(max-width: 768px)';
 
 const ROW_STATUS: Record<ArrangementRowStatus, { label: string; severity: 'success' | 'info' | 'warn' | 'danger' | 'secondary' }> = {
     NEW: { label: 'Nuova', severity: 'secondary' },
@@ -59,7 +56,8 @@ export class ScoreArrangementPanelComponent implements OnChanges {
     protected loading = false;
     protected failed = false;
     protected opening = false;
-    protected readonly phone = typeof matchMedia === 'function' && matchMedia(PHONE_QUERY).matches;
+    /** Telefono: la scheda mostra solo lo stato della partitura, che si scrive da un computer o da un tablet. */
+    protected readonly phone = isPhoneViewport();
     protected readonly rowStatus = ROW_STATUS;
     protected readonly moment = moment;
 

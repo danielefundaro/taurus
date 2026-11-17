@@ -71,8 +71,9 @@ Le prove sono in `specs`:
   sul tablet, annulla e ripristina l'ultima nota, salva e approva la versione; chiude l'editor e
   riprende la bozza con le note scritte; un amministratore che apre la parte mentre l'archivista la
   scrive vede la bozza in sola lettura, con «Prendi il controllo» e senza salvataggio, e chi scrive
-  tiene il blocco. Le prove si saltano senza `E2E_SCORE_WRITING_TRACK_ID` e sotto 768 pixel; il
-  profilo tablet è nella matrice (`--project=tablet`), ma su Windows WebKit non lo esegue (vedi
+  tiene il blocco. Sul profilo mobile, sotto 768 pixel, prova invece che la scheda Ascolto non mostri
+  le azioni di scrittura. Le prove si saltano senza `E2E_SCORE_WRITING_TRACK_ID`; il profilo tablet
+  è nella matrice (`--project=tablet`), ma su Windows WebKit non lo esegue (vedi
   [Esecuzione del 2026-11-17](#esecuzione-del-2026-11-17)). Ogni prova crea una parte `e2e-scrittura-…` e
   alla fine la rimuove dalla traccia con «Salva traccia»: l'eliminazione è logica, quindi la base dati
   conserva la parte e le sue versioni. La tastiera MIDI vera, le partiture grandi e i tempi di
