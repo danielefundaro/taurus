@@ -26,6 +26,7 @@ import {
     ScoreRecognitionService,
     ScoreRendererService
 } from '../../service';
+import { TUPLETS } from '../../score-editor/score-edits';
 import { prepareFragment } from '../../score-editor/score-fragments';
 import { LayoutPage } from '../../score-editor/score-layout';
 import { ScoreLayoutClient } from '../../score-editor/score-layout-client';
@@ -259,6 +260,18 @@ describe('ScoreEditorDialogComponent', () => {
 
         expect(renderer.renderPrepared).toHaveBeenCalledTimes(2);
         expect(renderer.renderPrepared.calls.mostRecent().args[0].split('<step>F</step>').length - 1).toBe(1);
+    });
+
+    it('groups the notes from the selected one with Alt and the digit in the correction', async () => {
+        fixture.detectChanges();
+        await fixture.whenStable();
+        const component = fixture.componentInstance as unknown as { onKey(event: KeyboardEvent): void; tupletHint(option: (typeof TUPLETS)[number]): string; message: string | null };
+
+        expect(component.tupletHint(TUPLETS[0])).toBe('3 note al posto di 2, dalla nota selezionata (Alt+3)');
+        // La prima battuta ha due note: il gruppo non si forma e l'editor dice perché.
+        component.onKey(new KeyboardEvent('keydown', { key: '3', code: 'Digit3', altKey: true }));
+
+        expect(component.message).toBe('Servono 3 note consecutive della stessa voce nella stessa battuta, fuori da altri gruppi');
     });
 
     it('goes back to the track from the top left button, asking first when there are unsaved corrections', async () => {
@@ -698,6 +711,33 @@ describe('ScoreEditorDialogComponent', () => {
             component.setMidiThreshold(120);
             component.setMidiThreshold(null);
             expect(midi.setThreshold).toHaveBeenCalledOnceWith(120);
+        });
+
+        it('creates tuplets with Alt and the digit on the selected note and at the cursor, saying which figure their notes take', async () => {
+            const component = await openWriting();
+            const [triplet, quintuplet] = TUPLETS;
+            const grouped = (): number => keeperOptions!.content().split('<time-modification>').length - 1;
+
+            // Fuori dall'inserimento il gruppo dura quanto la nota selezionata, come con il pulsante.
+            expect(component.tupletHint(triplet)).toBe('Terzina di crome al posto della semiminima selezionata (Alt+3)');
+            key(component, { key: '3', code: 'Digit3', altKey: true });
+            expect(component.note?.tuplet).toBe(3);
+            expect(grouped()).toBe(3);
+            key(component, { key: '3', code: 'Digit3', altKey: true });
+            expect(component.note?.tuplet).toBeNull();
+            expect(grouped()).toBe(0);
+
+            // Durante l'inserimento dura quanto la figura corrente: una minima dà una terzina di semiminime.
+            key(component, { key: 'n' });
+            key(component, { key: '6' });
+            expect(component.tupletHint(triplet)).toBe('Terzina di semiminime al posto di una minima, al cursore (Alt+3)');
+            expect(component.tupletHint(quintuplet)).toBe('Quintina di crome al posto di una minima, al cursore (Alt+5)');
+            key(component, { key: '3', code: 'Digit3', altKey: true });
+            expect(grouped()).toBe(3);
+            expect(keeperOptions!.content().split('<type>quarter</type>').length - 1).toBe(3);
+            expect(component.insertionLabel).toContain('semiminima');
+            key(component, { key: '.' });
+            expect(component.tupletHint(triplet)).toBe('Togli il punto di valore per creare una terzina');
         });
 
         it('turns the selected note into a rest instead of deleting it, so the measure stays complete', async () => {
@@ -1483,7 +1523,7 @@ interface WritingEditor {
     cursor: { voice: number };
     canSave: boolean;
     dirty: boolean;
-    note: { rest: boolean; slur: boolean } | null;
+    note: { rest: boolean; slur: boolean; tuplet: number | null } | null;
     wrongMeasures: unknown[];
     choice: { kind: string; resumeLabel: string; warning: string | null } | null;
     selectionLabel: string;
@@ -1537,6 +1577,7 @@ interface ScoreEditor {
     insertMeasure(where: 'before' | 'after'): void;
     applyConcertKey(fifths: number | null): void;
     addRowBelow(): void;
+    tupletHint(option: (typeof TUPLETS)[number]): string;
     removeActiveRow(): void;
     copyAllRows(): void;
     pasteAllRows(): void;

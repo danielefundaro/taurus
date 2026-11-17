@@ -199,6 +199,17 @@ const AUDITION_SECONDS = 0.6;
 /** Partitura: volume degli altri righi mentre uno è in evidenza nell'ascolto. */
 const BACKGROUND_GAIN = 0.35;
 
+/** Le figure al plurale, per dire di che cosa è fatto un gruppo irregolare: «terzina di crome». */
+const PLURAL_FIGURES: Readonly<Record<NoteType, string>> = {
+    whole: 'semibrevi',
+    half: 'minime',
+    quarter: 'semiminime',
+    eighth: 'crome',
+    '16th': 'semicrome',
+    '32nd': 'biscrome',
+    '64th': 'semibiscrome'
+};
+
 /** Partitura: le due notazioni, nella barra superiore. */
 const NOTATIONS = [
     { label: 'Trasposta', value: false, tooltip: 'Converte tutta la partitura nella notazione trasposta, come le parti' },
@@ -759,12 +770,15 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const command = event.ctrlKey || event.metaKey;
         let handled = true;
         if (command && key.toLowerCase() === 'z' && !event.shiftKey) this.undo();
+        const tupletKey = this.tupletShortcut(event);
         else if (command && (key.toLowerCase() === 'y' || (key.toLowerCase() === 'z' && event.shiftKey))) this.redo();
         else if (this.writingMode && this.writingKey(event)) handled = true;
         else if (this.data.arrangement && event.altKey && !command && (key === 'ArrowUp' || key === 'ArrowDown')) this.moveRow(key === 'ArrowUp' ? -1 : 1);
         else if (key === 'ArrowUp' || key === 'ArrowDown') this.move((key === 'ArrowUp' ? 1 : -1) * (command ? 7 : 1));
         else if (command || event.altKey) handled = false;
         else if (key === 'ArrowLeft' || key === 'ArrowRight') this.selectAdjacent(key === 'ArrowLeft' ? -1 : 1);
+        // Come i pulsanti: al cursore durante l'inserimento, altrimenti sulla nota selezionata, anche nella correzione.
+        else if (tupletKey !== null) this.tuplet(tupletKey);
         else if (/^[a-g]$/i.test(key)) this.letter(key.toUpperCase() as Step);
         else if (NOTE_TYPES.some((option) => option.key === key)) this.setType(NOTE_TYPES.find((option) => option.key === key)!.type);
         else if (key === '.') this.toggleDots();
@@ -951,6 +965,32 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     protected dynamic(value: edits.Dynamic | null): void {
         this.noteChange((score, id) => edits.setDynamic(score, id, value));
+    /**
+     * Il suggerimento di un gruppo irregolare. Nella scrittura il gruppo dura quanto la figura corrente o la nota
+     * selezionata, e dice la figura delle sue note: «Terzina di crome al posto di una semiminima»; nella correzione
+     * raggruppa le note che ci sono già.
+     */
+    protected tupletHint(option: { actual: number; normal: number; label: string }): string {
+        const shortcut = ` (Alt+${option.actual})`;
+        if (!this.writingMode) return `${option.actual} note al posto di ${option.normal}, dalla nota selezionata${shortcut}`;
+        const figure = this.inserting ? this.figure : this.note?.type ? { type: this.note.type, dots: this.note.dots } : null;
+        if (!figure) return `${option.label}: seleziona prima una nota`;
+        const name = option.label.toLowerCase();
+        if (figure.dots) return `Togli il punto di valore per creare una ${name}`;
+        const member = writing.tupletMemberType(figure.type, option.actual);
+        if (!member) return `Per una ${name} scegli una figura più lunga`;
+        const whole = NOTE_TYPES.find((type) => type.type === figure.type)!.label.toLowerCase();
+        const replaced = this.inserting ? `di una ${whole}, al cursore` : this.note?.rest ? `della pausa di ${whole} selezionata` : `della ${whole} selezionata`;
+        return `${option.label} di ${PLURAL_FIGURES[member]} al posto ${replaced}${shortcut}`;
+    }
+
+    /** Il gruppo irregolare di Alt+3, 5 o 6, letto dal tasto fisico per valere con ogni disposizione; `null` per gli altri tasti. */
+    private tupletShortcut(event: KeyboardEvent): number | null {
+        if (!event.altKey || event.ctrlKey || event.metaKey) return null;
+        const digit = Number(/^(?:Digit|Numpad)([0-9])$/.exec(event.code)?.[1] ?? NaN);
+        return this.tuplets.some((option) => option.actual === digit) ? digit : null;
+    }
+
     }
 
     protected articulation(value: edits.Articulation): void {
@@ -2190,10 +2230,6 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         const digit = Number(/^(?:Digit|Numpad)([0-9])$/.exec(event.code)?.[1] ?? NaN);
         if (command && event.altKey && digit >= 1 && digit <= 4) {
             this.setVoice(digit);
-            return true;
-        }
-        if (event.altKey && !command && this.tuplets.some((option) => option.actual === digit)) {
-            this.writeTuplet(digit);
             return true;
         }
         if (command || event.altKey) return false;

@@ -165,6 +165,22 @@ describe('score writing', () => {
         expect(() => writing.writeTuplet(score, writing.startCursor(), { type: 'quarter', dots: 1 }, 3)).toThrowError(EditError);
     });
 
+    it('makes a tuplet as long as the figure, with shorter notes: a triplet of quarters takes the place of a half', () => {
+        expect(writing.tupletMemberType('quarter', 3)).toBe('eighth');
+        expect(writing.tupletMemberType('quarter', 5)).toBe('16th');
+        expect(writing.tupletMemberType('half', 3)).toBe('quarter');
+        expect(writing.tupletMemberType('half', 6)).toBe('eighth');
+        expect(writing.tupletMemberType('whole', 5)).toBe('quarter');
+        expect(writing.tupletMemberType('64th', 3)).toBeNull();
+        expect(writing.tupletMemberType('quarter', 7)).toBeNull();
+
+        const score = empty(1);
+        const tuplet = writing.writeTuplet(score, writing.startCursor(), HALF, 3);
+        expect(tuplet.figure).toEqual(QUARTER);
+        expect(layout(score, 0)).toEqual(['r quarter/3', 'r quarter/3', 'r quarter/3', 'r half']);
+        expect(() => writing.writeTuplet(score, cursor(0, 2), { type: '64th', dots: 0 }, 3)).toThrowError(EditError, /figura più lunga/);
+    });
+
     it('turns a note into a tuplet and back, keeping its pitch', () => {
         const score = empty(1);
         const { noteId } = writing.writeNote(score, writing.startCursor(), QUARTER, 'G');
