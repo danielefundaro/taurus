@@ -488,6 +488,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
     private pager: PagedNotation | null = null;
     /** Larghezza, righi nascosti, compressione e interruzioni del disegno per pagine: se cambiano si ridisegna tutto. */
     private pagerKey = '';
+    /** Rigo di cui le pagine portano gli `id` delle battute: il primo mostrato, perché Verovio usa i suoi. */
+    private pagerRow = '';
     /** Battute cambiate dall'ultimo disegno per pagine; `null` se va ridisegnato tutto. */
     private drawChange: Set<string> | null = null;
     /** La pagina della selezione si sta disegnando: quando è pronta lo spartito scorre fino a lei. */
@@ -768,17 +770,17 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         if (target?.closest('[role="tab"]') && key.startsWith('Arrow')) return;
         if (target?.closest('button, [role="tab"]') && (key === ' ' || key === 'Enter')) return;
         const command = event.ctrlKey || event.metaKey;
+        const tupletKey = this.tupletShortcut(event);
         let handled = true;
         if (command && key.toLowerCase() === 'z' && !event.shiftKey) this.undo();
-        const tupletKey = this.tupletShortcut(event);
         else if (command && (key.toLowerCase() === 'y' || (key.toLowerCase() === 'z' && event.shiftKey))) this.redo();
         else if (this.writingMode && this.writingKey(event)) handled = true;
         else if (this.data.arrangement && event.altKey && !command && (key === 'ArrowUp' || key === 'ArrowDown')) this.moveRow(key === 'ArrowUp' ? -1 : 1);
         else if (key === 'ArrowUp' || key === 'ArrowDown') this.move((key === 'ArrowUp' ? 1 : -1) * (command ? 7 : 1));
-        else if (command || event.altKey) handled = false;
-        else if (key === 'ArrowLeft' || key === 'ArrowRight') this.selectAdjacent(key === 'ArrowLeft' ? -1 : 1);
         // Come i pulsanti: al cursore durante l'inserimento, altrimenti sulla nota selezionata, anche nella correzione.
         else if (tupletKey !== null) this.tuplet(tupletKey);
+        else if (command || event.altKey) handled = false;
+        else if (key === 'ArrowLeft' || key === 'ArrowRight') this.selectAdjacent(key === 'ArrowLeft' ? -1 : 1);
         else if (/^[a-g]$/i.test(key)) this.letter(key.toUpperCase() as Step);
         else if (NOTE_TYPES.some((option) => option.key === key)) this.setType(NOTE_TYPES.find((option) => option.key === key)!.type);
         else if (key === '.') this.toggleDots();
@@ -963,8 +965,6 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         else this.noteChange((score, id) => (this.writingMode ? writing.toggleWrittenTuplet(score, id, actual) : edits.toggleTuplet(score, id, actual)));
     }
 
-    protected dynamic(value: edits.Dynamic | null): void {
-        this.noteChange((score, id) => edits.setDynamic(score, id, value));
     /**
      * Il suggerimento di un gruppo irregolare. Nella scrittura il gruppo dura quanto la figura corrente o la nota
      * selezionata, e dice la figura delle sue note: «Terzina di crome al posto di una semiminima»; nella correzione
@@ -991,6 +991,8 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         return this.tuplets.some((option) => option.actual === digit) ? digit : null;
     }
 
+    protected dynamic(value: edits.Dynamic | null): void {
+        this.noteChange((score, id) => edits.setDynamic(score, id, value));
     }
 
     protected articulation(value: edits.Articulation): void {
@@ -2633,6 +2635,10 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
      * quando si avvicinano alla vista, e il Web Worker impagina di nuovo tutto lo spartito poco dopo l'ultima modifica.
      */
     private async renderPages(score: ScoreDocument, host: HTMLElement, token: number): Promise<void> {
+        // Le pagine ritrovano le loro battute dagli `id` del rigo che le ha nominate: tolto quel rigo, si impagina da capo,
+        // altrimenti si ridisegnerebbero vuote.
+        if (this.pager && !score.parts().some((part) => part.getAttribute('id') === this.pagerRow)) this.closePager();
+        this.pagerRow = this.firstShownRow(score);
         const key = this.drawingKey(host.clientWidth || 900);
         const created = !this.pager;
         if (!this.pager) {
@@ -2705,6 +2711,11 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         if (!score || !host || !pager || revision !== this.layoutRevision) return;
         const width = host.clientWidth || 900;
         const key = this.drawingKey(width);
+        if (key !== this.pagerKey) {
+            // La larghezza è cambiata dopo l'ultimo disegno, per esempio con la barra di scorrimento: si ridisegna con la nuova.
+            this.scheduleRender();
+            return;
+        }
         const options = drawingOptions(width, EDITOR_SCALE, { ...this.drawingFlags(), pageHeight: this.pageHeight(host) });
         this.layoutClient ??= this.renderer.layoutWorker();
         try {
@@ -2724,6 +2735,7 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
         this.pager?.destroy();
         this.pager = null;
         this.pagerKey = '';
+        this.pagerRow = '';
         this.drawChange = null;
         this.scrollPending = false;
     }
@@ -2741,6 +2753,12 @@ export class ScoreEditorDialogComponent implements OnInit, OnDestroy {
 
     private drawingKey(width: number): string {
         return [width, [...this.hiddenRows].sort().join(','), this.condense, this.writingMode].join('|');
+    }
+
+    /** `id` del primo rigo disegnato, o del primo rigo se sono tutti nascosti. */
+    private firstShownRow(score: ScoreDocument): string {
+        const parts = score.parts();
+        return (parts.find((part) => !this.hiddenRows.has(part.getAttribute('id') ?? '')) ?? parts[0])?.getAttribute('id') ?? '';
     }
 
     /** Righi disegnati: tutti se sono tutti nascosti. */

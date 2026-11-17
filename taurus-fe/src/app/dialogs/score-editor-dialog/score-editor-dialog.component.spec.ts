@@ -1148,6 +1148,51 @@ describe('ScoreEditorDialogComponent', () => {
                 expect(terminate).toHaveBeenCalled();
             });
 
+            it('lays out the score again when the first row, whose measures name the pages, goes away', async () => {
+                const component = await openScore();
+                confirm.confirmReversible.and.callFake((request) => request.accept?.());
+                component.newRowInstrumentId = ALTO_SAX.id;
+                component.addRowBelow();
+                await settle(450);
+                expect(pages()).toBe(6);
+
+                component.selectRow(0);
+                component.removeActiveRow();
+                await nextFrame();
+                await nextFrame();
+                expect(parts(keeperOptions!.content())).toEqual(['Sax contralto', 'Tuba']);
+                // Le pagine tornano gruppi di battute: quella della selezione è subito disegnata, con le battute del nuovo primo rigo.
+                const drawn = Array.from(fixture.nativeElement.querySelectorAll('.score-editor__notation g.measure') as NodeListOf<Element>, (measure) => measure.getAttribute('id') ?? '');
+                expect(drawn.length).toBeGreaterThan(0);
+
+                await settle();
+                const [, xml] = layout.calls.mostRecent().args;
+                expect(parts(xml)).toEqual(['Sax contralto', 'Tuba']);
+                const ids = new Set(firstRowIds(xml));
+                expect(drawn.every((id) => ids.has(id))).toBeTrue();
+                expect(pages()).toBe(6);
+            });
+
+            it('lays out at the new width when the notation changes width before the layout', async () => {
+                const component = await openScore();
+                await settle();
+                expect(pages()).toBe(6);
+
+                component.selectMeasure(3);
+                component.insertMeasure('after');
+                await nextFrame();
+                const host: HTMLElement = fixture.nativeElement.querySelector('.score-editor__notation');
+                // Per esempio compare o sparisce la barra di scorrimento: l'impaginazione della larghezza di prima non vale.
+                host.style.width = `${host.clientWidth > 700 ? host.clientWidth - 100 : host.clientWidth + 100}px`;
+                await settle(450);
+                await settle();
+
+                expect(layout).toHaveBeenCalledTimes(2);
+                const [options] = layout.calls.mostRecent().args;
+                expect(options['pageWidth']).toBe(Math.max(600, Math.round((host.clientWidth * 100) / (options['scale'] as number))));
+                expect(pages()).toBe(7);
+            });
+
             it('keeps the excerpts when the worker cannot lay out, and draws the whole score again when it gets short', async () => {
                 layout.and.rejectWith(new Error('Impaginazione non disponibile'));
                 const component = await openScore();
@@ -1532,6 +1577,7 @@ interface WritingEditor {
     transposeDirection: 1 | -1;
     transposeScope: 'passage' | 'part';
     onKey(event: KeyboardEvent): void;
+    tupletHint(option: (typeof TUPLETS)[number]): string;
     selectMeasure(index: number): void;
     transpose(): void;
     grace(kind: 'acciaccatura' | 'appoggiatura'): void;
@@ -1577,7 +1623,6 @@ interface ScoreEditor {
     insertMeasure(where: 'before' | 'after'): void;
     applyConcertKey(fifths: number | null): void;
     addRowBelow(): void;
-    tupletHint(option: (typeof TUPLETS)[number]): string;
     removeActiveRow(): void;
     copyAllRows(): void;
     pasteAllRows(): void;
