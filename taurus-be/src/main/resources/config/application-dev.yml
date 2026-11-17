@@ -109,6 +109,8 @@ application:
     enabled: true
   score-playback:
     enabled: true
+  score-writing:
+    enabled: true
   omr:
     # OMR service of src/main/docker/services.yml, with the development key of its .env file.
     url: ${TAURUS_OMR_URL:http://localhost:8090}
