@@ -25,8 +25,17 @@ RUN npm run build -- --configuration production
 # ascolta sulla porta 8080, perché un utente senza privilegi non può aprire le porte sotto la 1024.
 FROM nginxinc/nginx-unprivileged:1.30-alpine
 
-# Pulizia contenuto default: la cartella è di root, come i file dell'applicazione copiati sotto.
 USER root
+
+# Le correzioni di sicurezza di Alpine: l'immagine di nginx si ripubblica solo di tanto in tanto, e
+# fra una pubblicazione e l'altra i suoi pacchetti restano indietro. nginx e i suoi moduli restano
+# quelli di nginx.org, perché l'immagine li fissa alla loro versione. PACKAGES_REFRESH cambia a ogni
+# pubblicazione, perché la cache di build non riusi un aggiornamento vecchio: vedi
+# .github/workflows/docker-publish.yml.
+ARG PACKAGES_REFRESH=
+RUN apk upgrade --no-cache
+
+# Pulizia contenuto default: la cartella è di root, come i file dell'applicazione copiati sotto.
 RUN rm -rf /usr/share/nginx/html/*
 
 # Il modello della configurazione: l'entrypoint dell'immagine sostituisce le variabili TAURUS_* e
