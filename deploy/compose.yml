@@ -24,7 +24,7 @@ name: taurus
 
 services:
   postgresql:
-    image: postgres:${TAURUS_POSTGRES_VERSION:-18.6}
+    image: postgres:${TAURUS_POSTGRES_VERSION:-18.7}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${TAURUS_DB_USERNAME:?impostare TAURUS_DB_USERNAME}

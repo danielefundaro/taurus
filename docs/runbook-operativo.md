@@ -44,7 +44,7 @@ Finché questi campi non sono valorizzati e approvati, il runbook è utilizzabil
 | --- | --- | --- | --- | --- |
 | `taurus-fe` | Angular 22, Nginx 1.30 senza privilegi | SPA utente/amministrazione, PWA e Web Push; nel container serve anche da ingresso unico, inoltrando `/api` e `/auth` | `4200` in sviluppo, `8080` nel container | Nessuno; configurazione letta all'avvio del container (§4.2) |
 | `taurus-be` | Java 25, Spring Boot 4.1, JHipster | API, processi asincroni, scheduler, migrazioni e accesso ai dati | `8080` | Media su filesystem; dati in PostgreSQL |
-| PostgreSQL | PostgreSQL 18.6 nel compose locale | Schema globale `public`, schemi tenant e database Keycloak | `5432` | Critico |
+| PostgreSQL | PostgreSQL 18.7 nel compose locale | Schema globale `public`, schemi tenant e database Keycloak | `5432` | Critico |
 | Keycloak | Keycloak 26.8.2 nel compose locale | OIDC, utenti, ruoli, tenant claim, login e-mail e temi | `9080`, `9443` locali | Database `taurus_keycloak` e provider custom |
 | RabbitMQ | RabbitMQ 4.4.0 management nel compose locale | Code `upload.files` (elaborazione PDF), `score.recognition` (riconoscimento delle parti) e `score.engraving` (impaginazione delle parti scritte), con le rispettive code di scarto `.dead` | `5672`, console `15672` | Code e messaggi in transito |
 | `taurus-omr` | Python 3.12, FastAPI, Audiveris 5.11.0, homr 0.7.0 | Riconoscimento ottico della musica e conversione MIDI per l'ascolto delle parti, chiamato solo dal backend | `8090` | Nessuno; file temporanei in `/tmp`, eliminati a fine richiesta |

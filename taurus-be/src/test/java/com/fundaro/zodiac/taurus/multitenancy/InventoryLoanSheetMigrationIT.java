@@ -40,7 +40,7 @@ class InventoryLoanSheetMigrationIT {
         String password = System.getProperty("taurus.test.postgres.password", "password");
         if (jdbcUrl == null) {
             DockerRequirement.required();
-            postgres = new PostgreSQLContainer("postgres:18.6");
+            postgres = new PostgreSQLContainer("postgres:18.7");
             postgres.start();
             jdbcUrl = postgres.getJdbcUrl();
             username = postgres.getUsername();
