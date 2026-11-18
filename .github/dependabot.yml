@@ -32,7 +32,7 @@ updates:
       github-actions-minor-patch:
         update-types: [minor, patch]
 
-  # Backend: dipendenze Maven, strumenti npm di JHipster, immagine e dev container. I compose di
+  # Backend: dipendenze Maven, strumenti npm di formattazione, immagine e dev container. I compose di
   # sviluppo in src/main/docker hanno nomi che Dependabot non riconosce: si aggiornano a mano.
   - package-ecosystem: maven
     directory: /taurus-be
