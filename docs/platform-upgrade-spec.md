@@ -595,6 +595,7 @@ Applicata e verificata il 2026-11-10 sul ramo `upgrade-phase-8`, che parte da `2
     - Ora generator-jhipster 9.4.0, come JHipster nel backend, husky 9.1.7, Prettier 3.9.10, prettier-plugin-java 2.11.0, lint-staged 17.6.0 e prettier-plugin-packagejson 3.1.0. `engines` chiede Node `^22.22.1 || >=24.11.0`, come lint-staged 17 e generator-jhipster 9.4.
     - Maven e la CI non li usano: servono all'hook di pre-commit e agli script `prettier:*`. Per questo `./mvnw verify` non è stato ripetuto in locale; lo esegue la CI.
     - `npm audit` scende da 56 avvisi, 3 critici e 19 alti, a 38, 2 critici e 2 alti. Quelli critici e alti vengono tutti da simple-git 3.36.0, che generator-jhipster 9.4.0, ultima versione, fissa esattamente: la correzione è solo nella 4. Il generatore si lancia solo a mano, e Trivy non legge le dipendenze di sviluppo.
+    - Il 2026-11-18 generator-jhipster è uscito dal `package.json`, per chiudere quegli avvisi: per un aggiornamento di JHipster si lancia con `npx`. Vedi il [report sulle vulnerabilità delle dipendenze](reports/vulnerabilita-dipendenze.md).
 - **Componenti che Dependabot non legge.** Sono tutti all'ultima versione stabile, tranne pip, aggiornato qui:
   - gitleaks 8.30.1, semgrep 1.183.0 e Trivy 0.76.2 della CI;
   - Audiveris 5.11.0, homr 0.7.0, RapidOCR 3.10.0 e i dati Tesseract 4.1.0 del servizio OMR;
