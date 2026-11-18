@@ -25,6 +25,11 @@ RUN pnpm build
 # porta 8080.
 FROM nginxinc/nginx-unprivileged:1.30-alpine
 
+# Le correzioni di sicurezza di Alpine, come nel frontend.
+USER root
+ARG PACKAGES_REFRESH=
+RUN apk upgrade --no-cache
+
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Fuori da conf.d: i file .conf di quella cartella sono caricati come configurazioni a sé.
 COPY security-headers.conf /etc/nginx/taurus-security-headers.conf
