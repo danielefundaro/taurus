@@ -533,7 +533,9 @@ Applicata e verificata il 2026-11-10 sul ramo `upgrade-phase-7`, che parte da `9
 
 - **Versioni.**
   - nginx 1.30.6, del 2026-10-19, in `nginxinc/nginx-unprivileged:1.30-alpine`, per frontend e sito informativo.
+    - Il 2026-11-18 i due Dockerfile hanno ricevuto `apk upgrade`: l'immagine di nginx non era ripubblicata dal 2026-10-19 e i suoi pacchetti di Alpine avevano una vulnerabilità critica e 12 alte già corrette. Vedi il [report sulle vulnerabilità delle dipendenze](reports/vulnerabilita-dipendenze.md).
   - PostgreSQL 18.6, l'ultima della 18, di agosto 2026; RabbitMQ 4.4.0, del 2026-10-19, nella variante `management-alpine`. Anche i test del backend, `restore-test.sh` e `deploy/.env.example` usano queste due versioni.
+    - Il 2026-11-18 PostgreSQL è passato alla 18.7, del 2026-11-12, negli stessi file: è un rilascio di sicurezza, che per la decisione 7 non aspetta i sette giorni.
   - Nei compose di sviluppo: Prometheus 3.13.5 LTS, del 2026-10-21; Grafana 13.3.0, del 2026-10-27; SonarQube Community Build 26.10, del 2026-10-29; Mailpit 1.33.0, del 2026-10-31, anche nell'IT delle e-mail del provider. SonarQube 26.11, del 2026-11-05, e Mailpit 1.33.1, del 2026-11-07, sono uscite da meno di sette giorni. Dependabot non legge i compose di sviluppo: arriveranno con il prossimo aggiornamento a mano.
   - Dev container su `mcr.microsoft.com/devcontainers/java:3-25-trixie`, con Java 25 e Node 26.
 - **nginx senza privilegi.** Frontend e sito partono da `nginxinc/nginx-unprivileged`: nginx gira con l'utente `nginx` (uid 101) e ascolta sulla porta 8080 del container.

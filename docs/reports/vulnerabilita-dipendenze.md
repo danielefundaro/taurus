@@ -6,11 +6,14 @@ La pagina non era consultabile al momento della segnalazione. L'elenco che segue
 
 Il 2026-11-18 gli audit sono stati ripetuti e le segnalazioni che hanno una versione corretta sono state chiuse, sul ramo `feature/dependency-vulnerabilities`. Restano aperte quelle senza una versione corretta: vedi [Ancora aperte](#ancora-aperte).
 
+Lo stesso giorno sono state scansionate anche le immagini Docker del deploy, che né Dependabot né il job `security` della CI controllano: vedi [Immagini Docker](#immagini-docker).
+
 ## Come è stato ricavato
 
 - `npm audit` in `taurus-be` e `taurus-fe`, `pnpm audit` in `taurus-info`; il 2026-11-18 con pnpm 12.17.0, la versione di `packageManager`.
 - Le dipendenze Maven risolte con `./mvnw -o dependency:list`, di ogni scope, in `taurus-be` e `keycloak-authenticator`, e i pacchetti fissati in `taurus-omr/requirements*.txt`: tutti verificati sul database [OSV](https://osv.dev), che comprende gli avvisi di GitHub.
 - Il 2026-11-18 anche i JAR dell'immagine `quay.io/keycloak/keycloak:26.8.2`, nella cartella `/opt/keycloak/lib/lib/main`.
+- Il 2026-11-18 le immagini del deploy, con Trivy 0.76.2, la versione della CI: le tre di Taurus costruite in locale, quella del servizio OMR pubblicata, e quelle di PostgreSQL, Keycloak e RabbitMQ di `deploy/compose.yml`.
 
 Le dipendenze Maven del backend e i pacchetti Python del servizio OMR non hanno vulnerabilità note, né il 2026-11-14 né il 2026-11-18.
 
@@ -65,6 +68,66 @@ La riga 9 è chiusa da Astro 7.4.12, l'ultima versione della 7, con pnpm 12.17.0
 
 Con Astro 7.4.12 `@astrojs/astro2tsx` 0.1.3, usato da `@astrojs/check`, riceveva `@emnapi/runtime` 2.0.0-beta.2, incompatibile con il suo `@emnapi/core` 1.11.3. `pnpm check` si fermava con `this.bridge.setLastError is not a function`. La 0.1.4 dichiara `@emnapi/runtime` 1.11.3 come dipendenza propria: con lei `pnpm check` torna a passare.
 
+## Immagini Docker
+
+Il job `security` della CI scansiona il repository: lockfile, `pom.xml`, requisiti Python e Dockerfile. Non vede i pacchetti di sistema delle immagini, né le librerie che arrivano già dentro le immagini di terzi. Trivy 0.76.2 sulle immagini del deploy, il 2026-11-18:
+
+| Immagine | Base | Critiche | Alte | Dopo gli interventi |
+| --- | --- | ---: | ---: | --- |
+| Frontend | `nginxinc/nginx-unprivileged:1.30-alpine`, Alpine 3.24.2 | 1 | 12 | nessuna vulnerabilità, di nessuna gravità |
+| Sito informativo | la stessa | 1 | 12 | nessuna vulnerabilità, di nessuna gravità |
+| Backend | `eclipse-temurin:25-jre`, Ubuntu 26.04 | 0 | 0 | invariata; nessuna vulnerabilità nei JAR |
+| Servizio OMR | `ubuntu:24.04` | 1 | 10 | 11 voci a scadenza in `.trivyignore.yaml` |
+| PostgreSQL | `postgres:18.6`, Debian 13.7 | 2 | 146 | aperte; la 18.7 ne ha 2 e 148 |
+| Keycloak | `quay.io/keycloak/keycloak:26.8.2`, UBI 9.8 | 0 | 6 | aperte |
+| RabbitMQ | `rabbitmq:4.4.0-management-alpine`, Alpine 3.24.4 | 0 | 0 | una media, invariata |
+
+### Frontend e sito: `apk upgrade`
+
+L'immagine `nginxinc/nginx-unprivileged:1.30-alpine` non è stata ripubblicata dal 2026-10-19. I suoi pacchetti di Alpine sono rimasti alla 3.24.2, mentre le correzioni sono arrivate fino alla 3.24.4. La critica è in `brotli-libs`; le alte sono in `curl` e `libcurl`, `libexpat`, `libxslt`, `musl` e `musl-utils`, `zlib`.
+
+- L'ultimo stadio dei due Dockerfile esegue `apk upgrade --no-cache` come root, prima di tornare all'utente 101: aggiorna 15 pacchetti.
+- nginx e i suoi moduli restano quelli di nginx.org, alla 1.30.6. L'immagine li fissa alla loro versione, e `apk upgrade` non li sostituisce con quelli di Alpine.
+- L'argomento di build `PACKAGES_REFRESH` cambia a ogni pubblicazione. Senza, la cache di build della CI riprenderebbe l'aggiornamento della pubblicazione precedente.
+
+### PostgreSQL 18.7
+
+PostgreSQL 18.7, del 2026-11-12, corregge più di 50 CVE del server. Fra queste ci sono use-after-free e buffer overrun, scavalcamenti delle policy RLS con `INSERT ... ON CONFLICT` e iniezioni SQL in `pg_dump`, `reindexdb` e `CREATE EXTENSION`: vedi le [note di rilascio](https://www.postgresql.org/docs/release/18.7/). Trivy non le vede, perché legge solo i pacchetti Debian dell'immagine.
+
+- È un rilascio di sicurezza: per la decisione 7 dell'[aggiornamento della piattaforma](../platform-upgrade-spec.md) non aspetta i sette giorni.
+- È una patch: non chiede dump e ripristino, basta cambiare il tag, come dice il Runbook operativo (§8.6).
+- Le note chiedono di ricostruire alcuni indici e di controllare alcuni vincoli, ma nessuno riguarda Taurus:
+  - le migrazioni non creano indici GIN, GiST o `pg_trgm`, né tabelle partizionate;
+  - usano solo `CHAR(n)`, che le note escludono;
+  - i backup usano `pg_dump`, non i backup incrementali.
+- La versione cambia in `deploy/compose.yml`, `deploy/.env.example`, nel compose di sviluppo `postgresql.yml`, in `restore-test.sh`, nei Testcontainers del backend e nel Runbook operativo. Chi ha fissato `TAURUS_POSTGRES_VERSION` nel proprio `.env` la aggiorna lì.
+
+### Scansione prima della pubblicazione
+
+`docker-publish.yml`, a ogni tag `v*.*.*`, ora costruisce ogni immagine nel Docker del runner e la scansiona con Trivy prima di pubblicarla. Le regole sono quelle del job `security`: gravità alta e critica, solo le vulnerabilità che hanno una correzione, con le eccezioni di `.trivyignore.yaml`.
+
+- Se Trivy trova qualcosa, il job si ferma e quell'immagine non viene pubblicata.
+- La build che pubblica riusa gli strati di quella scansionata.
+- La scansione copre le quattro immagini di Taurus. PostgreSQL, Keycloak e RabbitMQ sono immagini ufficiali usate così come sono: si correggono solo con una nuova immagine, e si controllano a mano, come in questo report.
+
+### Servizio OMR: voci in `.trivyignore.yaml`
+
+L'immagine del servizio OMR ha una vulnerabilità critica e 10 alte. Tutte hanno una versione corretta, ma nessuna si corregge dal nostro Dockerfile:
+
+- `itextpdf` 5.5.13.2, `jackson-core` e `jackson-databind` 2.20.0 e `commons-io` 2.4 sono librerie di Audiveris 5.11.0, l'ultima release. Il Dockerfile estrae il suo pacchetto così com'è.
+- `setuptools` 70.3.0 non è installato. pip 26.3 include il suo `pkg_resources` e lo dichiara nel proprio SBOM, `pip/_vendor/bom.cdx.json`, da cui Trivy lo legge.
+
+Il rischio è basso:
+
+- il servizio passa ad Audiveris solo le immagini delle pagine, decodificate e riscritte con Pillow, e ne legge il MusicXML: nessun JSON, XML o PDF arriva ad Audiveris da fuori;
+- l'avviso di iText riguarda `CompareTool`, che confronta PDF con Ghostscript; quello di `commons-io` la lettura di XML non fidato; quello di `setuptools` `PackageIndex`, che pip non include;
+- il servizio OMR non pubblica porte ed è chiamato solo dal backend.
+
+Le 11 voci seguono la decisione 13: una per identificativo, con il file, il motivo e la scadenza al 2027-01-17. Si tolgono così:
+
+- le librerie di Audiveris, con una release che porti le versioni corrette, o sostituendo i JAR nel Dockerfile, con i test di accuratezza;
+- `setuptools`, con una versione di pip che includa un setuptools corretto, o togliendo pip dall'immagine finale.
+
 ## Ancora aperte
 
 ### `picomatch` (riga 12)
@@ -91,6 +154,16 @@ Vanno corrette aggiornando Keycloak, quando una versione le include:
 
 Prima di decidere va controllato quali versioni contiene davvero l'immagine nuova, nella cartella `/opt/keycloak/lib/lib/main`: possono essere diverse da quelle degli artefatti Maven, come per `guava` nella 26.8.2.
 
+### Immagini di PostgreSQL e Keycloak
+
+Sono immagini ufficiali, usate così come sono: si chiudono con una loro nuova immagine.
+
+- **PostgreSQL 18.7** (`postgres:18.7`, Debian 13.7, pubblicata il 2026-11-12): 2 critiche e 148 alte.
+  - La critica di `libxml2` e 123 alte sono pacchetti Debian. 122 non hanno correzione: sono soprattutto Kerberos (`libkrb5-3`, `libgssapi-krb5-2` e affini), `libxml2` e util-linux. L'unica con correzione è `zlib1g`, corretta in Debian 13 dopo la pubblicazione dell'immagine.
+  - L'altra critica e 25 alte sono nella libreria standard di Go 1.24.6, con cui è compilato `gosu`. L'entrypoint lo usa solo all'avvio, per passare all'utente `postgres`, e non apre connessioni.
+- **Keycloak 26.8.2** (UBI 9.8): 6 alte. Oltre a `guava` (riga 10) ci sono una del JDK 21 (`java-21-openjdk-headless`) e quattro di `sqlite-libs`, senza correzione in UBI 9. Si chiudono con una nuova versione di Keycloak, come le righe 10 e 11.
+- **RabbitMQ 4.4.0**: nessuna alta, una sola media con correzione.
+
 ## Verifica
 
 Il 2026-11-18, dopo gli interventi:
@@ -106,6 +179,11 @@ Il 2026-11-18, dopo gli interventi:
   - `npx lint-staged --version` risponde 17.6.0.
 - **`taurus-fe`:** `npm run build` passa, con i due avvisi di budget dei fogli di stile che c'erano già; `npm run test:coverage` passa con 1266 test e la copertura invariata.
 - **`taurus-info`:** `pnpm check`, `pnpm build` e `pnpm test` passano, con Node.js 24.21; la CI usa Node.js 26.
+- **Immagini**, con Trivy 0.76.2 e le regole della scansione prima della pubblicazione:
+  - frontend e sito, costruiti in locale con `apk upgrade`: nessuna vulnerabilità, di nessuna gravità. nginx resta la 1.30.6 e gira con l'uid 101. `/health` e la pagina rispondono 200, e il frontend scrive `assets/config.json` all'avvio;
+  - backend, costruito in locale: nessuna vulnerabilità alta o critica;
+  - servizio OMR: la scansione passa, e le voci soppresse sono le 11 di `.trivyignore.yaml`, nessun'altra.
+- **`docker-publish.yml`:** `actionlint` 1.7.7 non trova errori nei passi nuovi. La scansione nella CI girerà al primo tag.
 
 Dopo il merge su `main` resta da controllare che la pagina Dependabot chiuda le righe 1–9.
 
