@@ -1,5 +1,6 @@
-# Vulnerabilità e configurazioni che il job `security` ignora. Di norma il file non ha voci: una
-# vulnerabilità corretta si risolve aggiornando la dipendenza nella stessa pull request.
+# Vulnerabilità e configurazioni che il job `security` e la scansione delle immagini prima della
+# pubblicazione (docker-publish.yml) ignorano. Di norma il file non ha voci: una vulnerabilità
+# corretta si risolve aggiornando la dipendenza nella stessa pull request.
 #
 # Una voce serve solo quando la correzione non si può applicare subito, per esempio perché richiede una
 # versione maggiore o un'altra libreria la blocca. Regole (docs/platform-upgrade-spec.md, decisione 13):
@@ -9,3 +10,59 @@
 # - la pull request che applica l'aggiornamento toglie la voce.
 #
 # Il file è nato il 2026-11-06 per l'aggiornamento della piattaforma, che lo ha svuotato il 2026-11-10.
+# Il 2026-11-18 ha ricevuto le voci dell'immagine del servizio OMR: docs/reports/vulnerabilita-dipendenze.md.
+
+vulnerabilities:
+  # Immagine del servizio OMR: librerie di Audiveris 5.11.0, l'ultima release, che il Dockerfile estrae
+  # dal pacchetto così com'è. Il servizio passa ad Audiveris solo le immagini delle pagine, decodificate
+  # e riscritte con Pillow, e ne legge il MusicXML esportato: nessun JSON, XML o PDF arriva da fuori.
+  # Le toglie una release di Audiveris con le versioni corrette, o la sostituzione dei JAR nel
+  # Dockerfile, verificata con i test di accuratezza.
+  - id: CVE-2021-43113
+    paths: ["opt/audiveris/lib/app/itextpdf-5.5.13.2.jar"]
+    statement: "itextpdf 5.5.13.2 di Audiveris: corretto dalla 5.5.13.3; riguarda CompareTool, che confronta PDF con Ghostscript"
+    expired_at: 2027-01-17
+  - id: CVE-2026-68494
+    paths: ["opt/audiveris/lib/app/jackson-core-2.20.0.jar"]
+    statement: "jackson-core 2.20.0 di Audiveris: corretto dalla 2.21.4"
+    expired_at: 2027-01-17
+  - id: CVE-2026-89407
+    paths: ["opt/audiveris/lib/app/jackson-core-2.20.0.jar"]
+    statement: "jackson-core 2.20.0 di Audiveris: corretto dalla 2.21.7"
+    expired_at: 2027-01-17
+  - id: CVE-2026-89425
+    paths: ["opt/audiveris/lib/app/jackson-core-2.20.0.jar"]
+    statement: "jackson-core 2.20.0 di Audiveris: corretto dalla 2.21.7"
+    expired_at: 2027-01-17
+  - id: CVE-2026-54512
+    paths: ["opt/audiveris/lib/app/jackson-databind-2.20.0.jar"]
+    statement: "jackson-databind 2.20.0 di Audiveris: corretto dalla 2.21.4"
+    expired_at: 2027-01-17
+  - id: CVE-2026-54513
+    paths: ["opt/audiveris/lib/app/jackson-databind-2.20.0.jar"]
+    statement: "jackson-databind 2.20.0 di Audiveris: corretto dalla 2.21.4"
+    expired_at: 2027-01-17
+  - id: CVE-2026-68497
+    paths: ["opt/audiveris/lib/app/jackson-databind-2.20.0.jar"]
+    statement: "jackson-databind 2.20.0 di Audiveris: corretto dalla 2.21.6"
+    expired_at: 2027-01-17
+  - id: CVE-2026-91776
+    paths: ["opt/audiveris/lib/app/jackson-databind-2.20.0.jar"]
+    statement: "jackson-databind 2.20.0 di Audiveris: corretto dalla 2.21.7"
+    expired_at: 2027-01-17
+  - id: CVE-2026-91777
+    paths: ["opt/audiveris/lib/app/jackson-databind-2.20.0.jar"]
+    statement: "jackson-databind 2.20.0 di Audiveris: corretto dalla 2.21.7"
+    expired_at: 2027-01-17
+  - id: CVE-2024-47554
+    paths: ["opt/audiveris/lib/app/org.apache.commons.io-2.4.jar/lib/commons-io-2.4.jar"]
+    statement: "commons-io 2.4 di Audiveris: corretto dalla 2.14.0; riguarda XmlStreamReader su XML non fidato"
+    expired_at: 2027-01-17
+
+  # Immagine del servizio OMR: pip 26.3 include `pkg_resources` di setuptools 70.3.0 e lo dichiara nel
+  # suo SBOM, pip/_vendor/bom.cdx.json, da cui Trivy lo legge. L'avviso riguarda PackageIndex, che pip
+  # non include. La toglie una versione di pip con un setuptools corretto, o un'immagine senza pip.
+  - id: CVE-2025-47273
+    purls: ["pkg:pypi/setuptools@70.3.0"]
+    statement: "setuptools 70.3.0 nell'SBOM di pip 26.3: corretto dalla 78.1.1; PackageIndex non c'è"
+    expired_at: 2027-01-17
