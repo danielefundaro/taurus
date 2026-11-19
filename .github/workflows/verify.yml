@@ -253,7 +253,7 @@ jobs:
       # Segreti: il binario di gitleaks, senza l'azione, che per le organizzazioni chiede una licenza.
       # Le immagini di gitleaks e semgrep sono fissate per digest come le azioni, ma Dependabot non
       # le vede dentro `run`, né vede la versione di Trivy più sotto: si aggiornano a mano, insieme
-      # al Runbook di test (sezione 8.7).
+      # al Runbook di test (sezione 8.7). La versione di Trivy è anche in docker-publish.yml.
       - name: Scan for secrets
         run: |
           docker run --rm -v "$PWD:/repo" \

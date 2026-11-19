@@ -102,6 +102,31 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}.{{patch}}
 
+      # Prima di pubblicare, l'immagine si costruisce nel Docker del runner e Trivy la scansiona con le
+      # regole del job `security` di verify.yml e con .trivyignore.yaml: una vulnerabilità alta o
+      # critica che ha una correzione ferma il job, e non si pubblica nulla. La build che pubblica
+      # riusa gli strati di questa, quindi pubblica l'immagine scansionata. La versione di Trivy è
+      # quella del job `security`: si aggiornano insieme.
+      - name: Build the image for the scan
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./${{ env.BACKEND_PATH }}
+          load: true
+          tags: ${{ env.DOCKER_HUB_REPOSITORY_BACKEND }}:scan
+          cache-from: type=gha
+
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.DOCKER_HUB_REPOSITORY_BACKEND }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          version: v0.76.2
+          exit-code: '1'
+
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
       - name: Build and push Docker image
@@ -188,6 +213,30 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}.{{patch}}
 
+      # Scansione prima della pubblicazione, come nel job del backend. PACKAGES_REFRESH, uguale nelle
+      # due build, fa ripetere a ogni esecuzione l'aggiornamento dei pacchetti di Alpine del Dockerfile,
+      # invece di riprenderlo dalla cache, e lo condivide fra la build scansionata e quella pubblicata.
+      - name: Build the image for the scan
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./${{ env.FRONTEND_PATH }}
+          load: true
+          tags: ${{ env.DOCKER_HUB_REPOSITORY_FRONTEND }}:scan
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}
+          cache-from: type=gha
+
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.DOCKER_HUB_REPOSITORY_FRONTEND }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          version: v0.76.2
+          exit-code: '1'
+
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
       - name: Build and push Docker image
@@ -198,6 +247,7 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: PACKAGES_REFRESH=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -273,6 +323,27 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}.{{patch}}
+
+      # Scansione prima della pubblicazione, come nel job del backend.
+      - name: Build the image for the scan
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./${{ env.OMR_PATH }}
+          load: true
+          tags: ${{ env.DOCKER_HUB_REPOSITORY_OMR }}:scan
+          cache-from: type=gha
+
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.DOCKER_HUB_REPOSITORY_OMR }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          version: v0.76.2
+          exit-code: '1'
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
@@ -352,6 +423,33 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}.{{patch}}
 
+      # Scansione prima della pubblicazione, come nel job del frontend. Gli argomenti di build sono
+      # gli stessi nelle due build, perché la seconda riusi gli strati della prima.
+      - name: Build the image for the scan
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ./${{ env.INFO_PATH }}
+          load: true
+          tags: ${{ env.DOCKER_HUB_REPOSITORY_INFO }}:scan
+          build-args: |
+            SITE_URL=${{ vars.INFO_SITE_URL }}
+            PUBLIC_APP_URL=${{ vars.INFO_PUBLIC_APP_URL }}
+            PUBLIC_CONTACT_EMAIL=${{ vars.INFO_PUBLIC_CONTACT_EMAIL }}
+            PACKAGES_REFRESH=${{ github.run_id }}
+          cache-from: type=gha
+
+      - name: Scan the image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.DOCKER_HUB_REPOSITORY_INFO }}:scan
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
+          version: v0.76.2
+          exit-code: '1'
+
       # Gli indirizzi pubblici del sito finiscono nel bundle statico: arrivano dalle variabili del
       # repository, e in loro assenza valgono i valori predefiniti del Dockerfile.
       - name: Build and push Docker image
@@ -366,6 +464,7 @@ jobs:
             SITE_URL=${{ vars.INFO_SITE_URL }}
             PUBLIC_APP_URL=${{ vars.INFO_PUBLIC_APP_URL }}
             PUBLIC_CONTACT_EMAIL=${{ vars.INFO_PUBLIC_CONTACT_EMAIL }}
+            PACKAGES_REFRESH=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

@@ -24,7 +24,7 @@ public class PostgreSqlTestContainer implements SqlTestContainer {
     @Override
     public void afterPropertiesSet() {
         if (null == postgreSQLContainer) {
-            postgreSQLContainer = new PostgreSQLContainer("postgres:18.6")
+            postgreSQLContainer = new PostgreSQLContainer("postgres:18.7")
                 .withDatabaseName("taurus")
                 .withTmpFs(Map.of("/testtmpfs", "rw"))
                 // Spring tiene in cache un contesto per ogni configurazione di test, fino a 8

@@ -533,7 +533,9 @@ Applicata e verificata il 2026-11-10 sul ramo `upgrade-phase-7`, che parte da `9
 
 - **Versioni.**
   - nginx 1.30.6, del 2026-10-19, in `nginxinc/nginx-unprivileged:1.30-alpine`, per frontend e sito informativo.
+    - Il 2026-11-18 i due Dockerfile hanno ricevuto `apk upgrade`: l'immagine di nginx non era ripubblicata dal 2026-10-19 e i suoi pacchetti di Alpine avevano una vulnerabilità critica e 12 alte già corrette. Vedi il [report sulle vulnerabilità delle dipendenze](reports/vulnerabilita-dipendenze.md).
   - PostgreSQL 18.6, l'ultima della 18, di agosto 2026; RabbitMQ 4.4.0, del 2026-10-19, nella variante `management-alpine`. Anche i test del backend, `restore-test.sh` e `deploy/.env.example` usano queste due versioni.
+    - Il 2026-11-18 PostgreSQL è passato alla 18.7, del 2026-11-12, negli stessi file: è un rilascio di sicurezza, che per la decisione 7 non aspetta i sette giorni.
   - Nei compose di sviluppo: Prometheus 3.13.5 LTS, del 2026-10-21; Grafana 13.3.0, del 2026-10-27; SonarQube Community Build 26.10, del 2026-10-29; Mailpit 1.33.0, del 2026-10-31, anche nell'IT delle e-mail del provider. SonarQube 26.11, del 2026-11-05, e Mailpit 1.33.1, del 2026-11-07, sono uscite da meno di sette giorni. Dependabot non legge i compose di sviluppo: arriveranno con il prossimo aggiornamento a mano.
   - Dev container su `mcr.microsoft.com/devcontainers/java:3-25-trixie`, con Java 25 e Node 26.
 - **nginx senza privilegi.** Frontend e sito partono da `nginxinc/nginx-unprivileged`: nginx gira con l'utente `nginx` (uid 101) e ascolta sulla porta 8080 del container.
@@ -595,6 +597,7 @@ Applicata e verificata il 2026-11-10 sul ramo `upgrade-phase-8`, che parte da `2
     - Ora generator-jhipster 9.4.0, come JHipster nel backend, husky 9.1.7, Prettier 3.9.10, prettier-plugin-java 2.11.0, lint-staged 17.6.0 e prettier-plugin-packagejson 3.1.0. `engines` chiede Node `^22.22.1 || >=24.11.0`, come lint-staged 17 e generator-jhipster 9.4.
     - Maven e la CI non li usano: servono all'hook di pre-commit e agli script `prettier:*`. Per questo `./mvnw verify` non è stato ripetuto in locale; lo esegue la CI.
     - `npm audit` scende da 56 avvisi, 3 critici e 19 alti, a 38, 2 critici e 2 alti. Quelli critici e alti vengono tutti da simple-git 3.36.0, che generator-jhipster 9.4.0, ultima versione, fissa esattamente: la correzione è solo nella 4. Il generatore si lancia solo a mano, e Trivy non legge le dipendenze di sviluppo.
+    - Il 2026-11-18 generator-jhipster è uscito dal `package.json`, per chiudere quegli avvisi: per un aggiornamento di JHipster si lancia con `npx`. Vedi il [report sulle vulnerabilità delle dipendenze](reports/vulnerabilita-dipendenze.md).
 - **Componenti che Dependabot non legge.** Sono tutti all'ultima versione stabile, tranne pip, aggiornato qui:
   - gitleaks 8.30.1, semgrep 1.183.0 e Trivy 0.76.2 della CI;
   - Audiveris 5.11.0, homr 0.7.0, RapidOCR 3.10.0 e i dati Tesseract 4.1.0 del servizio OMR;

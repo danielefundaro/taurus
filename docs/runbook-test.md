@@ -412,7 +412,13 @@ docker run --rm -v "${PWD}:/repo" aquasec/trivy:0.76.2 fs --scanners vuln,miscon
 docker run --rm -v "${PWD}:/src" semgrep/semgrep:1.183.0 semgrep scan --config p/ci --error --quiet --metrics=off
 ```
 
-Dependabot aggiorna le azioni GitHub, non le immagini lanciate con `docker run` nel job né l'input `version` di Trivy: quando si aggiornano gitleaks, Trivy o semgrep in `verify.yml`, si aggiornano anche questi comandi. Su Windows il montaggio della cartella può rendere semgrep lentissimo: in quel caso si copia il repository nel container con `docker create`, `docker cp` e `docker start -a`.
+A ogni tag `v*.*.*`, prima di pubblicare, `docker-publish.yml` costruisce ogni immagine e la scansiona con Trivy, con le stesse regole e con lo stesso `.trivyignore.yaml`: una vulnerabilità alta o critica che ha una correzione ferma la pubblicazione di quell'immagine. In locale, su un'immagine costruita con `docker build`:
+
+```powershell
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "${PWD}/.trivyignore.yaml:/cfg/.trivyignore.yaml:ro" aquasec/trivy:0.76.2 image --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --ignorefile /cfg/.trivyignore.yaml --exit-code 1 taurus-fe:local
+```
+
+Dependabot aggiorna le azioni GitHub, non le immagini lanciate con `docker run` nel job né l'input `version` di Trivy: quando si aggiornano gitleaks, Trivy o semgrep in `verify.yml`, si aggiornano anche questi comandi e la versione di Trivy in `docker-publish.yml`. Su Windows il montaggio della cartella può rendere semgrep lentissimo: in quel caso si copia il repository nel container con `docker create`, `docker cp` e `docker start -a`.
 
 La ricerca dei segreti attraversa tutta la storia del repository. Le eccezioni vivono in `.gitleaks.toml` e sono soltanto valori di prova, di sviluppo e di documentazione: una credenziale vera non va aggiunta lì, va ruotata.
 
